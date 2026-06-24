@@ -60,7 +60,13 @@ AnimatedObject[data_]["GraphicsOptions"] := data["GraphicsOptions"]
 
 obj_AnimatedObject["Graphics"] := {obj["Directive"], obj["Primitives"] /. o_AnimatedObject :> o["Graphics"]}
 
-obj_AnimatedObject["Duration"] := Total[Cases[obj["Primitives"], o_AnimatedObject :> o["Duration"], All]] + Total[#["Duration"] & /@ obj["Effects"]]
+(* Nested objects are all updated at the same absolute time T in "Update", so they play
+   in parallel (Max), concurrently with this object's own sequential effect queue (Total). *)
+obj_AnimatedObject["Duration"] := Max[
+    Total[#["Duration"] & /@ obj["Effects"]],
+    Cases[obj["Primitives"], o_AnimatedObject :> o["Duration"], All],
+    0
+]
 
 
 obj_AnimatedObject[eff_AnimationEffect, t_ : 0, T_ : 0] := eff["Function"] @ <|
@@ -74,7 +80,7 @@ obj_AnimatedObject[eff_AnimationEffect, t_ : 0, T_ : 0] := eff["Function"] @ <|
         #1[[2]] + #2["Duration"]} &,
     {obj["MapPrimitives", ReplaceAll[o_AnimatedObject :> o["Update", T]]], 0},
     data["Effects"],
-    #[[2]] < T &
+    #[[2]] <= T &
 ]
 
 
@@ -91,6 +97,8 @@ obj_AnimatedObject["Render", opts : OptionsPattern[Graphics] | OptionsPattern[Gr
 
 
 regionPrimitive[withDirectives_][x_] := Which[
+    graphicsDirectiveQ[x], Nothing,
+    ListQ[x], regionPrimitive[withDirectives] /@ x,
     RegionQ @ x, x,
     MatchQ[x, _AnimatedObject],
     If[withDirectives, Prepend[x["Directive"]], Identity] @ x["RegionPrimitives"],
@@ -112,7 +120,25 @@ obj_AnimatedObject["Dimension"] :=  Max[RegionDimension /@ obj["RegionPrimitives
 
 obj_AnimatedObject["Center"] := Mean /@ obj["Bounds"] // Chop
 
-obj_AnimatedObject["Bounds"] := RegionBounds @ Region @ obj["Region"] // Chop
+$pointBasedPrimitiveQ[x_] := MatchQ[x, _FilledCurve | _JoinedCurve | _Line | _Polygon | _Point]
+
+primitiveBounds[x_] := Which[
+    MatchQ[x, _AnimatedObject], x["Bounds"],
+    graphicsDirectiveQ[x], Nothing,
+    $pointBasedPrimitiveQ[x], CoordinateBounds[Cases[x, {Repeated[_ ? NumericQ, {2, 3}]}, Infinity]],
+    RegionQ[x], RegionBounds[x],
+    True, RegionBounds[DiscretizeGraphics[x]]
+]
+
+combineBounds[boundsList_] := Transpose[{
+    Min /@ Transpose[boundsList[[All, All, 1]]],
+    Max /@ Transpose[boundsList[[All, All, 2]]]
+}]
+
+(* Bounding box of a union = union of the per-primitive bounding boxes. For point-based
+   primitives (e.g. LaTeX FilledCurves) the box is read straight from the coordinates,
+   avoiding the very expensive RegionUnion/discretization of the old Region-based path. *)
+obj_AnimatedObject["Bounds"] := Chop @ combineBounds[primitiveBounds /@ Flatten[{obj["Primitives"]}]]
 
 obj_AnimatedObject["Corners"] := Module[{xmin, xmax, ymin, ymax},
     {{xmin, xmax}, {ymin, ymax}} = obj["Bounds"];
@@ -212,7 +238,10 @@ obj_AnimatedObject["Wait", args___] := obj["Play", "Wait", args]
 Options[dynamicGraphics] = Merge[{Options[Graphics], Options[Graphics3D]}, First];
 
 dynamicGraphics[obj_AnimatedObject, repeating_ : False, opts : OptionsPattern[]] := DynamicModule[{
-    t, begin, end = obj["Duration"], init
+    t, begin, end = obj["Duration"], init,
+    bounds = obj["Bounds"],
+    gOpts = obj["GraphicsOptions"],
+    render = If[obj["EmbeddingDimension"] < 3, Graphics, Graphics3D]
 },
     init[] := (t = 0; begin = AbsoluteTime[]);
     init[];
@@ -221,8 +250,8 @@ dynamicGraphics[obj_AnimatedObject, repeating_ : False, opts : OptionsPattern[]]
         Refresh[
             If[t < end, t = AbsoluteTime[] - begin, If[repeating, init[], t = end]];
             EventHandler[
-                obj["Update", t]["Render", opts, 
-                PlotRange -> obj["Bounds"]], {{"MouseDown", 1} :> init[]}
+                render[obj["Update", t]["Graphics"], Sequence @@ gOpts, opts,
+                PlotRange -> bounds], {{"MouseDown", 1} :> init[]}
             ],
             TrackedSymbols :> {t}, UpdateInterval -> Infinity
         ]
@@ -232,12 +261,39 @@ dynamicGraphics[obj_AnimatedObject, repeating_ : False, opts : OptionsPattern[]]
 obj_AnimatedObject["Dynamic", opts : OptionsPattern[dynamicGraphics]] := dynamicGraphics[obj, False, opts]
 
 
+Options[animatedImage] = {"FrameRate" -> 20, ImageSize -> 360};
+
+obj_AnimatedObject["Image", opts : OptionsPattern[animatedImage]] := With[{
+    dur = obj["Duration"],
+    bounds = obj["Bounds"],
+    gOpts = obj["GraphicsOptions"],
+    render = If[obj["EmbeddingDimension"] < 3, Graphics, Graphics3D],
+    fps = OptionValue[animatedImage, {opts}, "FrameRate"],
+    imgSize = OptionValue[animatedImage, {opts}, ImageSize]
+},
+    With[{n = Max[Round[dur fps], 1]},
+        AnimatedImage[
+            Table[
+                Rasterize[
+                    render[obj["Update", t]["Graphics"], Sequence @@ gOpts, ImageSize -> imgSize, PlotRange -> bounds],
+                    "Image"
+                ],
+                {t, If[dur > 0, Subdivide[0, dur, n], {0}]}
+            ],
+            FrameRate -> fps
+        ]
+    ]
+]
+
+
 obj_AnimatedObject["Video", opts : OptionsPattern[VideoGenerator]] := With[{
-    bounds = obj["Bounds"]
+    bounds = obj["Bounds"],
+    gOpts = obj["GraphicsOptions"],
+    render = If[obj["EmbeddingDimension"] < 3, Graphics, Graphics3D]
 },
     Video[
         VideoGenerator[
-            obj["Update", #]["Render", PlotRange -> bounds] &,
+            render[obj["Update", #]["Graphics"], Sequence @@ gOpts, PlotRange -> bounds] &,
             obj["Duration"],
             opts
         ],
