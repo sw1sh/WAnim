@@ -31,27 +31,8 @@ PackageExport["Superimpose"]
 PackageExport["$SampleBank"]
 PackageExport["Oscilloscope"]
 PackageExport["Fastcat"]
-
-(* Strudel-style lowercase shortcuts (aliases defined near the end of the file) *)
-PackageExport["s"]
-PackageExport["sound"]
-PackageExport["note"]
-PackageExport["n"]
-PackageExport["fast"]
-PackageExport["slow"]
-PackageExport["rev"]
-PackageExport["stack"]
-PackageExport["cat"]
-PackageExport["seq"]
-PackageExport["every"]
-PackageExport["euclid"]
-PackageExport["degrade"]
-PackageExport["off"]
-PackageExport["superimpose"]
-PackageExport["late"]
-PackageExport["early"]
-PackageExport["gain"]
-PackageExport["silence"]
+PackageExport["LiveCode"]
+PackageExport["$LiveAtomHeads"]
 
 (* cycles per second; 0.5625 cps = 135 BPM at 4 beats/cycle = TidalCycles' classic feel *)
 $CyclesPerSecond = 0.5625
@@ -79,8 +60,8 @@ spanCycles[{b_, e_}] /; e <= nextSam[b] := {{b, e}}
 spanCycles[{b_, e_}] := Prepend[spanCycles[{nextSam[b], e}], {b, nextSam[b]}]
 
 (* map a function over every time coordinate of an event *)
-mapEventTime[f_][ev_] := <|
-    "Value" -> ev["Value"],
+(* keeps any extra event keys (e.g. "Source" used by LiveCode) and rewrites Whole/Part *)
+mapEventTime[f_][ev_] := <|ev,
     "Whole" -> If[ev["Whole"] === None, None, f /@ ev["Whole"]],
     "Part" -> f /@ ev["Part"]
 |>
@@ -119,8 +100,7 @@ CyclicPattern /: Reverse[CyclicPattern[q_]] := CyclicPattern[Function[span,
 ]]
 reverseCycle[q_, {b_, e_}] := With[{c = sam[b]},
     With[{reflect = Function[{x, y}, {2 c + 1 - y, 2 c + 1 - x}]},
-        Function[ev, <|
-            "Value" -> ev["Value"],
+        Function[ev, <|ev,
             "Whole" -> If[ev["Whole"] === None, None, reflect @@ ev["Whole"]],
             "Part" -> reflect @@ ev["Part"]
         |>] /@ q[reflect @@ {b, e}]
@@ -479,30 +459,66 @@ CyclicPattern /: Spectrogram[p_CyclicPattern, nCycles_ : 2, opts : OptionsPatter
 Track /: Spectrogram[t_Track, nCycles_ : 2, opts : OptionsPattern[]] := Spectrogram[renderAudio[t, nCycles], opts, ImageSize -> 480]
 
 
-(* ::Subsection:: Strudel-style shortcuts -- lowercase aliases for the idiomatic names.
-   Chain them postfix with //  e.g.   s["bd*4"] // every[4, rev] // fast[2]
-   (these put `s` and `n` on the context path, so mind any variables named s / n). *)
-
-s = CyclicPattern
-sound = CyclicPattern
-note = CyclicPattern
-n = CyclicPattern
-fast = Fast
-slow = Slow
-rev = Reverse
-stack = Layer
-cat = Alternate
-every = Every
-euclid = Euclidean
-degrade = Degrade
-off = Stagger
-superimpose = Superimpose
-late = Late
-early = Early
-gain = Gain
-silence = Silence
 Fastcat[ps__] := fastcatList[{ps}]
-seq = Fastcat
+
+(* heads LiveCode treats as atoms (single-token leaves).  The optional Strudel` context
+   (WolfAnim/Strudel.wl) registers its own s/note/n/sound here when loaded; the lowercase
+   Strudel-style shortcuts now live there, NOT in this paclet context. *)
+$LiveAtomHeads = {CyclicPattern}
+
+
+(* ::Subsection:: LiveCode -- a symbolic pattern shown as its own InputForm boxes, with each
+   atom's box highlighting (Strudel-REPL style) the instant its events sound.  Write the
+   pattern symbolically (no mini-notation string) from s/note/n/sound atoms + combinators:
+       LiveCode[ stack[ s["bd*4"], note["<c4 e4 g4>"] // fast[2] ] ]
+   Left-click = play/pause, right-click = reset. *)
+
+(* tag an atom's events with a source id so we can map events back to the box they came from;
+   combinators preserve the extra "Source" key (mapEventTime/reverseCycle now merge it). *)
+tagPat[id_][CyclicPattern[q_]] := CyclicPattern[Function[span, (Append[#, "Source" -> id] &) /@ q[span]]]
+
+(* hlAtom is an inert box-time marker: render the atom's own boxes wrapped in a StyleBox whose
+   Background lights up while any of its events is sounding (Dynamic on the shared livePhase). *)
+SetAttributes[hlAtom, HoldRest]
+hlAtom /: MakeBoxes[hlAtom[intervals_, atom_], fmt_] := StyleBox[
+    MakeBoxes[atom, fmt],
+    Background -> Dynamic[If[liveActiveQ[intervals, livePhase, liveCycles], RGBColor[1, 0.82, 0.25, 0.65], RGBColor[0, 0, 0, 0]]]
+]
+liveActiveQ[intervals_, phase_, n_] := With[{p = Mod[phase, n]}, AnyTrue[intervals, #[[1]] <= p < Max[#[[2]], #[[1]] + 0.06] &]]
+
+$liveAtom := Alternatives @@ (Blank /@ $LiveAtomHeads)
+
+SetAttributes[LiveCode, HoldFirst]
+LiveCode[expr_, nCycles_ : 2] := Module[{held = Hold[expr], j = 0, k = 0, pat, events, byId, boxExpr, boxes},
+    pat = ReleaseHold[held /. a : $liveAtom :> With[{id = ++j}, tagPat[id][a]]];
+    events = Select[pat["Query", 0, nCycles], hasOnset];
+    byId = GroupBy[events, #["Source"] &, Function[es, #["Whole"] & /@ es]];
+    boxExpr = held /. a : $liveAtom :> With[{id = ++k}, hlAtom[Lookup[byId, id, {}], a]];
+    boxes = Replace[boxExpr, Hold[c_] :> MakeBoxes[c, StandardForm]];
+    With[{b = boxes, aud = renderAudio[pat, nCycles], nC = nCycles},
+        DynamicModule[{livePhase = 0., liveCycles = nC, stream = AudioStream[aud, Looping -> True], playing = True},
+            AudioPlay[stream];
+            EventHandler[
+                Panel[
+                    Column[{
+                        RawBoxes[b],
+                        Dynamic @ Refresh[
+                            If[playing, livePhase = QuantityMagnitude[stream["Position"]] $CyclesPerSecond];
+                            ProgressIndicator[Mod[livePhase, nC], {0, nC}, ImageSize -> {Full, 4}],
+                            TrackedSymbols :> {}, UpdateInterval -> 0.03]
+                    }, Spacings -> 0.8],
+                    Background -> GrayLevel[0.1], FrameMargins -> 14,
+                    BaseStyle -> {FontFamily -> "Source Code Pro", FontSize -> 15, FontColor -> GrayLevel[0.92]}
+                ],
+                {
+                    {"MouseDown", 1} :> If[playing, (AudioStop[stream]; playing = False), (AudioPlay[stream]; playing = True)],
+                    {"MouseDown", 2} :> (AudioStop[stream]; RemoveAudioStream[stream]; stream = AudioStream[aud, Looping -> True]; livePhase = 0.; playing = False)
+                }
+            ],
+            SaveDefinitions -> True
+        ]
+    ]
+]
 
 
 (* ::Subsection:: Formatting -- a pattern shows itself as its piano roll *)
