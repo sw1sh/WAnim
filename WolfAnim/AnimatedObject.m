@@ -7,11 +7,16 @@ PackageScope["directiveQ"]
 PackageScope["$AnimatedObjectDefaultDirective"]
 
 
-Options[AnimatedObject] = {"GraphicsOptions" -> Sequence[]};
+(* AnimatedObject accepts any Graphics / Graphics3D option directly (e.g. Background, PlotRange,
+   ImageSize); they are stored and threaded into every rendering. *)
+Options[AnimatedObject] = Normal @ Merge[
+    {{Background -> Black, PlotRangePadding -> Scaled[0.1]}, Options[Graphics], Options[Graphics3D]},
+    First
+]
 
-$AnimatedObjectProperties = {"Primitives", "Directive", "Effects", "GraphicsOptions"};
+$AnimatedObjectProperties = {"Primitives", "Directive", "Effects", "GraphicsOptions"}
 
-$AnimatedObjectDefaultDirective = {LightBlue};
+$AnimatedObjectDefaultDirective = {LightBlue}
 
 
 graphicsDirectiveQ[x_] := ResourceFunction["GraphicsDirectiveQ"][x] || MatchQ[x, _LinearGradientFilling | _RadialGradientFilling | _ConicGradientFilling] ||
@@ -21,7 +26,7 @@ graphicsPrimitiveQ[x_] := ResourceFunction["GraphicsPrimitiveQ"][x] || VectorQ[x
 
 directiveQ[x_] := graphicsDirectiveQ[x]
 
-primitiveQ[x_] := ResourceFunction["GraphicsPrimitiveQ"][x] || RegionQ[x] || MatchQ[x, _AnimatedObject] || VectorQ[x, primitiveQ] && ! MatchQ[x, {}]
+primitiveQ[x_] := ResourceFunction["GraphicsPrimitiveQ"][x] || RegionQ[x] || MatchQ[x, _AnimatedObject] || graphicsDirectiveQ[x] || VectorQ[x, primitiveQ] && ! MatchQ[x, {}]
 
 
 animatedObjectDataQ[data_] :=
@@ -32,18 +37,53 @@ animatedObjectDataQ[data_] :=
 
 AnimatedObject[g_ ? primitiveQ, Optional[dir : _ ? directiveQ, $AnimatedObjectDefaultDirective], opts : OptionsPattern[]] :=
     AnimatedObject[<|"Primitives" -> g, "Directive" -> dir, "Effects" -> {}, "GraphicsOptions" -> {
-        OptionValue["GraphicsOptions"], PlotRangePadding -> Scaled[0.1], Background -> Black}|>
+        opts, PlotRangePadding -> Scaled[0.1], Background -> Black}|>
     ]
 
 AnimatedObject["" | {}, ___] := AnimatedObject[EmptyRegion[2], Transparent]
 
+(* Extract MaTeX glyphs while keeping each run's fill color (e.g. \color{red}{...}).
+   MaTeX wraps each colored run as Style[primitives, FaceForm[color]]; runs with no
+   explicit color inherit the object's directive. *)
+
+maTeXColor[FaceForm[c_, ___]] := c
+maTeXColor[c : _RGBColor | _GrayLevel | _Hue | _CMYKColor] := c
+
+maTeXColorQ[x_] := MatchQ[x, _FaceForm | _RGBColor | _GrayLevel | _Hue | _CMYKColor]
+
+maTeXStyleColor[s_Style, default_] := FirstCase[s, FaceForm[c_] :> c,
+    FirstCase[Rest[List @@ s], _RGBColor | _GrayLevel | _Hue | _CMYKColor, default, Infinity], Infinity]
+
+decodeMaTeXCurve[curve_FilledCurve] := GeometricFunctions`DecodeFilledCurve[curve]
+decodeMaTeXCurve[curve_JoinedCurve] := GeometricFunctions`DecodeJoinedCurve[curve]
+decodeMaTeXCurve[p_] := p
+
+maTeXColoredPairs[expr_, color_] := Which[
+    MatchQ[expr, _Style], maTeXColoredPairs[First[expr], maTeXStyleColor[expr, color]],
+    ListQ[expr],
+    Module[{c = color, acc = {}},
+        Scan[If[maTeXColorQ[#], c = maTeXColor[#], acc = Join[acc, maTeXColoredPairs[#, c]]] &, expr];
+        acc
+    ],
+    ResourceFunction["GraphicsPrimitiveQ"][expr] || RegionQ[expr], {{color, expr}},
+    True, {}
+]
+
+(* flat primitive list, with a color directive emitted before each run whose color changes *)
+(* prev starts at the default so default-colored runs emit NO directive and inherit the
+   object's directive (keeps it overridable, e.g. by the "Gradient" creation method); only
+   explicitly colored runs embed their color. *)
+maTeXPrimitives[graphics_, default_] := Module[{prev = default, out = {}},
+    Do[
+        If[pair[[1]] =!= prev, out = Join[out, Flatten[{pair[[1]]}]]; prev = pair[[1]]];
+        AppendTo[out, decodeMaTeXCurve[pair[[2]]]],
+        {pair, maTeXColoredPairs[First[graphics], default]}
+    ];
+    out
+]
+
 AnimatedObject[s_String, Optional[dir : _ ? directiveQ, $AnimatedObjectDefaultDirective], opts : OptionsPattern[]] :=
-    AnimatedObject[Cases[MaTeX`MaTeX[s], _ ? primitiveQ, {4}] /. {
-        curve_FilledCurve :> GeometricFunctions`DecodeFilledCurve[curve],
-        curve_JoinedCurve :> GeometricFunctions`DecodeJoinedCurve[curve]
-    },
-        dir, opts
-    ]["Apply", "Stretch", Automatic, 1]["Centralize"]
+    AnimatedObject[maTeXPrimitives[MaTeX`MaTeX[s], dir], dir, opts]["Apply", "Stretch", Automatic, 1]["Centralize"]
 
 AnimatedObject[g_Graphics, dir_ : Nothing, opts : OptionsPattern[]] :=
     AnimatedObject[Cases[g, _ ? graphicsPrimitiveQ, {1, 2}], Append[Cases[g, _ ? graphicsDirectiveQ, {1, 2}], dir], opts]
@@ -92,7 +132,7 @@ obj_AnimatedObject["Render", opts : OptionsPattern[Graphics] | OptionsPattern[Gr
         dim == 3, Graphics3D,
         True,
         Failure["UnsupportedDimension", "Only dimensions less or equal to 3 are supported."]
-    ][obj["Graphics"], Sequence @@ obj["GraphicsOptions"], opts]
+    ][obj["Graphics"], obj["GraphicsOptions"], opts]
 ]
 
 
@@ -150,7 +190,11 @@ obj_AnimatedObject["Width"] := ReverseApplied[Subtract] @@ obj["Bounds"][[1]]
 obj_AnimatedObject["Height"] := ReverseApplied[Subtract] @@ obj["Bounds"][[2]]
 
 
-AnimatedObject /: MakeBoxes[obj : AnimatedObject[data_ ? animatedObjectDataQ], form_] := Module[{
+(* Form-specific display, switchable with Cell > Convert To (or the keyboard shortcuts):
+     StandardForm    -> a summary box (info + a live preview)
+     TraditionalForm -> the object rendered as its live ["Dynamic"] animation
+     InputForm       -> falls through to the raw AnimatedObject[<|...|>] expression *)
+AnimatedObject /: MakeBoxes[obj : AnimatedObject[data_ ? animatedObjectDataQ], StandardForm] := Module[{
     above, below
 },
     above = {
@@ -166,9 +210,15 @@ AnimatedObject /: MakeBoxes[obj : AnimatedObject[data_ ? animatedObjectDataQ], f
         AnimatedObject,
         obj, obj["Dynamic"],
         above, below,
-        form,
+        StandardForm,
         "Interpretable" -> Automatic
     ]
+]
+
+AnimatedObject /: MakeBoxes[obj : AnimatedObject[data_ ? animatedObjectDataQ], TraditionalForm] := With[{
+    boxes = ToBoxes[obj["Dynamic"]]
+},
+    InterpretationBox[boxes, obj]
 ]
 
 obj_AnimatedObject["MapData", f_] := MapAt[f, obj, {1}]
@@ -235,52 +285,81 @@ obj_AnimatedObject["Apply", name_String, args___] := With[{eff = AnimationEffect
 obj_AnimatedObject["Wait", args___] := obj["Play", "Wait", args]
 
 
-Options[dynamicGraphics] = Merge[{Options[Graphics], Options[Graphics3D]}, First];
+Options[dynamicGraphics] = Join[
+    {"StartTime" -> 0, "FinalTime" -> 1, "Frozen" -> False, "Looping" -> False},
+    Normal @ Merge[{Options[Graphics], Options[Graphics3D]}, First],
+    Options[DynamicModule]
+]
 
-dynamicGraphics[obj_AnimatedObject, repeating_ : False, opts : OptionsPattern[]] := DynamicModule[{
-    t, begin, end = obj["Duration"], init,
+(* Replay control. "StartTime"/"FinalTime" are fractions of the Duration:
+     "StartTime" -> where playback begins (default 0)
+     "FinalTime" -> where playback ends   (default 1 = the whole animation)
+     "Frozen"    -> True starts paused (otherwise it auto-plays)
+     "Looping"   -> True loops instead of stopping at FinalTime
+   Left-click toggles play/pause; right-click resets to StartTime. *)
+dynamicGraphics[obj_AnimatedObject, opts : OptionsPattern[]] := With[{
+    start = OptionValue["StartTime"] obj["Duration"],
+    final = OptionValue["FinalTime"] obj["Duration"],
+    frozen = TrueQ @ OptionValue["Frozen"],
+    looping = TrueQ @ OptionValue["Looping"],
     bounds = obj["Bounds"],
     gOpts = obj["GraphicsOptions"],
-    render = If[obj["EmbeddingDimension"] < 3, Graphics, Graphics3D]
+    render = If[obj["EmbeddingDimension"] < 3, Graphics, Graphics3D],
+    graphicsOpts = FilterRules[{opts}, Join[Options[Graphics], Options[Graphics3D]]],
+    dynamicModuleOpts = FilterRules[{opts}, Options[DynamicModule]]
 },
-    init[] := (t = 0; begin = AbsoluteTime[]);
-    init[];
-
-    Dynamic[
-        Refresh[
-            If[t < end, t = AbsoluteTime[] - begin, If[repeating, init[], t = end]];
-            EventHandler[
-                render[obj["Update", t]["Graphics"], Sequence @@ gOpts, opts,
-                PlotRange -> bounds], {{"MouseDown", 1} :> init[]}
-            ],
-            TrackedSymbols :> {t}, UpdateInterval -> Infinity
-        ]
+    DynamicModule[{t = start, begin = AbsoluteTime[], playing = ! frozen},
+        Dynamic[
+            Refresh[
+                If[ playing,
+                    With[{elapsed = AbsoluteTime[] - begin},
+                        If[ start + elapsed < final,
+                            t = start + elapsed,
+                            If[looping, (begin = AbsoluteTime[]; t = start), (t = final; playing = False)]
+                        ]
+                    ]
+                ];
+                EventHandler[
+                    render[obj["Update", t]["Graphics"], gOpts, graphicsOpts, PlotRange -> bounds],
+                    {
+                        (* left-click: play / pause (resume from where it was; restart if at the end) *)
+                        {"MouseDown", 1} :> If[ playing, playing = False,
+                            (If[t >= final, t = start]; begin = AbsoluteTime[] - (t - start); playing = True)],
+                        (* right-click: reset to StartTime, paused *)
+                        {"MouseDown", 2} :> (t = start; playing = False)
+                    }
+                ],
+                TrackedSymbols :> {t, playing}, UpdateInterval -> Infinity
+            ]
+        ],
+        dynamicModuleOpts,
+        SaveDefinitions -> True
     ]
 ]
 
-obj_AnimatedObject["Dynamic", opts : OptionsPattern[dynamicGraphics]] := dynamicGraphics[obj, False, opts]
+obj_AnimatedObject["Dynamic", opts : OptionsPattern[dynamicGraphics]] := dynamicGraphics[obj, opts]
 
 
-Options[animatedImage] = {"FrameRate" -> 20, ImageSize -> 360};
-
-obj_AnimatedObject["Image", opts : OptionsPattern[animatedImage]] := With[{
+obj_AnimatedObject["Image", opts : OptionsPattern[AnimatedImage]] := With[{
     dur = obj["Duration"],
     bounds = obj["Bounds"],
     gOpts = obj["GraphicsOptions"],
     render = If[obj["EmbeddingDimension"] < 3, Graphics, Graphics3D],
-    fps = OptionValue[animatedImage, {opts}, "FrameRate"],
-    imgSize = OptionValue[animatedImage, {opts}, ImageSize]
+    fps = Replace[OptionValue[AnimatedImage, {opts}, FrameRate], Automatic -> 20],
+    imgSize = Replace[OptionValue[AnimatedImage, {opts}, ImageSize], Automatic -> 360]
 },
-    With[{n = Max[Round[dur fps], 1]},
+    With[{n = Max[Round[dur * fps], 1]},
         AnimatedImage[
             Table[
                 Rasterize[
-                    render[obj["Update", t]["Graphics"], Sequence @@ gOpts, ImageSize -> imgSize, PlotRange -> bounds],
+                    render[obj["Update", t]["Graphics"], gOpts, ImageSize -> imgSize, PlotRange -> bounds],
                     "Image"
                 ],
                 {t, If[dur > 0, Subdivide[0, dur, n], {0}]}
             ],
-            FrameRate -> fps
+            FilterRules[{opts}, Options[AnimatedImage]],
+            FrameRate -> fps,
+            AnimationRepetitions -> 1
         ]
     ]
 ]
@@ -293,7 +372,7 @@ obj_AnimatedObject["Video", opts : OptionsPattern[VideoGenerator]] := With[{
 },
     Video[
         VideoGenerator[
-            render[obj["Update", #]["Graphics"], Sequence @@ gOpts, PlotRange -> bounds] &,
+            render[obj["Update", #]["Graphics"], gOpts, PlotRange -> bounds] &,
             obj["Duration"],
             opts
         ],
