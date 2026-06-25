@@ -40,6 +40,14 @@ AnimatedObject[g_ ? primitiveQ, Optional[dir : _ ? directiveQ, $AnimatedObjectDe
         opts, PlotRangePadding -> Scaled[0.1], Background -> Black}|>
     ]
 
+(* A CyclicPattern / Track / Synth|Gain voice / Audio dropped into the object becomes its
+   soundtrack: it plays under ["Dynamic"] and is muxed into ["Video"].  Detected by name so
+   no symbol has to be shared across the package files. *)
+audioObjectQ[x_] := MatchQ[x, _Audio] || MemberQ[{"CyclicPattern", "Track", "SynthVoice", "GainVoice"}, SymbolName[Head[x]]]
+
+AnimatedObject[g_ ? primitiveQ, dir : _ ? directiveQ, audio_ ? audioObjectQ, opts : OptionsPattern[]] := AnimatedObject[g, dir, opts]["SetAudio", audio]
+AnimatedObject[g_ ? primitiveQ, audio_ ? audioObjectQ, opts : OptionsPattern[]] := AnimatedObject[g, opts]["SetAudio", audio]
+
 AnimatedObject["" | {}, ___] := AnimatedObject[EmptyRegion[2], Transparent]
 
 (* Extract MaTeX glyphs while keeping each run's fill color (e.g. \color{red}{...}).
@@ -96,6 +104,14 @@ AnimatedObject[data_]["Directive"] := Replace[data["Directive"], {ds__} :> Direc
 AnimatedObject[data_]["Effects"] := data["Effects"]
 
 AnimatedObject[data_]["GraphicsOptions"] := data["GraphicsOptions"]
+
+AnimatedObject[data_]["Audio"] := Lookup[data, "Audio", None]
+AnimatedObject[data_]["AudioCycles"] := Lookup[data, "AudioCycles", 4]
+(obj : AnimatedObject[data_])["SetAudio", audio_, nCycles_ : 4] := AnimatedObject[Join[data, <|"Audio" -> audio, "AudioCycles" -> nCycles|>]]
+
+(* the attached soundtrack rendered to an Audio (CyclicPattern/Track are rendered; an Audio is used as-is) *)
+obj_AnimatedObject["AudioObject"] := With[{spec = obj["Audio"]},
+    Which[spec === None, None, MatchQ[spec, _Audio], spec, True, Audio[spec, obj["AudioCycles"]]]]
 
 
 obj_AnimatedObject["Graphics"] := {obj["Directive"], obj["Primitives"] /. o_AnimatedObject :> o["Graphics"]}
@@ -337,7 +353,44 @@ dynamicGraphics[obj_AnimatedObject, opts : OptionsPattern[]] := With[{
     ]
 ]
 
-obj_AnimatedObject["Dynamic", opts : OptionsPattern[dynamicGraphics]] := dynamicGraphics[obj, opts]
+(* when the object carries a soundtrack, drive the animation from the audio stream's true
+   Position (the master clock) and loop both together; clicking toggles play/pause, plus
+   transport buttons.  Otherwise use the self-driven visual-only Dynamic above. *)
+audioDynamic[obj_AnimatedObject, opts : OptionsPattern[dynamicGraphics]] := With[{
+    aud = obj["AudioObject"],
+    dur = obj["Duration"],
+    bounds = obj["Bounds"],
+    gOpts = obj["GraphicsOptions"],
+    render = If[obj["EmbeddingDimension"] < 3, Graphics, Graphics3D],
+    graphicsOpts = FilterRules[{opts}, Join[Options[Graphics], Options[Graphics3D]]]
+},
+    DynamicModule[{stream = Null, playing = True, t = 0.},
+        stream = AudioStream[aud, Looping -> True];
+        AudioPlay[stream];
+        Deploy @ Column[{
+            Dynamic @ Refresh[
+                If[playing && stream =!= Null, t = If[dur > 0, Mod[QuantityMagnitude @ stream["Position"], dur], 0.]];
+                EventHandler[
+                    render[obj["Update", t]["Graphics"], gOpts, graphicsOpts, PlotRange -> bounds],
+                    {
+                        {"MouseDown", 1} :> If[playing, (AudioStop[stream]; playing = False), (AudioPlay[stream]; playing = True)],
+                        {"MouseDown", 2} :> (AudioStop[stream]; AudioPlay[stream]; playing = True)
+                    }
+                ],
+                TrackedSymbols :> {t, playing}, UpdateInterval -> 0.03
+            ],
+            Row[{
+                Button["\:25b6 play", (AudioPlay[stream]; playing = True)],
+                Button["\:23f8 stop", (AudioStop[stream]; playing = False)],
+                Button["\:2715 remove", (AudioStop[stream]; RemoveAudioStream[stream]; stream = Null)]
+            }, Spacer[8]]
+        }],
+        SaveDefinitions -> True
+    ]
+]
+
+obj_AnimatedObject["Dynamic", opts : OptionsPattern[dynamicGraphics]] :=
+    If[obj["Audio"] === None, dynamicGraphics[obj, opts], audioDynamic[obj, opts]]
 
 
 obj_AnimatedObject["Image", opts : OptionsPattern[AnimatedImage]] := With[{
@@ -365,17 +418,22 @@ obj_AnimatedObject["Image", opts : OptionsPattern[AnimatedImage]] := With[{
 ]
 
 
+(* loop/trim a soundtrack to exactly the video's duration so the mux lines up *)
+fitAudioToVideo[aud_, durSec_] := With[{d = QuantityMagnitude @ Duration[aud]},
+    AudioTrim[
+        If[d >= durSec, aud, AudioJoin @@ ConstantArray[aud, Ceiling[durSec / Max[d, 0.001]]]],
+        Quantity[{0, durSec}, "Seconds"]]]
+
 obj_AnimatedObject["Video", opts : OptionsPattern[VideoGenerator]] := With[{
     bounds = obj["Bounds"],
     gOpts = obj["GraphicsOptions"],
-    render = If[obj["EmbeddingDimension"] < 3, Graphics, Graphics3D]
+    render = If[obj["EmbeddingDimension"] < 3, Graphics, Graphics3D],
+    aud = obj["AudioObject"],
+    dur = obj["Duration"]
 },
-    Video[
-        VideoGenerator[
-            render[obj["Update", #]["Graphics"], gOpts, PlotRange -> bounds] &,
-            obj["Duration"],
-            opts
-        ],
-        Appearance -> "Minimal"
+    With[{vid = Video[
+        VideoGenerator[render[obj["Update", #]["Graphics"], gOpts, PlotRange -> bounds] &, dur, opts],
+        Appearance -> "Minimal"]},
+        If[aud === None, vid, VideoCombine[{vid, fitAudioToVideo[aud, dur]}]]
     ]
 ]
