@@ -1,0 +1,354 @@
+Package["WolfAnim`"]
+
+(* ::Section:: A cyclic-time Pattern algebra (one structure, two renderers) *)
+
+(* A CyclicPattern is a pure function of cyclic, exact-rational time: given a query
+   timespan it returns the timed events that fall in it.  This is the TidalCycles /
+   Strudel "Pattern = query : TimeSpan -> [Event]" abstraction, transplanted to WL with
+   native Rational time.  The SAME pattern is rendered two ways: to sound (MusicScore ->
+   Audio) and to vision (a piano roll / AnimatedObject effects).  See
+   docs/wolfanim-music-design.md. *)
+
+PackageExport["CyclicPattern"]
+PackageExport["Steady"]
+PackageExport["Silence"]
+PackageExport["Fast"]
+PackageExport["Slow"]
+PackageExport["Layer"]
+PackageExport["Alternate"]
+PackageExport["Every"]
+PackageExport["Euclidean"]
+PackageExport["Degrade"]
+PackageExport["Track"]
+PackageExport["$CyclesPerSecond"]
+
+(* cycles per second; 0.5625 cps = 135 BPM at 4 beats/cycle = TidalCycles' classic feel *)
+$CyclesPerSecond = 0.5625
+
+patternTempo[] := 240 $CyclesPerSecond
+
+
+(* ::Subsection:: Events and timespans *)
+
+(* An event is <|"Value" -> v, "Whole" -> {wb, we} | None, "Part" -> {pb, pe}|>.
+   "Whole" is the event's full extent (None for a continuous signal sample);
+   "Part" is the slice intersecting the query.  It "has onset" iff its part begins
+   where its whole begins -- i.e. the note actually starts inside the query. *)
+
+sam[t_] := Floor[t]
+nextSam[t_] := Floor[t] + 1
+
+hasOnset[ev_] := ev["Whole"] =!= None && ev["Part"][[1]] == ev["Whole"][[1]]
+
+eventDuration[ev_] := ev["Whole"][[2]] - ev["Whole"][[1]]
+
+(* break a query span into pieces that never cross an integer cycle boundary *)
+spanCycles[{b_, e_}] /; b >= e := {}
+spanCycles[{b_, e_}] /; e <= nextSam[b] := {{b, e}}
+spanCycles[{b_, e_}] := Prepend[spanCycles[{nextSam[b], e}], {b, nextSam[b]}]
+
+(* map a function over every time coordinate of an event *)
+mapEventTime[f_][ev_] := <|
+    "Value" -> ev["Value"],
+    "Whole" -> If[ev["Whole"] === None, None, f /@ ev["Whole"]],
+    "Part" -> f /@ ev["Part"]
+|>
+
+
+(* ::Subsection:: Constructors *)
+
+(* the canonical form is CyclicPattern[queryFunction]; these are its query methods *)
+CyclicPattern[q_]["Query", b_, e_] := q[{b, e}]
+CyclicPattern[q_]["Cycle", c_ : 0] := q[{c, c + 1}]
+CyclicPattern[q_]["Onsets", b_ : 0, e_ : 1] := Select[q[{b, e}], hasOnset]
+
+(* Steady[v] -- TidalCycles "pure": one event per cycle carrying value v *)
+Steady[v_] := CyclicPattern[Function[span,
+    Function[piece, <|"Value" -> v, "Whole" -> {sam[piece[[1]]], nextSam[piece[[1]]]}, "Part" -> piece|>] /@ spanCycles[span]
+]]
+
+Silence = CyclicPattern[Function[span, {}]]
+
+(* mini-notation string -> pattern *)
+CyclicPattern[s_String] := parseSequence[StringTrim[s]]
+
+
+(* ::Subsection:: The combinator algebra (query rewriters) *)
+
+(* Fast[r] compresses time by r; Slow[r] stretches it. Operator forms: Fast[2] @ p. *)
+Fast[r_][CyclicPattern[q_]] := CyclicPattern[Function[span,
+    mapEventTime[#/r &] /@ q[r # & /@ span]
+]]
+Fast[_][Silence] := Silence
+Slow[r_][p_] := Fast[1/r][p]
+
+(* Reverse a pattern within each cycle (overloads System`Reverse on the new type) *)
+CyclicPattern /: Reverse[CyclicPattern[q_]] := CyclicPattern[Function[span,
+    Join @@ (reverseCycle[q, #] & /@ spanCycles[span])
+]]
+reverseCycle[q_, {b_, e_}] := With[{c = sam[b]},
+    With[{reflect = Function[{x, y}, {2 c + 1 - y, 2 c + 1 - x}]},
+        Function[ev, <|
+            "Value" -> ev["Value"],
+            "Whole" -> If[ev["Whole"] === None, None, reflect @@ ev["Whole"]],
+            "Part" -> reflect @@ ev["Part"]
+        |>] /@ q[reflect @@ {b, e}]
+    ]
+]
+
+(* Layer -- play patterns simultaneously (TidalCycles "stack"): union of events *)
+Layer[ps__CyclicPattern] := CyclicPattern[Function[span,
+    Join @@ (Function[p, p["Query", span[[1]], span[[2]]]] /@ {ps})
+]]
+Layer[ps_List] := Layer @@ ps
+Layer[p_CyclicPattern] := p
+
+(* Alternate -- one sub-pattern per cycle (TidalCycles "slowcat" / mini-notation <...>) *)
+Alternate[p_CyclicPattern] := p
+Alternate[ps__CyclicPattern] := With[{pats = {ps}, n = Length[{ps}]},
+    CyclicPattern[Function[span, Join @@ (alternateCycle[pats, n, #] & /@ spanCycles[span])]]
+]
+alternateCycle[pats_, n_, {b_, e_}] := With[{c = sam[b]},
+    With[{off = c - Floor[c/n]},
+        mapEventTime[# + off &] /@ pats[[Mod[c, n] + 1]]["Query", b - off, e - off]
+    ]
+]
+
+(* within-cycle sequence (mini-notation spaces): fast[n] of slowcat *)
+fastcatList[{p_}] := p
+fastcatList[ps_List] := Fast[Length[ps]][Alternate @@ ps]
+
+(* Every[n, f] applies transform f only on cycles where Mod[cycle, n] == 0 *)
+Every[n_, f_][CyclicPattern[q_]] := CyclicPattern[Function[span,
+    Join @@ (Function[piece,
+        If[Mod[sam[piece[[1]]], n] == 0,
+            f[CyclicPattern[q]]["Query", piece[[1]], piece[[2]]],
+            q[piece]
+        ]] /@ spanCycles[span])
+]]
+
+(* Euclidean[k, n] -- Bjorklund rhythm: k onsets spread maximally evenly over n steps *)
+Euclidean[k_, n_][p_] := Euclidean[k, n, 0][p]
+Euclidean[k_, n_, rot_][p_] := fastcatList[If[#, p, Silence] & /@ RotateLeft[bjorklund[k, n], rot]]
+
+bjorklund[k_, n_] := Which[
+    k <= 0, ConstantArray[False, n],
+    k >= n, ConstantArray[True, n],
+    True, bjork[ConstantArray[{True}, k], ConstantArray[{False}, n - k]]
+]
+bjork[a_, b_] := If[Length[b] <= 1,
+    Flatten[Join[a, b]],
+    With[{m = Min[Length[a], Length[b]]},
+        bjork[
+            Table[Join[a[[i]], b[[i]]], {i, m}],
+            If[Length[a] > m, a[[m + 1 ;;]], b[[m + 1 ;;]]]
+        ]
+    ]
+]
+
+(* Degrade -- drop ~fraction of onsets deterministically per cycle.
+   The unary form is restricted to a pattern argument so the operator form
+   Degrade[0.5] does NOT match it (which would recurse Degrade[0.5][0.5]...). *)
+Degrade[p_CyclicPattern] := Degrade[0.5][p]
+Degrade[fraction_][CyclicPattern[q_]] := CyclicPattern[Function[span,
+    Select[q[span], stableHash[#] >= fraction &]
+]]
+stableHash[ev_] := Mod[Hash[{ev["Whole"], ev["Value"]}], 1000]/1000.
+
+
+(* ::Subsection:: Mini-notation parser *)
+
+(* split a string on any separator char, respecting [], <>, () nesting *)
+splitTop[s_String, seps_List] := Module[{depth = 0, cur = "", out = {}, ch},
+    Do[
+        ch = StringTake[s, {i}];
+        Which[
+            MemberQ[{"[", "<", "("}, ch], depth++; cur = cur <> ch,
+            MemberQ[{"]", ">", ")"}, ch], depth--; cur = cur <> ch,
+            depth == 0 && MemberQ[seps, ch], (If[StringTrim[cur] =!= "", AppendTo[out, StringTrim[cur]]]; cur = ""),
+            True, cur = cur <> ch
+        ],
+        {i, StringLength[s]}
+    ];
+    If[StringTrim[cur] =!= "", AppendTo[out, StringTrim[cur]]];
+    out
+]
+
+(* "a b c" -> fastcat; the top-level sequence *)
+parseSequence[s_String] := With[{steps = splitTop[s, {" "}]},
+    Switch[Length[steps], 0, Silence, 1, parseStep[steps[[1]]], _, fastcatList[parseStep /@ steps]]
+]
+
+(* "a, b" inside [] -> Layer; otherwise a plain sequence *)
+parseStack[s_String] := With[{parts = splitTop[s, {","}]},
+    If[Length[parts] <= 1, parseSequence[s], Layer @@ (parseSequence /@ parts)]
+]
+
+(* one step: an element followed by modifiers like  *n  /n  (k,n[,r]) *)
+parseStep[tok_String] := With[{ev = parseElement[tok]}, applyModifiers[ev[[1]], ev[[2]]]]
+
+(* returns {pattern, leftoverModifierString} *)
+parseElement[tok_String] := Which[
+    StringStartsQ[tok, "["], With[{close = matchBracket[tok, "[", "]"]},
+        {parseStack[StringTake[tok, {2, close - 1}]], StringDrop[tok, close]}],
+    StringStartsQ[tok, "<"], With[{close = matchBracket[tok, "<", ">"]},
+        {Alternate @@ (parseStep /@ splitTop[StringTake[tok, {2, close - 1}], {" "}]), StringDrop[tok, close]}],
+    True, With[{m = StringPosition[tok, "*" | "/" | "(", 1]},
+        If[m === {},
+            {atomPattern[tok], ""},
+            {atomPattern[StringTake[tok, m[[1, 1]] - 1]], StringDrop[tok, m[[1, 1]] - 1]}
+        ]
+    ]
+]
+
+(* index of the bracket matching the opener at position 1 *)
+matchBracket[s_String, open_, close_] := Module[{depth = 0, ch},
+    Do[
+        ch = StringTake[s, {i}];
+        If[ch === open, depth++]; If[ch === close, depth--];
+        If[depth == 0, Return[i]],
+        {i, StringLength[s]}
+    ]
+]
+
+applyModifiers[p_, ""] := p
+applyModifiers[p_, mods_String] := Which[
+    StringStartsQ[mods, "*"], With[{r = readNumber[StringDrop[mods, 1]]},
+        applyModifiers[Fast[r[[1]]][p], r[[2]]]],
+    StringStartsQ[mods, "/"], With[{r = readNumber[StringDrop[mods, 1]]},
+        applyModifiers[Slow[r[[1]]][p], r[[2]]]],
+    StringStartsQ[mods, "("], With[{close = matchBracket[mods, "(", ")"]},
+        With[{args = ToExpression["{" <> StringTake[mods, {2, close - 1}] <> "}"]},
+            applyModifiers[(Euclidean @@ args)[p], StringDrop[mods, close]]
+        ]],
+    True, p
+]
+
+(* read a leading number, return {number, rest} *)
+readNumber[s_String] := With[{m = StringCases[s, StartOfString ~~ d : (DigitCharacter | ".").. :> d, 1]},
+    If[m === {}, {1, s}, {ToExpression[m[[1]]], StringDrop[s, StringLength[m[[1]]]]}]
+]
+
+atomPattern["~"] := Silence
+atomPattern[a_String] := Steady[If[StringMatchQ[a, (DigitCharacter | "-")..], ToExpression[a], a]]
+
+
+(* ::Subsection:: Sound renderer: pattern -> MusicScore -> Audio *)
+
+valueMidi[v_Integer] := v
+valueMidi[v_String] := Quiet@Check[MusicPitch[v]["MIDINumber"], Missing[]]
+valueMidi[_] := Missing[]
+
+(* one cycle-range of a pattern -> a monophonic MusicVoice (simultaneous onsets become
+   chords; gaps become rests).  Durations are exact cycle fractions = whole-note units. *)
+patternVoice[pat_, nCycles_ : 1] := Module[{onsets, byOnset, items = {}, t = 0, dur, grp, pitches},
+    onsets = Select[pat["Query", 0, nCycles], hasOnset];
+    If[onsets === {}, Return[MusicVoice[{MusicRest[nCycles]}]]];
+    byOnset = KeySort @ GroupBy[onsets, #["Whole"][[1]] &];
+    KeyValueMap[(
+        grp = #2; dur = Min[eventDuration /@ grp];
+        If[#1 > t, AppendTo[items, MusicRest[#1 - t]]];
+        pitches = DeleteMissing[valueMidi[#["Value"]] & /@ grp];
+        If[pitches =!= {},
+            AppendTo[items, If[Length[pitches] == 1, MusicNote[pitches[[1]], dur], MusicChord[pitches, dur]]],
+            AppendTo[items, MusicRest[dur]]
+        ];
+        t = Max[t, #1] + dur
+    ) &, byOnset];
+    If[t < nCycles, AppendTo[items, MusicRest[nCycles - t]]];
+    MusicVoice[items]
+]
+
+patternScore[voices_List, nCycles_] := MusicScore[
+    patternVoice[#, nCycles] & /@ voices,
+    MusicTimeSignature[4, 4], MusicTempo -> patternTempo[]
+]
+patternScore[pat_CyclicPattern, nCycles_] := patternScore[{pat}, nCycles]
+patternScore[Track[voices_List], nCycles_] := patternScore[voices, nCycles]
+
+(* pad the offline render's trimmed trailing rest back to the symbolic bar so a loop is
+   gapless (see music-design doc, "trailing-rest trim gotcha") *)
+patternAudio[voicesOrPat_, nCycles_ : 1] := Module[{score, audio, barSec},
+    score = patternScore[voicesOrPat, nCycles];
+    audio = Audio[score];
+    barSec = QuantityMagnitude @ MusicMeasurements[score, "DurationSeconds"];
+    AudioPad[audio, {0, Max[0, barSec - QuantityMagnitude @ Duration[audio]]}]
+]
+
+CyclicPattern /: Audio[p_CyclicPattern, nCycles_ : 1] := patternAudio[p, nCycles]
+CyclicPattern /: MusicPlot[p_CyclicPattern, nCycles_ : 1, opts___] := MusicPlot[patternScore[p, nCycles], opts]
+CyclicPattern /: Sound[p_CyclicPattern, nCycles_ : 1] := Sound[patternScore[p, nCycles]]
+
+
+(* ::Subsection:: Track: a multi-voice composition (each line its own timbre/voice) *)
+
+Track[ps__CyclicPattern] := Track[{ps}]
+Track[t_Track] := t
+
+Track[voices_List]["Voices"] := voices
+Track[voices_List]["Score", nCycles_ : 1] := patternScore[voices, nCycles]
+
+Track /: Audio[Track[voices_List], nCycles_ : 1] := patternAudio[voices, nCycles]
+Track /: MusicPlot[Track[voices_List], nCycles_ : 1, opts___] := MusicPlot[patternScore[voices, nCycles], opts]
+Track /: Sound[Track[voices_List], nCycles_ : 1] := Sound[patternScore[voices, nCycles]]
+
+
+(* ::Subsection:: Vision renderer: piano roll (static) and an audio-synced animation *)
+
+rollData[pat_, nCycles_] := With[{evs = Select[pat["Query", 0, nCycles], hasOnset]},
+    {#["Whole"], valueMidi[#["Value"]]} & /@ DeleteCases[evs, _?(MissingQ[valueMidi[#["Value"]]] &)]
+]
+
+pianoRoll[patsOrTrack_, nCycles_ : 1, highlight_ : None] := Module[{lanes, data, mids, lo, hi},
+    lanes = Which[
+        MatchQ[patsOrTrack, _Track], patsOrTrack["Voices"],
+        MatchQ[patsOrTrack, _List], patsOrTrack,
+        True, {patsOrTrack}
+    ];
+    data = MapIndexed[Function[{lane, i}, {First[i], #} & /@ rollData[lane, nCycles]], lanes];
+    mids = Cases[Flatten[data, 1][[All, 2, 2]], _Integer];
+    If[mids === {}, Return[Graphics[{}, ImageSize -> 360]]];
+    lo = Min[mids] - 2; hi = Max[mids] + 2;
+    Graphics[{
+        EdgeForm[{GrayLevel[0.1]}],
+        MapThread[Function[{laneData, hue},
+            {Hue[hue, 0.55, 0.95],
+             {#1, Rectangle[{#2[[1, 1]], #2[[2]] - 0.42}, {#2[[1, 2]], #2[[2]] + 0.42}]}[[2]] & @@@ laneData}
+        ], {data, If[Length[lanes] == 1, {0.58}, Range[0, Length[lanes] - 1]/Length[lanes]]}],
+        If[highlight === None, {},
+            {GrayLevel[1, 0.85], Thickness[0.006], Line[{{Mod[highlight, nCycles], lo}, {Mod[highlight, nCycles], hi}}]}]
+    },
+        PlotRange -> {{0, nCycles}, {lo, hi}}, AspectRatio -> 1/3, Background -> GrayLevel[0.13],
+        GridLines -> {Range[0, nCycles], None}, GridLinesStyle -> GrayLevel[0.28],
+        Frame -> True, FrameStyle -> GrayLevel[0.4], FrameTicks -> {{None, None}, {Range[0, nCycles], None}},
+        ImageSize -> 480
+    ]
+]
+
+CyclicPattern[q_]["PianoRoll", nCycles_ : 1] := pianoRoll[CyclicPattern[q], nCycles]
+Track[voices_List]["PianoRoll", nCycles_ : 1] := pianoRoll[Track[voices], nCycles]
+
+(* live: loop the rendered bar through an AudioStream and scrub the playhead across the
+   piano roll from the stream's true position (the master clock).  Returns a Dynamic. *)
+patternPlay[patsOrTrack_, nCycles_ : 1] := DynamicModule[{stream, barSec},
+    stream = AudioStream[patternAudio[patsOrTrack, nCycles], Looping -> True];
+    barSec = QuantityMagnitude @ MusicMeasurements[patternScore[patsOrTrack, nCycles], "DurationSeconds"];
+    AudioPlay[stream];
+    Deploy @ Column[{
+        Dynamic @ pianoRoll[patsOrTrack, nCycles, nCycles QuantityMagnitude[stream["Position"]] / barSec],
+        Row[{
+            Button["\:25b6 play", AudioPlay[stream]], Button["\:23f8 stop", AudioStop[stream]],
+            Button["\:2715 remove", (AudioStop[stream]; RemoveAudioStream[stream])]
+        }, Spacer[8]]
+    }]
+]
+CyclicPattern[q_]["Play", nCycles_ : 1] := patternPlay[CyclicPattern[q], nCycles]
+Track[voices_List]["Play", nCycles_ : 1] := patternPlay[Track[voices], nCycles]
+
+
+(* ::Subsection:: Formatting -- a pattern shows itself as its piano roll *)
+
+CyclicPattern /: MakeBoxes[p : CyclicPattern[_Function | _Symbol], StandardForm] :=
+    With[{boxes = ToBoxes[pianoRoll[p, 1], StandardForm]}, InterpretationBox[boxes, p]]
+Track /: MakeBoxes[t : Track[_List], StandardForm] :=
+    With[{boxes = ToBoxes[pianoRoll[t, 1], StandardForm]}, InterpretationBox[boxes, t]]
