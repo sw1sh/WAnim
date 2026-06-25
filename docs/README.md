@@ -33,8 +33,14 @@ declarative animation with Strudel/TidalCycles-style live-coding music on top of
    visual bridge, three runnable demo sketches, and a phased roadmap on top of the
    current paclet.
 
-**Read order:** 1 → 2 → 3. Doc 1 frames what WolfAnim is; doc 2 supplies the unifying
-abstraction; doc 3 turns it into a concrete WL design.
+4. **[dynamic-code-highlighting.md](dynamic-code-highlighting.md)** — a later **proposal
+   for review**: how to do Strudel-REPL-style live code highlighting (the mini-notation
+   flashing in time with playback) inside Wolfram notebook cells. Source-mapped events +
+   a projectional `LiveCode` view, with a phased plan and open questions.
+
+**Read order:** 1 → 2 → 3, then 4 once the pattern engine exists. Doc 1 frames what WolfAnim
+is; doc 2 supplies the unifying abstraction; doc 3 turns it into a concrete WL design; doc 4
+proposes the live-coding editor experience on top.
 
 ## How these were produced & verification status
 
