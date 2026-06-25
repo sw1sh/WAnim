@@ -359,32 +359,31 @@ dynamicGraphics[obj_AnimatedObject, opts : OptionsPattern[]] := With[{
 audioDynamic[obj_AnimatedObject, opts : OptionsPattern[dynamicGraphics]] := With[{
     aud = obj["AudioObject"],
     dur = obj["Duration"],
+    frozen = TrueQ @ OptionValue[dynamicGraphics, {opts}, "Frozen"],
     bounds = obj["Bounds"],
     gOpts = obj["GraphicsOptions"],
     render = If[obj["EmbeddingDimension"] < 3, Graphics, Graphics3D],
-    graphicsOpts = FilterRules[{opts}, Join[Options[Graphics], Options[Graphics3D]]]
+    graphicsOpts = FilterRules[{opts}, Join[Options[Graphics], Options[Graphics3D]]],
+    dynamicModuleOpts = FilterRules[{opts}, Options[DynamicModule]]
 },
-    DynamicModule[{stream = Null, playing = True, t = 0.},
-        stream = AudioStream[aud, Looping -> True];
-        AudioPlay[stream];
-        Deploy @ Column[{
-            Dynamic @ Refresh[
-                If[playing && stream =!= Null, t = If[dur > 0, Mod[QuantityMagnitude @ stream["Position"], dur], 0.]];
+    DynamicModule[{stream = AudioStream[aud, Looping -> True], playing = ! frozen, t = 0.},
+        If[playing, AudioPlay[stream]];
+        Dynamic[
+            Refresh[
+                If[playing, t = If[dur > 0, Mod[QuantityMagnitude @ stream["Position"], dur], 0.]];
                 EventHandler[
                     render[obj["Update", t]["Graphics"], gOpts, graphicsOpts, PlotRange -> bounds],
                     {
+                        (* left-click: play / pause (audio and animation together) *)
                         {"MouseDown", 1} :> If[playing, (AudioStop[stream]; playing = False), (AudioPlay[stream]; playing = True)],
-                        {"MouseDown", 2} :> (AudioStop[stream]; AudioPlay[stream]; playing = True)
+                        (* right-click: reset to the start, paused *)
+                        {"MouseDown", 2} :> (AudioStop[stream]; RemoveAudioStream[stream]; stream = AudioStream[aud, Looping -> True]; t = 0.; playing = False)
                     }
                 ],
                 TrackedSymbols :> {t, playing}, UpdateInterval -> 0.03
-            ],
-            Row[{
-                Button["\:25b6 play", (AudioPlay[stream]; playing = True)],
-                Button["\:23f8 stop", (AudioStop[stream]; playing = False)],
-                Button["\:2715 remove", (AudioStop[stream]; RemoveAudioStream[stream]; stream = Null)]
-            }, Spacer[8]]
-        }],
+            ]
+        ],
+        dynamicModuleOpts,
         SaveDefinitions -> True
     ]
 ]
