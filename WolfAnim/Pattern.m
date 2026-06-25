@@ -21,6 +21,14 @@ PackageExport["Euclidean"]
 PackageExport["Degrade"]
 PackageExport["Track"]
 PackageExport["$CyclesPerSecond"]
+PackageExport["LoadSamples"]
+PackageExport["Synth"]
+PackageExport["Gain"]
+PackageExport["Late"]
+PackageExport["Early"]
+PackageExport["Stagger"]
+PackageExport["Superimpose"]
+PackageExport["$SampleBank"]
 
 (* cycles per second; 0.5625 cps = 135 BPM at 4 beats/cycle = TidalCycles' classic feel *)
 $CyclesPerSecond = 0.5625
@@ -155,6 +163,12 @@ Degrade[fraction_][CyclicPattern[q_]] := CyclicPattern[Function[span,
 ]]
 stableHash[ev_] := Mod[Hash[{ev["Whole"], ev["Value"]}], 1000]/1000.
 
+(* time shift, and layering combinators *)
+Late[t_][CyclicPattern[q_]] := CyclicPattern[Function[span, mapEventTime[# + t &] /@ q[# - t & /@ span]]]
+Early[t_] := Late[-t]
+Superimpose[f_][p_] := Layer[p, f[p]]
+Stagger[t_, f_][p_] := Layer[p, Late[t][f[p]]]
+
 
 (* ::Subsection:: Mini-notation parser *)
 
@@ -233,69 +247,115 @@ atomPattern["~"] := Silence
 atomPattern[a_String] := Steady[If[StringMatchQ[a, (DigitCharacter | "-")..], ToExpression[a], a]]
 
 
-(* ::Subsection:: Sound renderer: pattern -> MusicScore -> Audio *)
+(* ::Subsection:: Sample bank -- load drum / one-shot WAVs, addressed by name *)
+
+$SampleBank = <||>
+
+LoadSample[name_String, file_String] := ($SampleBank[name] = AudioNormalize @ AudioChannelMix[Import[file], "Mono"])
+LoadSamples[dir_String] := (LoadSample[FileBaseName[#], #] & /@ FileNames["*.wav", dir]; Keys[$SampleBank])
+sampleQ[v_] := KeyExistsQ[$SampleBank, v]
+
+
+(* ::Subsection:: Notation: pitched events -> MusicScore (drives Sound / MusicPlot) *)
 
 valueMidi[v_Integer] := v
 valueMidi[v_String] := Quiet@Check[MusicPitch[v]["MIDINumber"], Missing[]]
 valueMidi[_] := Missing[]
 
-(* one cycle-range of a pattern -> a monophonic MusicVoice (simultaneous onsets become
-   chords; gaps become rests).  Durations are exact cycle fractions = whole-note units. *)
-patternVoice[pat_, nCycles_ : 1] := Module[{onsets, byOnset, items = {}, t = 0, dur, grp, pitches},
-    onsets = Select[pat["Query", 0, nCycles], hasOnset];
-    If[onsets === {}, Return[MusicVoice[{MusicRest[nCycles]}]]];
-    byOnset = KeySort @ GroupBy[onsets, #["Whole"][[1]] &];
+(* a voice is a bare pattern or a Synth / Gain wrapper; patternOf recovers the pattern *)
+patternOf[SynthVoice[_, p_]] := p
+patternOf[GainVoice[_, v_]] := patternOf[v]
+patternOf[p_] := p
+
+(* events (one cycle-range) -> a monophonic MusicVoice: simultaneous onsets become chords;
+   gaps and non-pitch (sample) tokens become rests.  Durations are whole-note units. *)
+eventsToVoice[events_, nCycles_] := Module[{byOnset, items = {}, t = 0, dur, grp, pitches},
+    If[events === {}, Return[MusicVoice[{MusicRest[nCycles]}]]];
+    byOnset = KeySort @ GroupBy[events, #["Whole"][[1]] &];
     KeyValueMap[(
         grp = #2; dur = Min[eventDuration /@ grp];
         If[#1 > t, AppendTo[items, MusicRest[#1 - t]]];
         pitches = DeleteMissing[valueMidi[#["Value"]] & /@ grp];
-        If[pitches =!= {},
-            AppendTo[items, If[Length[pitches] == 1, MusicNote[pitches[[1]], dur], MusicChord[pitches, dur]]],
-            AppendTo[items, MusicRest[dur]]
-        ];
+        AppendTo[items, Which[pitches === {}, MusicRest[dur], Length[pitches] == 1, MusicNote[pitches[[1]], dur], True, MusicChord[pitches, dur]]];
         t = Max[t, #1] + dur
     ) &, byOnset];
     If[t < nCycles, AppendTo[items, MusicRest[nCycles - t]]];
     MusicVoice[items]
 ]
+patternVoice[v_, nCycles_ : 1] := eventsToVoice[Select[patternOf[v]["Query", 0, nCycles], hasOnset], nCycles]
 
-patternScore[voices_List, nCycles_] := MusicScore[
-    patternVoice[#, nCycles] & /@ voices,
-    MusicTimeSignature[4, 4], MusicTempo -> patternTempo[]
-]
-patternScore[pat_CyclicPattern, nCycles_] := patternScore[{pat}, nCycles]
+patternScore[voices_List, nCycles_] := MusicScore[patternVoice[#, nCycles] & /@ voices, MusicTimeSignature[4, 4], MusicTempo -> patternTempo[]]
+patternScore[v : _CyclicPattern | _SynthVoice | _GainVoice, nCycles_] := patternScore[{v}, nCycles]
 patternScore[Track[voices_List], nCycles_] := patternScore[voices, nCycles]
 
-(* pad the offline render's trimmed trailing rest back to the symbolic bar so a loop is
-   gapless (see music-design doc, "trailing-rest trim gotcha") *)
-patternAudio[voicesOrPat_, nCycles_ : 1] := Module[{score, audio, barSec},
-    score = patternScore[voicesOrPat, nCycles];
-    audio = Audio[score];
-    barSec = QuantityMagnitude @ MusicMeasurements[score, "DurationSeconds"];
-    AudioPad[audio, {0, Max[0, barSec - QuantityMagnitude @ Duration[audio]]}]
-]
 
-CyclicPattern /: Audio[p_CyclicPattern, nCycles_ : 1] := patternAudio[p, nCycles]
+(* ::Subsection:: Audio renderer: drum samples + oscillator synth + MusicScore, overlaid *)
+
+(* a voice carrying a wave gets oscillator synthesis; Gain scales its level *)
+Synth[wave_String][p_] := SynthVoice[wave, p]
+Gain[g_][v_] := GainVoice[g, v]
+
+cycleSeconds[] := 1 / $CyclesPerSecond
+midiToFreq[m_] := 440. * 2 ^ ((m - 69) / 12.)
+silence[sec_] := AudioGenerator["Silence", Max[sec, 0.001]]
+at[onsetCycles_] := onsetCycles cycleSeconds[]
+
+fitDuration[a_, sec_] := With[{d = QuantityMagnitude @ Duration[a]},
+    Which[d < sec - 0.0005, AudioPad[a, {0, sec - d}], d > sec + 0.0005, AudioTrim[a, Quantity[{0, sec}, "Seconds"]], True, a]]
+
+mix[layers_] := With[{ls = DeleteCases[Flatten[{layers}], Nothing]},
+    Switch[Length[ls], 0, Nothing, 1, ls[[1]], _, AudioOverlay[ls]]]
+fitTo[Nothing, nCycles_] := silence[nCycles cycleSeconds[]]
+fitTo[a_, nCycles_] := fitDuration[a, nCycles cycleSeconds[]]
+
+(* per-note amplitude envelope (anti-click attack + release scaled to the note) *)
+env[a_, durSec_] := AudioFade[a, {0.004, Min[0.09, 0.5 durSec]}]
+oscNote[wave_, f_, durSec_] := env[Switch[wave,
+    "Supersaw", AudioOverlay[AudioGenerator[{"Sawtooth", f #}, durSec] & /@ {0.993, 1., 1.007}],
+    _, AudioGenerator[{wave, f}, durSec]], durSec]
+
+(* sample events placed at their onsets *)
+sampleLayer[events_] := mix[AudioPad[$SampleBank[#["Value"]], {at[#["Whole"][[1]]], 0}] & /@ Select[events, sampleQ[#["Value"]] &]]
+(* pitched events -> MusicScore -> Audio (acoustic-ish) *)
+musicLayer[events_, nCycles_] := With[{pe = Select[events, ! sampleQ[#["Value"]] && NumericQ[valueMidi[#["Value"]]] &]},
+    If[pe === {}, Nothing, Audio[MusicScore[{eventsToVoice[pe, nCycles]}, MusicTimeSignature[4, 4], MusicTempo -> patternTempo[]]]]]
+(* pitched events -> oscillator synth -> Audio *)
+oscLayer[events_, wave_] := mix[Function[ev,
+    AudioPad[oscNote[wave, midiToFreq[valueMidi[ev["Value"]]], eventDuration[ev] cycleSeconds[]], {at[ev["Whole"][[1]]], 0}]] /@
+    Select[events, NumericQ[valueMidi[#["Value"]]] &]]
+
+voiceAudio[GainVoice[g_, v_], nCycles_] := AudioAmplify[voiceAudio[v, nCycles], g]
+voiceAudio[SynthVoice[wave_, p_], nCycles_] := fitTo[oscLayer[Select[p["Query", 0, nCycles], hasOnset], wave], nCycles]
+voiceAudio[p_CyclicPattern, nCycles_] := With[{ev = Select[p["Query", 0, nCycles], hasOnset]},
+    fitTo[mix[{sampleLayer[ev], musicLayer[ev, nCycles]}], nCycles]]
+
+renderAudio[Track[voices_List], nCycles_] := AudioNormalize @ fitDuration[mix[voiceAudio[#, nCycles] & /@ voices], nCycles cycleSeconds[]]
+renderAudio[v_, nCycles_] := fitTo[voiceAudio[v, nCycles], nCycles]
+
+CyclicPattern /: Audio[p_CyclicPattern, nCycles_ : 1] := renderAudio[p, nCycles]
 CyclicPattern /: MusicPlot[p_CyclicPattern, nCycles_ : 1, opts___] := MusicPlot[patternScore[p, nCycles], opts]
 CyclicPattern /: Sound[p_CyclicPattern, nCycles_ : 1] := Sound[patternScore[p, nCycles]]
+SynthVoice /: Audio[v_SynthVoice, nCycles_ : 1] := renderAudio[v, nCycles]
+GainVoice /: Audio[v_GainVoice, nCycles_ : 1] := renderAudio[v, nCycles]
 
 
 (* ::Subsection:: Track: a multi-voice composition (each line its own timbre/voice) *)
 
-Track[ps__CyclicPattern] := Track[{ps}]
+voiceQ[v_] := MatchQ[v, _CyclicPattern | _SynthVoice | _GainVoice]
+Track[ps__?voiceQ] := Track[{ps}]
 Track[t_Track] := t
 
 Track[voices_List]["Voices"] := voices
 Track[voices_List]["Score", nCycles_ : 1] := patternScore[voices, nCycles]
 
-Track /: Audio[Track[voices_List], nCycles_ : 1] := patternAudio[voices, nCycles]
+Track /: Audio[Track[voices_List], nCycles_ : 1] := renderAudio[Track[voices], nCycles]
 Track /: MusicPlot[Track[voices_List], nCycles_ : 1, opts___] := MusicPlot[patternScore[voices, nCycles], opts]
 Track /: Sound[Track[voices_List], nCycles_ : 1] := Sound[patternScore[voices, nCycles]]
 
 
 (* ::Subsection:: Vision renderer: piano roll (static) and an audio-synced animation *)
 
-rollData[pat_, nCycles_] := With[{evs = Select[pat["Query", 0, nCycles], hasOnset]},
+rollData[v_, nCycles_] := With[{evs = Select[patternOf[v]["Query", 0, nCycles], hasOnset]},
     {#["Whole"], valueMidi[#["Value"]]} & /@ DeleteCases[evs, _?(MissingQ[valueMidi[#["Value"]]] &)]
 ]
 
@@ -330,9 +390,8 @@ Track[voices_List]["PianoRoll", nCycles_ : 1] := pianoRoll[Track[voices], nCycle
 
 (* live: loop the rendered bar through an AudioStream and scrub the playhead across the
    piano roll from the stream's true position (the master clock).  Returns a Dynamic. *)
-patternPlay[patsOrTrack_, nCycles_ : 1] := DynamicModule[{stream, barSec},
-    stream = AudioStream[patternAudio[patsOrTrack, nCycles], Looping -> True];
-    barSec = QuantityMagnitude @ MusicMeasurements[patternScore[patsOrTrack, nCycles], "DurationSeconds"];
+patternPlay[patsOrTrack_, nCycles_ : 1] := DynamicModule[{stream, barSec = nCycles / $CyclesPerSecond},
+    stream = AudioStream[renderAudio[patsOrTrack, nCycles], Looping -> True];
     AudioPlay[stream];
     Deploy @ Column[{
         Dynamic @ pianoRoll[patsOrTrack, nCycles, nCycles QuantityMagnitude[stream["Position"]] / barSec],

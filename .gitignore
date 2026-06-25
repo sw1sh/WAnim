@@ -3,3 +3,6 @@
 **/*.nb
 
 *.paclet
+
+# downloaded sound assets + renders (CC samples from tidalcycles/Dirt-Samples)
+/assets/
