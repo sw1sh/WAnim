@@ -422,8 +422,9 @@ CyclicPattern /: MakeBoxes[p : CyclicPattern[_Function | _Symbol], StandardForm]
 Track /: MakeBoxes[t : Track[_List], StandardForm] :=
     With[{boxes = ToBoxes[pianoRoll[t, 1], StandardForm]}, InterpretationBox[boxes, t]]
 
-(* TraditionalForm renders the pattern as a playable Audio (switch with Cell > Convert To) *)
+(* TraditionalForm renders the pattern as its live ["Play"] piano roll: left-click
+   play/pause, right-click reset, playhead scrubbing the loop.  Switch with Cell > Convert To. *)
 CyclicPattern /: MakeBoxes[p : CyclicPattern[_Function | _Symbol], TraditionalForm] :=
-    With[{boxes = ToBoxes[Audio[p, 2]]}, InterpretationBox[boxes, p]]
+    With[{boxes = ToBoxes[patternPlay[p, 2]]}, InterpretationBox[boxes, p]]
 Track /: MakeBoxes[t : Track[_List], TraditionalForm] :=
-    With[{boxes = ToBoxes[Audio[t, 2]]}, InterpretationBox[boxes, t]]
+    With[{boxes = ToBoxes[patternPlay[t, 2]]}, InterpretationBox[boxes, t]]
