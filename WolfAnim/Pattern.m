@@ -390,16 +390,26 @@ Track[voices_List]["PianoRoll", nCycles_ : 1] := pianoRoll[Track[voices], nCycle
 
 (* live: loop the rendered bar through an AudioStream and scrub the playhead across the
    piano roll from the stream's true position (the master clock).  Returns a Dynamic. *)
-patternPlay[patsOrTrack_, nCycles_ : 1] := DynamicModule[{stream, barSec = nCycles / $CyclesPerSecond},
-    stream = AudioStream[renderAudio[patsOrTrack, nCycles], Looping -> True];
-    AudioPlay[stream];
-    Deploy @ Column[{
-        Dynamic @ pianoRoll[patsOrTrack, nCycles, nCycles QuantityMagnitude[stream["Position"]] / barSec],
-        Row[{
-            Button["\:25b6 play", AudioPlay[stream]], Button["\:23f8 stop", AudioStop[stream]],
-            Button["\:2715 remove", (AudioStop[stream]; RemoveAudioStream[stream])]
-        }, Spacer[8]]
-    }]
+patternPlay[patsOrTrack_, nCycles_ : 1] := With[{aud = renderAudio[patsOrTrack, nCycles]},
+    DynamicModule[{stream = AudioStream[aud, Looping -> True], playing = True, head = 0.},
+        AudioPlay[stream];
+        Dynamic[
+            Refresh[
+                If[playing, head = QuantityMagnitude[stream["Position"]] $CyclesPerSecond];
+                EventHandler[
+                    pianoRoll[patsOrTrack, nCycles, head],
+                    {
+                        (* left-click: play / pause *)
+                        {"MouseDown", 1} :> If[playing, (AudioStop[stream]; playing = False), (AudioPlay[stream]; playing = True)],
+                        (* right-click: reset to the start, paused *)
+                        {"MouseDown", 2} :> (AudioStop[stream]; RemoveAudioStream[stream]; stream = AudioStream[aud, Looping -> True]; head = 0.; playing = False)
+                    }
+                ],
+                TrackedSymbols :> {head, playing}, UpdateInterval -> 0.03
+            ]
+        ],
+        SaveDefinitions -> True
+    ]
 ]
 CyclicPattern[q_]["Play", nCycles_ : 1] := patternPlay[CyclicPattern[q], nCycles]
 Track[voices_List]["Play", nCycles_ : 1] := patternPlay[Track[voices], nCycles]
