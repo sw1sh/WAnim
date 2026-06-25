@@ -29,6 +29,29 @@ PackageExport["Early"]
 PackageExport["Stagger"]
 PackageExport["Superimpose"]
 PackageExport["$SampleBank"]
+PackageExport["Oscilloscope"]
+PackageExport["Fastcat"]
+
+(* Strudel-style lowercase shortcuts (aliases defined near the end of the file) *)
+PackageExport["s"]
+PackageExport["sound"]
+PackageExport["note"]
+PackageExport["n"]
+PackageExport["fast"]
+PackageExport["slow"]
+PackageExport["rev"]
+PackageExport["stack"]
+PackageExport["cat"]
+PackageExport["seq"]
+PackageExport["every"]
+PackageExport["euclid"]
+PackageExport["degrade"]
+PackageExport["off"]
+PackageExport["superimpose"]
+PackageExport["late"]
+PackageExport["early"]
+PackageExport["gain"]
+PackageExport["silence"]
 
 (* cycles per second; 0.5625 cps = 135 BPM at 4 beats/cycle = TidalCycles' classic feel *)
 $CyclesPerSecond = 0.5625
@@ -413,6 +436,73 @@ patternPlay[patsOrTrack_, nCycles_ : 1] := With[{aud = renderAudio[patsOrTrack, 
 ]
 CyclicPattern[q_]["Play", nCycles_ : 1] := patternPlay[CyclicPattern[q], nCycles]
 Track[voices_List]["Play", nCycles_ : 1] := patternPlay[Track[voices], nCycles]
+
+(* ["Scope"] plays the loop and shows a live oscilloscope of the audio stream's current
+   buffer; same click mechanics as ["Play"] (left = play/pause, right = reset). *)
+scopeFrame[snippet_] := With[{wave = Quiet @ Check[Flatten @ AudioData[snippet], {0.}]},
+    ListLinePlot[wave, PlotRange -> {All, {-1.05, 1.05}}, AspectRatio -> 1/3, Axes -> False,
+        Frame -> True, FrameTicks -> None, FrameStyle -> GrayLevel[0.3], Background -> GrayLevel[0.08],
+        PlotStyle -> Directive[RGBColor[0.25, 1, 0.55], Thickness[0.004]],
+        GridLines -> {None, {0}}, GridLinesStyle -> GrayLevel[0.25], ImageSize -> 480, ImagePadding -> 4]]
+
+scopePlay[patsOrTrack_, nCycles_ : 2] := With[{aud = renderAudio[patsOrTrack, nCycles]},
+    DynamicModule[{stream = AudioStream[aud, Looping -> True], playing = True, frame = 0},
+        AudioPlay[stream];
+        Dynamic[
+            Refresh[
+                frame++;
+                EventHandler[
+                    scopeFrame[stream["CurrentAudio"]],
+                    {
+                        {"MouseDown", 1} :> If[playing, (AudioStop[stream]; playing = False), (AudioPlay[stream]; playing = True)],
+                        {"MouseDown", 2} :> (AudioStop[stream]; RemoveAudioStream[stream]; stream = AudioStream[aud, Looping -> True]; playing = False)
+                    }
+                ],
+                TrackedSymbols :> {frame}, UpdateInterval -> 0.04
+            ]
+        ],
+        SaveDefinitions -> True
+    ]
+]
+CyclicPattern[q_]["Scope", nCycles_ : 2] := scopePlay[CyclicPattern[q], nCycles]
+Track[voices_List]["Scope", nCycles_ : 2] := scopePlay[Track[voices], nCycles]
+
+
+(* ::Subsection:: Visualizations -- waveform and spectrogram of a pattern / track / audio *)
+
+scopeStatic[a_] := AudioPlot[a, AspectRatio -> 1/3, Background -> GrayLevel[0.08],
+    PlotStyle -> RGBColor[0.25, 1, 0.55], Frame -> True, FrameTicks -> None,
+    FrameStyle -> GrayLevel[0.3], ImageSize -> 480]
+Oscilloscope[x_, nCycles_ : 2] := scopeStatic @ If[MatchQ[x, _Audio], x, renderAudio[x, nCycles]]
+
+CyclicPattern /: Spectrogram[p_CyclicPattern, nCycles_ : 2, opts : OptionsPattern[]] := Spectrogram[renderAudio[p, nCycles], opts, ImageSize -> 480]
+Track /: Spectrogram[t_Track, nCycles_ : 2, opts : OptionsPattern[]] := Spectrogram[renderAudio[t, nCycles], opts, ImageSize -> 480]
+
+
+(* ::Subsection:: Strudel-style shortcuts -- lowercase aliases for the idiomatic names.
+   Chain them postfix with //  e.g.   s["bd*4"] // every[4, rev] // fast[2]
+   (these put `s` and `n` on the context path, so mind any variables named s / n). *)
+
+s = CyclicPattern
+sound = CyclicPattern
+note = CyclicPattern
+n = CyclicPattern
+fast = Fast
+slow = Slow
+rev = Reverse
+stack = Layer
+cat = Alternate
+every = Every
+euclid = Euclidean
+degrade = Degrade
+off = Stagger
+superimpose = Superimpose
+late = Late
+early = Early
+gain = Gain
+silence = Silence
+Fastcat[ps__] := fastcatList[{ps}]
+seq = Fastcat
 
 
 (* ::Subsection:: Formatting -- a pattern shows itself as its piano roll *)
