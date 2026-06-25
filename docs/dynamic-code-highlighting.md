@@ -1,160 +1,125 @@
-# Design note (proposal) — live code highlighting in Notebook cells, Strudel-REPL style
+# Live code highlighting in Notebook cells — symbolic InputForm boxes (implemented prototype)
 
-**Status:** proposal for review. Nothing here is built yet. The goal is to agree on a shape
-before committing code. Author's recommendation is in §6.
+**Status:** working prototype shipped as `LiveCode` in `WolfAnim/Pattern.m`. This note
+explains the approach, what is kernel-verified, and what still needs a human at a front end
+to judge. An earlier version of this doc proposed a *projectional string mirror* — that was
+rejected (it re-typesets a string instead of the code). The approach below is the one built.
 
 ## 1. What we want
 
-In the [Strudel](https://strudel.cc) REPL, while a pattern plays the **mini-notation lights
-up in time with the sound**: the token(s) currently sounding glow, synced to the audio clock.
-It turns the code into a third feedback channel alongside what you hear and what you see.
+Strudel's REPL highlights the mini-notation **in time with the sound** — the token(s)
+currently sounding glow, locked to the audio clock. We want the same inside a Wolfram
+notebook for a `CyclicPattern`/`Track`.
 
-We want the same thing for WolfAnim's `CyclicPattern`/`Track` **inside a Wolfram notebook**:
-play a pattern and watch its mini-notation string flash on each onset, locked to playback.
+## 2. The idea that won — render the *symbolic* pattern, highlight its boxes
 
-## 2. How Strudel does it (for reference)
-
-- The mini-notation parser produces an AST whose **leaves keep their source location**
-  (a character span in the typed string).
-- The scheduler emits *haps* (timed events); each hap carries a reference back to the source
-  location it came from.
-- A CodeMirror **decoration** highlights those spans for the duration of each hap.
-- The master clock is the Web Audio clock; a look-ahead scheduler paints decorations slightly
-  ahead and clears them when the hap ends.
-
-Three ingredients: (a) **source-mapped events**, (b) a **clock**, (c) a way to **style spans
-of the displayed code** live. We have good analogues for (b) and (c); (a) is the work.
-
-## 3. What the WL notebook gives us, and what it doesn't
-
-**We have:**
-- A real master clock: `AudioStream[...]["Position"]` (seconds), already what `["Play"]`/
-  `["Scope"]` scrub from. `phaseCycles = Position * $CyclesPerSecond`.
-- Live typesetting: `Dynamic`, `Refresh[…, UpdateInterval->…, TrackedSymbols:>…]`, and
-  per-element styling via `StyleBox`/`Framed`/`Highlighted`/`Background`. A box can have a
-  `Dynamic` background that reads a shared symbol — so a token can glow on demand.
-- `EventHandler` for the click mechanics we already use (left = play/pause, right = reset).
-- `InputField[Dynamic[str], String]` for an editable text field that re-parses on change.
-
-**We don't have (cheaply):**
-- A clean, supported way to **restyle the user's actual typed Input cell** while they edit it.
-  The front end owns those boxes; rewriting them mid-edit is invasive and FE-version-fragile.
-- Public per-token bounding boxes for an arbitrary cell (needed to overlay highlights on the
-  real cell).
-
-So the robust path is a **projectional mirror**: render the mini-notation ourselves as styled
-boxes we fully control, rather than instrumenting the typed cell. That mirror can also be
-editable, giving the REPL feel without fighting the front end.
-
-## 4. The core idea — a source→time schedule
-
-Everything rests on annotating events with where they came from in the string.
-
-1. **Source-mapped parser (Phase 0).** Today `parseSequence`/`parseStep`/`parseElement`
-   (`WolfAnim/Pattern.m`) discard character offsets. Add a position-tracking mode that threads
-   the absolute offset through the recursion so each `atomPattern` records
-   `"Source" -> {i, j}` (the char span of its token) on the events it produces. Steady/atom set
-   it; the combinators (`fast`, `rev`, `every`, …) already `mapEventTime` over events — they
-   just need to **preserve the extra `"Source"` key** (mostly free, since they rebuild the
-   association). `CyclicPattern[str]` also stashes the original `str`.
-
-2. **Schedule.** For a pattern `p` over `N` cycles:
-   ```
-   events   = Select[p["Query", 0, N], hasOnset]
-   schedule = {#["Source"], #["Whole"]} & /@ events     (* {span, {t0, t1}} in cycles *)
-   ```
-   Group by span → for each source span, the list of cycle-intervals when it is sounding.
-
-3. **Active test.** At play phase `φ` (cycles), span `{i,j}` is lit iff some interval
-   `{t0,t1}` for it satisfies `t0 <= Mod[φ, N] < t0 + glow`, where `glow` is a short window
-   (the hap's `t1-t0`, or a fixed ~80 ms so brief notes still flash visibly). This is an
-   interval lookup, cheap to do per frame for typical token counts.
-
-## 5. Proposed surface
-
-### Phase 1 — `LiveCode` projectional view (the realistic core)
+Don't use a mini-notation *string* and char-map into it. Write the pattern **symbolically**
+(combinators + atoms) and render *that expression* to its own **InputForm boxes** — the same
+boxes the front end already syntax-colors. Then wrap each atom's boxes in a `StyleBox` whose
+`Background` is a `Dynamic` that lights up while that atom's events are sounding. The code you
+see *is* the pattern, and the highlight rides on top of the FE's own typesetting.
 
 ```wolfram
-LiveCode["bd*4, ~ cp ~ cp, <c e g> "]      (* or:  pattern["Highlight", nCycles] *)
+LiveCode[ stack[ s["bd*4"], note["<c4 e4 g4>"] // fast[2] // every[4, rev] ] ]
 ```
 
-Returns a `DynamicModule` that:
-- parses the string once into the pattern **and** a token list with spans + the schedule;
-- renders the string as a monospace `Row`/`Grid` of per-token boxes, each token a
-  `Framed`/`StyleBox` whose `Background` is
-  `Dynamic[If[active[span, phase], litColor, GrayLevel[0.12]]]`;
-- starts a hidden looping `AudioStream` of the rendered loop and drives a shared `phase` from
-  its `Position` (`Refresh`, `UpdateInterval -> 0.03`);
-- uses the **same click mechanics** as `["Play"]`/`["Scope"]` — left-click on the code =
-  play/pause, right-click = reset.
+renders as the literal code `stack[s["bd*4"], note["<c4 e4 g4>"] // fast[2] // every[4, rev]]`,
+each `s[...]`/`note[...]` atom box flashing on its onsets, with a playhead bar underneath.
+Left-click = play/pause, right-click = reset (the same click mechanics as `["Play"]`).
 
-This is a read-only-by-default, fully-controlled mirror of the code that plays and glows. It
-needs nothing from the front end beyond ordinary Dynamic typesetting, so it is robust.
+Avoiding strings is the whole point: the structure is already a tree, so mapping a sounding
+event back to *its box* is just an id on the atom — no source-span parsing of a string.
 
-Optionally stack it with the existing piano roll (`["Play"]`) so code, roll, and sound all
-scrub together.
+## 3. How it works (what the prototype does)
 
-### Phase 2 — editable mini-REPL
+`LiveCode` is `HoldFirst`, so it gets the pattern expression **unevaluated** and does three
+passes over the held tree (`WolfAnim/Pattern.m`):
 
-Wrap the code in `InputField[Dynamic[codeString], String, ...]` (monospace). On change:
-re-parse → rebuild the schedule → **hot-swap the stream at the next cycle boundary**
-(quantized, reusing the loop length so the groove doesn't jump). That is the Strudel
-edit-hear-see loop, living inside one notebook output cell. Highlighting overlays the field's
-text via a `Dynamic` `Background`/`Overlay` aligned to the field (monospace makes column math
-exact: char *k* sits at *k·em*).
+1. **Tag + play.** Replace each atom (a leaf whose head is in `$LiveAtomHeads`, see §5) with
+   `tagPat[id][atom]`, which adds `"Source" -> id` to every event the atom emits, then
+   `ReleaseHold` to get the real pattern. The combinators carry the extra key through because
+   `mapEventTime`/`reverseCycle` now **merge** the event association instead of rebuilding it
+   with only `Value/Whole/Part`. Query that tagged pattern over *N* cycles → events, each
+   knowing which atom (`Source`) it came from and when it plays (`Whole`). Group into a
+   per-id schedule of `{onset, offset}` cycle-intervals.
 
-### Phase 3 — instrument the *actual* typed cell (stretch / research)
+2. **Render + inject.** Replace each atom in the *same* tree with `hlAtom[itsIntervals, atom]`,
+   an inert marker whose `MakeBoxes` is
 
-To light the real code the user typed (not a mirror), the options, roughly worst-to-best:
-- **(a) Box surgery** — on evaluate, replace the cell's `BoxData` with a styled tree (each
-  token a `StyleBox` with a `Dynamic` background). Clobbers in-progress edits; brittle.
-- **(b) Overlay** — compute token bounding boxes from FE box info and draw highlight
-  rectangles in an attached/overlay cell. No public per-token bounds API; position math is
-  fragile across FE versions and zoom.
-- **(c) A dedicated cell style** (`"Pattern"`) whose stylesheet renders its string content
-  through the Phase-1 machinery, so *typing in a `Pattern` cell* auto-highlights. Most
-  "native", but needs a stylesheet + a content→pattern hook, and constrains the cell to a
-  single pattern string.
+   ```
+   StyleBox[ MakeBoxes[atom],
+             Background -> Dynamic[ If[liveActiveQ[intervals, livePhase, liveCycles],
+                                       glow, transparent] ] ]
+   ```
 
-Recommendation: treat Phase 3 as research; (c) is the most promising if we pursue it.
+   so `MakeBoxes` of the whole tree yields the normal InputForm boxes of the code, with each
+   atom's box wrapped in a highlight that reads the shared `livePhase`.
 
-## 6. Recommendation
+3. **Clock + transport.** Wrap it all in a `DynamicModule[{livePhase, stream, playing}, …]`:
+   a looping `AudioStream` of the rendered loop, a `Refresh` (30 ms) that sets
+   `livePhase = streamPosition · cps` (the audio is the master clock, so no drift), an
+   `EventHandler` for the clicks, and a `ProgressIndicator` playhead. `With[{b = boxes}, …]`
+   splices the boxes into the module body so the module localizes `livePhase` *inside* the
+   `StyleBox` dynamics.
 
-Ship **Phase 0 + Phase 1** first: source-mapped events plus the `LiveCode` projectional
-view. It delivers ~90% of the value (play, watch the code flash in time, click to control)
-with no front-end fragility, and it composes with the piano roll and `["Scope"]` we already
-have. Add **Phase 2** (editable field + quantized hot-swap) once Phase 1 feels right. Defer
-Phase 3.
+`liveActiveQ` lights an atom while `Mod[phase, N]` is inside any of its intervals (with a
+~0.06-cycle floor so very short notes still flash). `SaveDefinitions -> True` makes the cell
+self-contained.
 
-## 7. Open questions for review
+## 4. Verified vs. needs-a-front-end
 
-1. **Glow semantics.** Flash per onset (brief glow = the hap, Strudel-like) vs. stay-lit
-   across a held note? Proposal: flash per onset with a short floor (~80 ms) so fast steps
-   still read.
-2. **Granularity.** Highlight only the active leaf token, or also dim/outline its enclosing
-   group (`[ … ]`, `< … >`)? Proposal: leaf glow, with an optional faint outline on the active
-   group.
-3. **`a*4` and Euclid.** One token, several haps — flash the token on each hit. Confirm that
-   reads well, or split visually.
-4. **Mirror vs. real cell.** Is a projectional mirror acceptable for v1 (recommended), or is
-   highlighting the literally-typed cell a hard requirement (pushing us to Phase 3)?
-5. **Latency.** `Position` is the true clock, but the audible buffer floor is the default
-   `BufferSize` (~90 ms). The glow can lead/lag by that much — leave it, or apply a fixed
-   offset so the flash matches what the ear hears?
-6. **Editable v1?** Start read-only (Phase 1) or jump to the editable field (Phase 2)?
+Kernel-verified (via `wolframscript`, fresh kernels):
 
-## 8. Rough effort
+- `LiveCode[…]` builds a `DynamicModule` with **one `StyleBox` per atom**, each containing the
+  atom's InputForm boxes; the `AudioStream`, click handlers, and localized `livePhase` are all
+  present; the audio renders and plays; the schedule maps events→atoms correctly. Works for
+  nested combinators (`stack`, `// fast`, …) and counts atoms correctly.
 
-- Phase 0 (source-mapped parser): small-to-medium — localized to the parser + preserving one
-  key through the combinators; covered by `VerificationTest`s on the schedule.
-- Phase 1 (`LiveCode` view): medium — schedule + a styled-box renderer + the existing
-  play/clock/click plumbing.
-- Phase 2 (editable + hot-swap): medium — field + cycle-quantized stream swap.
-- Phase 3: open-ended research.
+Needs eyes at a front end (cannot be checked headless):
+
+- **Does the FE syntax-color the rendered boxes**, and does the `StyleBox` `Background` ride on
+  top without fighting the foreground color? (Background and FontColor are independent, so it
+  should — but confirm.) If output cells don't get input-style syntax coloring, we can color
+  the tokens ourselves in the `MakeBoxes` (symbols one color, strings another) and keep the
+  dynamic background.
+- The glow timing vs. what the ear hears (the ~90 ms audio buffer floor may make the flash
+  lead/lag slightly).
+- Readability of the glow color / floor on real patterns.
+
+## 5. The atom registry, and where the shortcuts live
+
+`LiveCode` decides "what is an atom" from `$LiveAtomHeads` (a `WolfAnim`` global, default
+`{CyclicPattern}`), so it has **no** hard-coded short names. The optional, opt-in
+`Strudel`` context (`WolfAnim/Strudel.wl`) defines the lowercase Strudel shortcuts
+(`s`/`note`/`n`/`sound` as down-values, `fast`/`rev`/`stack`/`seq`/… as aliases) and appends
+its atom heads to `$LiveAtomHeads`. So:
+
+- The paclet stays clean — no `s`/`n` forced onto the `WolfAnim`` path.
+- `LiveCode[Fastcat[CyclicPattern["bd"], CyclicPattern["hh"]]]` highlights with no shortcuts
+  loaded; after `Get["…/Strudel.wl"]`, `LiveCode[seq[s["bd"], s["hh"]]]` highlights too.
+
+Atom heads must be **down-values, not own-value aliases** (`s[a_] := CyclicPattern[a]`, not
+`s = CyclicPattern`), or `_s` in the detector would evaluate `s` away and never match the held
+`s[...]`.
+
+## 6. Open questions / next steps
+
+1. **Glow semantics** — flash-per-onset (current, with a floor) vs. stay-lit across a held
+   note's duration. Easy to switch in `liveActiveQ`.
+2. **Editable REPL** — wrap the code in an `InputField[Dynamic[…]]` (or make `LiveCode` accept
+   edits) and hot-swap the stream at the next cycle boundary, for the full edit-hear-see loop.
+   The held-expression form makes "edit" mean *re-evaluate the cell*, which is already natural
+   in a notebook; an in-widget editor is the stretch.
+3. **Highlight groups too** — currently only leaf atoms glow; optionally outline the active
+   enclosing `[ … ]` / `< … >` group.
+4. **Instrument the literally-typed Input cell** (rather than a re-rendered output) — still the
+   hard, FE-fragile option; deferred. The output-cell prototype gives the experience without
+   it.
+5. **`Track` / multi-voice** — `LiveCode` currently takes one pattern expression; extend to a
+   stack of named voices with per-voice rows.
 
 ---
 
-*Grounding in the current code:* the clock and click mechanics already exist in
-`patternPlay`/`scopePlay` and `audioDynamic` (`WolfAnim/Pattern.m`, `WolfAnim/AnimatedObject.m`);
-the parser to extend is `parseSequence`→`atomPattern` in `WolfAnim/Pattern.m`; events are
-associations with `"Whole"`/`"Part"`, to which Phase 0 adds `"Source"`.
+*Code:* `LiveCode`, `tagPat`, `hlAtom`, `liveActiveQ`, `$LiveAtomHeads` in
+`WolfAnim/Pattern.m`; the shortcuts + atom registration in `WolfAnim/Strudel.wl`. The clock and
+click mechanics mirror `patternPlay`/`audioDynamic`.

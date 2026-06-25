@@ -33,10 +33,12 @@ declarative animation with Strudel/TidalCycles-style live-coding music on top of
    visual bridge, three runnable demo sketches, and a phased roadmap on top of the
    current paclet.
 
-4. **[dynamic-code-highlighting.md](dynamic-code-highlighting.md)** — a later **proposal
-   for review**: how to do Strudel-REPL-style live code highlighting (the mini-notation
-   flashing in time with playback) inside Wolfram notebook cells. Source-mapped events +
-   a projectional `LiveCode` view, with a phased plan and open questions.
+4. **[dynamic-code-highlighting.md](dynamic-code-highlighting.md)** — Strudel-REPL-style
+   live code highlighting inside notebook cells, now a **working prototype** (`LiveCode`):
+   render the *symbolic* pattern as its own InputForm boxes and wrap each atom's box in a
+   `Dynamic` `StyleBox` that flashes on its onsets, driven by the audio clock. Documents the
+   mechanism, what's kernel-verified vs. needs a front end, the `$LiveAtomHeads` registry +
+   separate `Strudel`` shortcut context, and next steps.
 
 **Read order:** 1 → 2 → 3, then 4 once the pattern engine exists. Doc 1 frames what WolfAnim
 is; doc 2 supplies the unifying abstraction; doc 3 turns it into a concrete WL design; doc 4
