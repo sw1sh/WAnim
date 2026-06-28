@@ -3,7 +3,7 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{CyclicPattern, Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, Fastcat, LiveCode, $LiveAtomHeads}]
+PackageExported[{CyclicPattern, Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, Fastcat, LiveCode, $LiveAtomHeads}]
 
 
 
@@ -19,6 +19,11 @@ PackageExported[{CyclicPattern, Steady, Silence, Fast, Slow, Layer, Alternate, E
 
 (* cycles per second; 0.5625 cps = 135 BPM at 4 beats/cycle = TidalCycles' classic feel *)
 $CyclesPerSecond = 0.5625
+
+(* seconds to shift the visual playhead/highlight back from the audio stream's reported
+   position, to compensate output latency (what you hear lags what the stream reports).
+   Default 0 = no shift; raise it (~0.05-0.2) if the highlight flashes ahead of the sound. *)
+$AudioLatency = 0.
 
 patternTempo[] := 240 $CyclesPerSecond
 
@@ -307,8 +312,24 @@ oscNote[wave_, f_, durSec_] := env[Switch[wave,
     "Supersaw", AudioOverlay[AudioGenerator[{"Sawtooth", f #}, durSec] & /@ {0.993, 1., 1.007}],
     _, AudioGenerator[{wave, f}, durSec]], durSec]
 
-(* sample events placed at their onsets *)
-sampleLayer[events_] := mix[AudioPad[$SampleBank[#["Value"]], {at[#["Whole"][[1]]], 0}] & /@ Select[events, sampleQ[#["Value"]] &]]
+(* synthesized drum fallback so percussion tokens are audible with NO samples loaded -- the
+   default before LoadSamples replaces them with real WAVs.  Memoized per token. *)
+perc[a_, rel_] := AudioFade[a, {0.002, rel}]
+hpf[a_, f_] := HighpassFilter[a, f]
+synthDrum[v_] := synthDrum[v] = AudioNormalize @ Switch[ToLowerCase[v],
+    "bd" | "kick" | "bass" | "b", perc[AudioGenerator[{"Sine", 55}, 0.22], 0.2],
+    "sn" | "sd" | "snare", perc[AudioOverlay[{AudioGenerator["Pink", 0.16], AudioGenerator[{"Sine", 185}, 0.16]}], 0.14],
+    "hh" | "ch" | "hat" | "h", perc[hpf[AudioGenerator["White", 0.05], 7000], 0.045],
+    "oh" | "open", perc[hpf[AudioGenerator["White", 0.2], 6000], 0.18],
+    "cp" | "clap" | "hc", perc[AudioGenerator["White", 0.09], 0.08],
+    "cr" | "crash" | "ride" | "rd", perc[hpf[AudioGenerator["White", 0.5], 5000], 0.45],
+    "rim" | "rs" | "cl", perc[AudioGenerator[{"Sine", 330}, 0.04], 0.035],
+    "tom" | "lt" | "mt" | "ht" | "t", perc[AudioGenerator[{"Sine", 120}, 0.18], 0.16],
+    _, perc[AudioGenerator["White", 0.05], 0.045]]
+drumSound[v_] := If[sampleQ[v], $SampleBank[v], synthDrum[v]]
+(* drum/percussion events (a loaded sample, or any non-pitch token) placed at their onsets *)
+sampleLayer[events_] := mix[AudioPad[drumSound[#["Value"]], {at[#["Whole"][[1]]], 0}] & /@
+    Select[events, sampleQ[#["Value"]] || ! NumericQ[valueMidi[#["Value"]]] &]]
 (* pitched events -> MusicScore -> Audio (acoustic-ish) *)
 musicLayer[events_, nCycles_] := With[{pe = Select[events, ! sampleQ[#["Value"]] && NumericQ[valueMidi[#["Value"]]] &]},
     If[pe === {}, Nothing, Audio[MusicScore[{eventsToVoice[pe, nCycles]}, MusicTimeSignature[4, 4], MusicTempo -> patternTempo[]]]]]
@@ -391,7 +412,7 @@ patternPlay[patsOrTrack_, nCycles_ : 1] := With[{aud = renderAudio[patsOrTrack, 
         AudioPlay[stream];
         Dynamic[
             Refresh[
-                If[playing, head = QuantityMagnitude[stream["Position"]] $CyclesPerSecond];
+                If[playing, head = (QuantityMagnitude[stream["Position"]] - $AudioLatency) $CyclesPerSecond];
                 EventHandler[
                     pianoRoll[patsOrTrack, nCycles, head],
                     {
@@ -404,6 +425,9 @@ patternPlay[patsOrTrack_, nCycles_ : 1] := With[{aud = renderAudio[patsOrTrack, 
                 TrackedSymbols :> {head, playing}, UpdateInterval -> 0.03
             ]
         ],
+        (* stop + free the stream when the cell is re-evaluated or deleted, so re-evals don't
+           pile up orphan loops all playing at once *)
+        Deinitialization :> Quiet[AudioStop[stream]; RemoveAudioStream[stream]],
         SaveDefinitions -> True
     ]
 ]
