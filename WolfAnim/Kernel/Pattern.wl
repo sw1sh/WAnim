@@ -519,16 +519,20 @@ LiveCode[expr_, nCycles_ : 2] := Module[{held = Hold[expr], atomPos, pat, events
 ]
 
 
-(* ::Subsection:: Formatting -- a pattern shows itself as its piano roll *)
+(* ::Subsection:: Formatting *)
 
+(* StandardForm is the LIVE piano roll: a looping AudioStream with the playhead scrubbing
+   across it, left-click play/pause, right-click reset.  (Get the static still via ["PianoRoll"].) *)
 CyclicPattern /: MakeBoxes[p : CyclicPattern[_Function | _Symbol, ___],StandardForm] :=
-    With[{boxes = ToBoxes[pianoRoll[p, 1], StandardForm]}, InterpretationBox[boxes, p]]
-Track /: MakeBoxes[t : Track[_List], StandardForm] :=
-    With[{boxes = ToBoxes[pianoRoll[t, 1], StandardForm]}, InterpretationBox[boxes, t]]
-
-(* TraditionalForm renders the pattern as its live ["Play"] piano roll: left-click
-   play/pause, right-click reset, playhead scrubbing the loop.  Switch with Cell > Convert To. *)
-CyclicPattern /: MakeBoxes[p : CyclicPattern[_Function | _Symbol, ___] /; p["Source"] === None, TraditionalForm] :=
     With[{boxes = ToBoxes[patternPlay[p, 2]]}, InterpretationBox[boxes, p]]
-Track /: MakeBoxes[t : Track[_List], TraditionalForm] :=
+Track /: MakeBoxes[t : Track[_List], StandardForm] :=
     With[{boxes = ToBoxes[patternPlay[t, 2]]}, InterpretationBox[boxes, t]]
+
+(* TraditionalForm is the editable mini-notation code with per-onset highlighting (defined in
+   MiniNotation.wl, for source-bearing patterns).  A pattern with no source string -- a
+   combinator result -- has no code to show, so it falls back to the static roll here.
+   Switch forms with Cell > Convert To. *)
+CyclicPattern /: MakeBoxes[p : CyclicPattern[_Function | _Symbol, ___] /; p["Source"] === None, TraditionalForm] :=
+    With[{boxes = ToBoxes[pianoRoll[p, 2], StandardForm]}, InterpretationBox[boxes, p]]
+Track /: MakeBoxes[t : Track[_List], TraditionalForm] :=
+    With[{boxes = ToBoxes[pianoRoll[t, 2], StandardForm]}, InterpretationBox[boxes, t]]
