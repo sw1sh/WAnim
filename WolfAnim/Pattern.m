@@ -489,11 +489,16 @@ liveActiveQ[intervals_, phase_, n_] := With[{p = Mod[phase, n]}, AnyTrue[interva
 $liveAtom := Alternatives @@ (Blank /@ $LiveAtomHeads)
 
 SetAttributes[LiveCode, HoldFirst]
-LiveCode[expr_, nCycles_ : 2] := Module[{held = Hold[expr], j = 0, k = 0, pat, events, byId, boxExpr, boxes},
-    pat = ReleaseHold[held /. a : $liveAtom :> With[{id = ++j}, tagPat[id][a]]];
+LiveCode[expr_, nCycles_ : 2] := Module[{held = Hold[expr], atomPos, pat, events, byId, boxExpr, boxes},
+    (* ids by position so the same atom gets the same id in the pattern and the boxes; build the
+       replacements OUTSIDE the Hold (ReplaceAll into a Hold would NOT evaluate the rule RHS). *)
+    atomPos = Position[held, $liveAtom];
+    pat = ReleaseHold @ ReplacePart[held, Table[
+        atomPos[[i]] -> Replace[Extract[held, atomPos[[i]], Hold], Hold[x_] :> tagPat[i][x]], {i, Length[atomPos]}]];
     events = Select[pat["Query", 0, nCycles], hasOnset];
     byId = GroupBy[events, #["Source"] &, Function[es, #["Whole"] & /@ es]];
-    boxExpr = held /. a : $liveAtom :> With[{id = ++k}, hlAtom[Lookup[byId, id, {}], a]];
+    boxExpr = ReplacePart[held, Table[
+        atomPos[[i]] -> Replace[Extract[held, atomPos[[i]], Hold], Hold[x_] :> hlAtom[Lookup[byId, i, {}], x]], {i, Length[atomPos]}]];
     boxes = Replace[boxExpr, Hold[c_] :> MakeBoxes[c, StandardForm]];
     With[{b = boxes, aud = renderAudio[pat, nCycles], nC = nCycles},
         DynamicModule[{livePhase = 0., liveCycles = nC, stream = AudioStream[aud, Looping -> True], playing = True},
@@ -530,7 +535,7 @@ Track /: MakeBoxes[t : Track[_List], StandardForm] :=
 
 (* TraditionalForm renders the pattern as its live ["Play"] piano roll: left-click
    play/pause, right-click reset, playhead scrubbing the loop.  Switch with Cell > Convert To. *)
-CyclicPattern /: MakeBoxes[p : CyclicPattern[_Function | _Symbol], TraditionalForm] :=
-    With[{boxes = ToBoxes[patternPlay[p, 2]]}, InterpretationBox[boxes, p]]
-Track /: MakeBoxes[t : Track[_List], TraditionalForm] :=
-    With[{boxes = ToBoxes[patternPlay[t, 2]]}, InterpretationBox[boxes, t]]
+CyclicPattern /: MakeBoxes[p : CyclicPattern[_Function | _Symbol], StandardForm] :=
+    With[{boxes = ToBoxes[patternPlay[p, 1]]}, InterpretationBox[boxes, p]]
+Track /: MakeBoxes[t : Track[_List], StandardForm] :=
+    With[{boxes = ToBoxes[patternPlay[t, 1]]}, InterpretationBox[boxes, t]]
