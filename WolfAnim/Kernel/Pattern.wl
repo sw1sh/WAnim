@@ -3,7 +3,10 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{CyclicPattern, Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, Fastcat, LiveCode, $LiveAtomHeads}]
+PackageExported[{CyclicPattern, Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Fastcat, LiveCode, $LiveAtomHeads}]
+
+(* shared with MiniNotation.wl so the TraditionalForm can render the same live Visual *)
+PackageScoped[{renderVisual, visualOf}]
 
 
 
@@ -431,8 +434,8 @@ patternPlay[patsOrTrack_, nCycles_ : 1] := With[{aud = renderAudio[patsOrTrack, 
         SaveDefinitions -> True
     ]
 ]
-CyclicPattern[q_, ___]["Play", nCycles_ : 1] := patternPlay[CyclicPattern[q], nCycles]
-Track[voices_List]["Play", nCycles_ : 1] := patternPlay[Track[voices], nCycles]
+CyclicPattern[q_, m___]["Play", nCycles_ : 2] := livePlayer[CyclicPattern[q, m], nCycles, True]
+Track[voices_List]["Play", nCycles_ : 2] := livePlayer[Track[voices], nCycles, True]
 
 (* ["Scope"] plays the loop and shows a live oscilloscope of the audio stream's current
    buffer; same click mechanics as ["Play"] (left = play/pause, right = reset). *)
@@ -463,6 +466,57 @@ scopePlay[patsOrTrack_, nCycles_ : 2] := With[{aud = renderAudio[patsOrTrack, nC
 ]
 CyclicPattern[q_, ___]["Scope", nCycles_ : 2] := scopePlay[CyclicPattern[q], nCycles]
 Track[voices_List]["Scope", nCycles_ : 2] := scopePlay[Track[voices], nCycles]
+
+
+(* ::Subsection:: The "Visual" property + the unified live player *)
+
+(* A pattern's Visual is what it shows as its live display: a progress "Bar" (default), the
+   "PianoRoll", or the "Oscilloscope".  PianoRoll[p] / Oscilloscope[p] return p with it set;
+   p["Visual"] reads it.  Stored in the pattern's metadata Association. *)
+visualOf[CyclicPattern[_, m_Association]] := Lookup[m, "Visual", "Bar"]
+visualOf[_Track] := "PianoRoll"
+visualOf[_] := "Bar"
+setVisual[CyclicPattern[q_, m_Association], v_] := CyclicPattern[q, <|m, "Visual" -> v|>]
+setVisual[CyclicPattern[q_], v_] := CyclicPattern[q, <|"Visual" -> v|>]
+
+PianoRoll[p_CyclicPattern] := setVisual[p, "PianoRoll"]
+Oscilloscope[p_CyclicPattern] := setVisual[p, "Oscilloscope"]
+CyclicPattern[_, m_Association]["Visual"] := Lookup[m, "Visual", "Bar"]
+CyclicPattern[_]["Visual"] := "Bar"
+
+(* the default Visual: a simple clickable progress bar with a playhead *)
+visualBar[phase_, n_] := With[{x = Mod[phase, n]},
+    Graphics[{
+        GrayLevel[0.25], Rectangle[{0, 0}, {n, 1}],
+        Hue[0.57, 0.45, 0.6], Rectangle[{0, 0}, {x, 1}],
+        Hue[0.54, 0.85, 1], Rectangle[{x - 0.007 n, 0}, {x + 0.007 n, 1}]
+    }, PlotRange -> {{0, n}, {0, 1}}, AspectRatio -> 1/24, ImageSize -> 480, Background -> GrayLevel[0.13],
+        ImagePadding -> 1, Frame -> True, FrameTicks -> None, FrameStyle -> GrayLevel[0.3]]]
+
+(* render the chosen Visual at the current playhead phase; the scope reads the stream's
+   live buffer.  Shared (PackageScoped) so MiniNotation's TraditionalForm shows the same. *)
+renderVisual["PianoRoll", pat_, n_, phase_, stream_] := pianoRoll[pat, n, phase]
+renderVisual["Oscilloscope", pat_, n_, phase_, stream_] := scopeFrame[stream["CurrentAudio"]]
+renderVisual[_, pat_, n_, phase_, stream_] := visualBar[phase, n]
+
+(* the unified live player behind StandardForm and ["Play"]: loop the audio, scrub the
+   playhead, click the visual to play/pause (right-click resets).  Paused unless autoplay. *)
+livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[{aud = renderAudio[patOrTrack, n], vis = visualOf[patOrTrack]},
+    DynamicModule[{stream = AudioStream[aud, Looping -> True], playing = autoplay, phase = 0.},
+        If[autoplay, AudioPlay[stream]];
+        EventHandler[
+            Dynamic @ Refresh[
+                If[playing, phase = (QuantityMagnitude[stream["Position"]] - $AudioLatency) $CyclesPerSecond];
+                renderVisual[vis, patOrTrack, n, phase, stream],
+                TrackedSymbols :> {}, UpdateInterval -> 0.03],
+            {
+                {"MouseDown", 1} :> If[playing, (AudioStop[stream]; playing = False), (AudioPlay[stream]; playing = True)],
+                {"MouseDown", 2} :> (AudioStop[stream]; RemoveAudioStream[stream]; stream = AudioStream[aud, Looping -> True]; phase = 0.; playing = False)
+            }],
+        Deinitialization :> Quiet[AudioStop[stream]; RemoveAudioStream[stream]],
+        SaveDefinitions -> True
+    ]
+]
 
 
 (* ::Subsection:: Visualizations -- waveform and spectrogram of a pattern / track / audio *)
@@ -548,9 +602,9 @@ LiveCode[expr_, nCycles_ : 2] := Module[{held = Hold[expr], atomPos, pat, events
 (* StandardForm is the LIVE piano roll: a looping AudioStream with the playhead scrubbing
    across it, left-click play/pause, right-click reset.  (Get the static still via ["PianoRoll"].) *)
 CyclicPattern /: MakeBoxes[p : CyclicPattern[_Function | _Symbol, ___],StandardForm] :=
-    With[{boxes = ToBoxes[patternPlay[p, 2]]}, InterpretationBox[boxes, p]]
+    With[{boxes = ToBoxes[livePlayer[p, 2]]}, InterpretationBox[boxes, p]]
 Track /: MakeBoxes[t : Track[_List], StandardForm] :=
-    With[{boxes = ToBoxes[patternPlay[t, 2]]}, InterpretationBox[boxes, t]]
+    With[{boxes = ToBoxes[livePlayer[t, 2]]}, InterpretationBox[boxes, t]]
 
 (* TraditionalForm is the editable mini-notation code with per-onset highlighting (defined in
    MiniNotation.wl, for source-bearing patterns).  A pattern with no source string -- a
