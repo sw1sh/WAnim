@@ -70,16 +70,21 @@ highlightedString[str_, active_] := Row[Table[
 
 (* one Dynamic both advances the phase from the audio Position AND re-renders the highlighted
    string -- so the highlight tracks the clock directly (no cross-Dynamic dependency to drop). *)
-miniDisplay[pat_, n_ : 2] := DynamicModule[{src = pat["Source"], stream = Null, phase = 0., playing = True, sched = <||>},
-    reparse[] := Module[{p = CyclicPattern[src]},
-        sched = scheduleOf[p, n];
-        If[stream =!= Null, Quiet[AudioStop[stream]; RemoveAudioStream[stream]]];
-        stream = AudioStream[Audio[p, n], Looping -> True]; AudioPlay[stream]; playing = True];
-    reparse[];
-    Deploy @ Panel[Column[{
-        InputField[Dynamic[src, (src = #; reparse[]) &], String,
-            FieldSize -> {Scaled[1], 1}, ContinuousAction -> False,
-            BaseStyle -> {FontFamily -> "Source Code Pro", FontSize -> 15}],
+(* The schedule + audio are BAKED from `pat` here (in MakeBoxes, with the full grammar
+   available), NOT re-parsed inside the Dynamic -- re-parsing under SaveDefinitions loses the
+   compiled WolframParser grammar, which silently gave Silence (no sound, no highlight, but a
+   moving playhead).  Editing the field re-parses live. *)
+miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], sched0 = scheduleOf[pat, n], aud0 = Audio[pat, n]},
+    DynamicModule[{src = source, stream = Null, phase = 0., playing = True, sched = sched0},
+        stream = AudioStream[aud0, Looping -> True]; AudioPlay[stream];
+        Deploy @ Panel[Column[{
+            InputField[Dynamic[src, Function[new, src = new;
+                Quiet @ Module[{p = CyclicPattern[new]},
+                    sched = scheduleOf[p, n];
+                    If[stream =!= Null, AudioStop[stream]; RemoveAudioStream[stream]];
+                    stream = AudioStream[Audio[p, n], Looping -> True]; AudioPlay[stream]; playing = True; phase = 0.]]],
+                String, FieldSize -> {Scaled[1], 1}, ContinuousAction -> False,
+                BaseStyle -> {FontFamily -> "Source Code Pro", FontSize -> 15}],
         EventHandler[
             Dynamic @ Refresh[
                 If[playing && stream =!= Null, phase = QuantityMagnitude[stream["Position"]] $CyclesPerSecond];
@@ -92,7 +97,7 @@ miniDisplay[pat_, n_ : 2] := DynamicModule[{src = pat["Source"], stream = Null, 
         Dynamic @ Refresh[ProgressIndicator[Mod[phase, n], {0, n}, ImageSize -> {Scaled[1], 3}],
             TrackedSymbols :> {phase}, UpdateInterval -> 0.05]
     }, Spacings -> 0.6], Background -> GrayLevel[0.1], FrameMargins -> 12],
-    SaveDefinitions -> True]
+    SaveDefinitions -> True]]
 
 WolfAnim`CyclicPattern /: MakeBoxes[p : WolfAnim`CyclicPattern[_, meta_Association] /; KeyExistsQ[meta, "Source"], TraditionalForm] :=
     With[{boxes = ToBoxes[miniDisplay[p, 2]]}, InterpretationBox[boxes, p]]
