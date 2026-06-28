@@ -376,7 +376,7 @@ Track /: Sound[Track[voices_List], nCycles_ : 1] := Sound[patternScore[voices, n
    low percussion row so a drum pattern still draws instead of an empty (black) roll. *)
 laneValue[val_] := With[{m = valueMidi[val]}, If[NumericQ[m], Round[m], 36 + Mod[Hash[val], 8]]]
 rollData[v_, nCycles_] := With[{evs = Select[patternOf[v]["Query", 0, nCycles], hasOnset]},
-    {#["Whole"], laneValue[#["Value"]]} & /@ evs
+    {#["Whole"], laneValue[#["Value"]], #["Value"]} & /@ evs   (* {whole, row, token} *)
 ]
 
 pianoRoll[patsOrTrack_, nCycles_ : 1, highlight_ : None] := Module[{lanes, data, mids, lo, hi},
@@ -391,9 +391,12 @@ pianoRoll[patsOrTrack_, nCycles_ : 1, highlight_ : None] := Module[{lanes, data,
     lo = Min[mids] - 2; hi = Max[mids] + 2;
     Graphics[{
         EdgeForm[{GrayLevel[0.1]}],
+        (* each block is its mini-notation token, drawn as a labeled rectangle *)
         MapThread[Function[{laneData, hue},
-            {Hue[hue, 0.55, 0.95],
-             {#1, Rectangle[{#2[[1, 1]], #2[[2]] - 0.42}, {#2[[1, 2]], #2[[2]] + 0.42}]}[[2]] & @@@ laneData}
+            Function[{li, wrt}, {
+                Hue[hue, 0.55, 0.95], Rectangle[{wrt[[1, 1]], wrt[[2]] - 0.42}, {wrt[[1, 2]], wrt[[2]] + 0.42}],
+                GrayLevel[0.1], Text[Style[wrt[[3]], 9, FontFamily -> "Source Code Pro", FontWeight -> Bold], {Mean[wrt[[1]]], wrt[[2]]}]
+            }] @@@ laneData
         ], {data, If[Length[lanes] == 1, {0.58}, Range[0, Length[lanes] - 1]/Length[lanes]]}],
         If[highlight === None, {},
             {GrayLevel[1, 0.85], Thickness[0.006], Line[{{Mod[highlight, nCycles], lo}, {Mod[highlight, nCycles], hi}}]}]
@@ -602,9 +605,9 @@ LiveCode[expr_, nCycles_ : 2] := Module[{held = Hold[expr], atomPos, pat, events
 (* StandardForm is the LIVE piano roll: a looping AudioStream with the playhead scrubbing
    across it, left-click play/pause, right-click reset.  (Get the static still via ["PianoRoll"].) *)
 CyclicPattern /: MakeBoxes[p : CyclicPattern[_Function | _Symbol, ___],StandardForm] :=
-    With[{boxes = ToBoxes[livePlayer[p, 2]]}, InterpretationBox[boxes, p]]
+    With[{boxes = ToBoxes[livePlayer[p, 2, True]]}, InterpretationBox[boxes, p]]
 Track /: MakeBoxes[t : Track[_List], StandardForm] :=
-    With[{boxes = ToBoxes[livePlayer[t, 2]]}, InterpretationBox[boxes, t]]
+    With[{boxes = ToBoxes[livePlayer[t, 2, True]]}, InterpretationBox[boxes, t]]
 
 (* TraditionalForm is the editable mini-notation code with per-onset highlighting (defined in
    MiniNotation.wl, for source-bearing patterns).  A pattern with no source string -- a
