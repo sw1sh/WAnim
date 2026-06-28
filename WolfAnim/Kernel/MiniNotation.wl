@@ -87,27 +87,33 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
             curPat = p; sched = scheduleOf[p, n];
             Quiet[AudioStop[stream]; RemoveAudioStream[stream]];
             stream = AudioStream[Audio[p, n], Looping -> True]; Quiet @ AudioPlay[stream]; playing = True];
-        Deploy @ Panel[
+        Panel[
             Dynamic[
                 If[editing,
+                    (* EDIT MODE: a plain InputField + the static visual.  Enter or click away applies. *)
                     Column[{
+                        Style["editing \[Dash] press Enter or click away to apply", 10, GrayLevel[0.55]],
                         InputField[Dynamic[src, Function[new, src = new; reparse[]; editing = False]], String,
                             FieldSize -> {Scaled[1], 1}, ContinuousAction -> False,
                             BaseStyle -> {FontFamily -> "Source Code Pro", FontSize -> 16}],
                         renderVisual[vis, curPat, n, phase, stream]
-                    }, Spacings -> 0.4],
-                    Refresh[
-                        If[playing, With[{ph = streamPhase[stream]}, If[NumericQ[ph], phase = ph]]];
-                        Column[{
-                            EventHandler[
-                                Tooltip[highlightedString[src, activeSpans[sched, phase, n]], "click to edit"],
-                                {"MouseClicked" :> (Quiet @ AudioStop[stream]; playing = False; editing = True)}],
-                            EventHandler[
+                    }, Spacings -> 0.4, Alignment -> Left],
+                    (* PLAY MODE: STABLE click targets (a Button to edit, an EventHandler to
+                       play/pause), each wrapping a re-rendering Dynamic -- so clicks don't get
+                       lost to the 30ms refresh recreating the handler every tick. *)
+                    Column[{
+                        Button[
+                            Tooltip[Dynamic[highlightedString[src, activeSpans[sched, phase, n]]], "click to edit"],
+                            (Quiet @ AudioStop[stream]; playing = False; editing = True),
+                            Appearance -> None],
+                        EventHandler[
+                            Dynamic @ Refresh[
+                                If[playing, With[{ph = streamPhase[stream]}, If[NumericQ[ph], phase = ph]]];
                                 renderVisual[vis, curPat, n, phase, stream],
-                                {{"MouseDown", 1} :> If[playing, (Quiet @ AudioStop[stream]; playing = False), (Quiet @ AudioPlay[stream]; playing = True)],
-                                 {"MouseDown", 2} :> (Quiet @ AudioStop[stream]; phase = 0.; playing = False)}]
-                        }, Spacings -> 0.4],
-                        TrackedSymbols :> {}, UpdateInterval -> 0.03]
+                                TrackedSymbols :> {}, UpdateInterval -> 0.03],
+                            {{"MouseDown", 1} :> If[playing, (Quiet @ AudioStop[stream]; playing = False), (Quiet @ AudioPlay[stream]; playing = True)],
+                             {"MouseDown", 2} :> (Quiet @ AudioStop[stream]; phase = 0.; playing = False)}]
+                    }, Spacings -> 0.4, Alignment -> Left]
                 ],
                 TrackedSymbols :> {editing}
             ],

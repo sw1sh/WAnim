@@ -3,7 +3,7 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{CyclicPattern, Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Fastcat, LiveCode, $LiveAtomHeads}]
+PackageExported[{CyclicPattern, Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Fastcat, LiveCode, $LiveAtomHeads}]
 
 (* shared with MiniNotation.wl so the TraditionalForm can render the same live Visual *)
 PackageScoped[{renderVisual, visualOf, streamPhase}]
@@ -30,6 +30,9 @@ $AudioLatency = 0.
 
 (* default oscillator timbre for pitched notes (Sine/Triangle/Sawtooth/Square/Supersaw). *)
 $DefaultWave = "Sawtooth"
+
+(* default live Visual for patterns with none set: "PianoRoll" (labeled blocks), "Bar", "Oscilloscope". *)
+$DefaultVisual = "PianoRoll"
 
 patternTempo[] := 240 $CyclesPerSecond
 
@@ -481,12 +484,12 @@ Track[voices_List]["Scope", nCycles_ : 2] := scopePlay[Track[voices], nCycles]
 
 (* ::Subsection:: The "Visual" property + the unified live player *)
 
-(* A pattern's Visual is what it shows as its live display: a progress "Bar" (default), the
-   "PianoRoll", or the "Oscilloscope".  PianoRoll[p] / Oscilloscope[p] return p with it set;
-   p["Visual"] reads it.  Stored in the pattern's metadata Association. *)
-visualOf[CyclicPattern[_, m_Association]] := Lookup[m, "Visual", "Bar"]
+(* A pattern's Visual is what it shows as its live display: the labeled "PianoRoll" (default),
+   a progress "Bar", or the "Oscilloscope".  PianoRoll[p] / Oscilloscope[p] return p with it
+   set; p["Visual"] reads it.  $DefaultVisual sets the global default for unset patterns. *)
+visualOf[CyclicPattern[_, m_Association]] := Lookup[m, "Visual", $DefaultVisual]
 visualOf[_Track] := "PianoRoll"
-visualOf[_] := "Bar"
+visualOf[_] := $DefaultVisual
 setVisual[CyclicPattern[q_, m_Association], v_] := CyclicPattern[q, <|m, "Visual" -> v|>]
 setVisual[CyclicPattern[q_], v_] := CyclicPattern[q, <|"Visual" -> v|>]
 
