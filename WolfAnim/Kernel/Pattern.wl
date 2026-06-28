@@ -1,4 +1,11 @@
-Package["WolfAnim`"]
+(* ::Package:: *)
+
+(* ::Section:: *)
+(*PackageExported*)
+
+PackageExported[{CyclicPattern, Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, Fastcat, LiveCode, $LiveAtomHeads}]
+
+
 
 (* ::Section:: A cyclic-time Pattern algebra (one structure, two renderers) *)
 
@@ -9,30 +16,6 @@ Package["WolfAnim`"]
    Audio) and to vision (a piano roll / AnimatedObject effects).  See
    docs/wolfanim-music-design.md. *)
 
-PackageExport["CyclicPattern"]
-PackageExport["Steady"]
-PackageExport["Silence"]
-PackageExport["Fast"]
-PackageExport["Slow"]
-PackageExport["Layer"]
-PackageExport["Alternate"]
-PackageExport["Every"]
-PackageExport["Euclidean"]
-PackageExport["Degrade"]
-PackageExport["Track"]
-PackageExport["$CyclesPerSecond"]
-PackageExport["LoadSamples"]
-PackageExport["Synth"]
-PackageExport["Gain"]
-PackageExport["Late"]
-PackageExport["Early"]
-PackageExport["Stagger"]
-PackageExport["Superimpose"]
-PackageExport["$SampleBank"]
-PackageExport["Oscilloscope"]
-PackageExport["Fastcat"]
-PackageExport["LiveCode"]
-PackageExport["$LiveAtomHeads"]
 
 (* cycles per second; 0.5625 cps = 135 BPM at 4 beats/cycle = TidalCycles' classic feel *)
 $CyclesPerSecond = 0.5625

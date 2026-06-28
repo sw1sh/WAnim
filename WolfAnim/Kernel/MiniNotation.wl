@@ -1,3 +1,5 @@
+(* ::Package:: *)
+
 (* WolfAnim`MiniNotation`  --  a proper AST parser for the mini-notation, built on the
    Wolfram`Parser` paclet.  It makes CyclicPattern HOLD its source string + AST (as the
    pattern's 2nd metadata arg), and renders an EDITABLE, event-highlighting TraditionalForm:
@@ -8,9 +10,7 @@
        PacletDirectoryLoad["<.../WolframParser/Parser>"];   (* or install the paclet *)
        Get["<.../WolfAnim/MiniNotation.wl>"]                                          *)
 
-BeginPackage["WolfAnim`MiniNotation`", {"WolfAnim`", "Wolfram`Parser`"}]
 
-Begin["`Private`"]
 
 (* ---------- grammar: mini-notation -> neutral AST, each atom carrying a {start,end} char span ---------- *)
 $grammar := $grammar = Module[
@@ -102,6 +102,4 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], sched0 = scheduleOf[p
 WolfAnim`CyclicPattern /: MakeBoxes[p : WolfAnim`CyclicPattern[_, meta_Association] /; KeyExistsQ[meta, "Source"], TraditionalForm] :=
     With[{boxes = ToBoxes[miniDisplay[p, 2]]}, InterpretationBox[boxes, p]]
 
-End[]
 
-EndPackage[]

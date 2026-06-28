@@ -1,10 +1,18 @@
-Package["WolfAnim`"]
+(* ::Package:: *)
 
-PackageExport["AnimatedObject"]
+(* ::Section:: *)
+(*PackageExported*)
 
-PackageScope["primitiveQ"]
-PackageScope["directiveQ"]
-PackageScope["$AnimatedObjectDefaultDirective"]
+PackageExported[{AnimatedObject}]
+
+(* ::Section:: *)
+(*PackageScoped*)
+
+PackageScoped[{primitiveQ, directiveQ, $AnimatedObjectDefaultDirective}]
+
+
+
+
 
 
 (* AnimatedObject accepts any Graphics / Graphics3D option directly (e.g. Background, PlotRange,
@@ -55,12 +63,12 @@ AnimatedObject["" | {}, ___] := AnimatedObject[EmptyRegion[2], Transparent]
    explicit color inherit the object's directive. *)
 
 maTeXColor[FaceForm[c_, ___]] := c
-maTeXColor[c : _RGBColor | _GrayLevel | _Hue | _CMYKColor] := c
+maTeXColor[c_ ? ColorQ] := c
 
-maTeXColorQ[x_] := MatchQ[x, _FaceForm | _RGBColor | _GrayLevel | _Hue | _CMYKColor]
+maTeXColorQ[x_] := MatchQ[x, _FaceForm | _ ? ColorQ]
 
 maTeXStyleColor[s_Style, default_] := FirstCase[s, FaceForm[c_] :> c,
-    FirstCase[Rest[List @@ s], _RGBColor | _GrayLevel | _Hue | _CMYKColor, default, Infinity], Infinity]
+    FirstCase[Rest[List @@ s], _ ? ColorQ, default, Infinity], Infinity]
 
 decodeMaTeXCurve[curve_FilledCurve] := GeometricFunctions`DecodeFilledCurve[curve]
 decodeMaTeXCurve[curve_JoinedCurve] := GeometricFunctions`DecodeJoinedCurve[curve]
@@ -94,7 +102,9 @@ AnimatedObject[s_String, Optional[dir : _ ? directiveQ, $AnimatedObjectDefaultDi
     AnimatedObject[maTeXPrimitives[MaTeX`MaTeX[s], dir], dir, opts]["Apply", "Stretch", Automatic, 1]["Centralize"]
 
 AnimatedObject[g_Graphics, dir_ : Nothing, opts : OptionsPattern[]] :=
-    AnimatedObject[Cases[g, _ ? graphicsPrimitiveQ, {1, 2}], Append[Cases[g, _ ? graphicsDirectiveQ, {1, 2}], dir], opts]
+    With[{objs = Flatten[g[[1]]]},
+        AnimatedObject[Cases[objs, _ ? graphicsPrimitiveQ], Append[Cases[objs, _ ? graphicsDirectiveQ], dir], opts]
+    ]
 
 
 AnimatedObject[data_]["Primitives"] := data["Primitives"]

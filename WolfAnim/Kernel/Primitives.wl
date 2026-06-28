@@ -1,6 +1,12 @@
-Package["WolfAnim`"]
+(* ::Package:: *)
 
-PackageExport["Brace"]
+(* ::Section:: *)
+(*PackageExported*)
+
+PackageExported[{Brace}]
+
+
+
 
 
 Options[Brace] = {"Direction" -> Down, "WidthMultiplier" -> 2, "Buffer" -> 0.2}

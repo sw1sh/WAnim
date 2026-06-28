@@ -1,6 +1,12 @@
-Package["WolfAnim`"]
+(* ::Package:: *)
 
-PackageExport["AnimationEffect"]
+(* ::Section:: *)
+(*PackageExported*)
+
+PackageExported[{AnimationEffect}]
+
+
+
 
 
 
