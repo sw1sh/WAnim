@@ -3,10 +3,10 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{CyclicPattern, Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Fastcat, LiveCode, $LiveAtomHeads}]
+PackageExported[{CyclicPattern, Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Fastcat, LiveCode, $LiveAtomHeads}]
 
 (* shared with MiniNotation.wl so the TraditionalForm can render the same live Visual *)
-PackageScoped[{renderVisual, visualOf}]
+PackageScoped[{renderVisual, visualOf, streamPhase}]
 
 
 
@@ -27,6 +27,9 @@ $CyclesPerSecond = 0.5625
    position, to compensate output latency (what you hear lags what the stream reports).
    Default 0 = no shift; raise it (~0.05-0.2) if the highlight flashes ahead of the sound. *)
 $AudioLatency = 0.
+
+(* default oscillator timbre for pitched notes (Sine/Triangle/Sawtooth/Square/Supersaw). *)
+$DefaultWave = "Sawtooth"
 
 patternTempo[] := 240 $CyclesPerSecond
 
@@ -343,8 +346,13 @@ oscLayer[events_, wave_] := mix[Function[ev,
 
 voiceAudio[GainVoice[g_, v_], nCycles_] := AudioAmplify[voiceAudio[v, nCycles], g]
 voiceAudio[SynthVoice[wave_, p_], nCycles_] := fitTo[oscLayer[Select[p["Query", 0, nCycles], hasOnset], wave], nCycles]
+(* default pitched rendering uses self-contained OSCILLATORS, not MusicScore/FluidSynth: the
+   external soundfont backend is slow to re-render on every live edit and was the likely source
+   of the kernel-reconnect ("MathLink") dialog + instability.  Set $DefaultWave to retimbre, or
+   wrap a voice in Synth["..."] for an explicit oscillator.  (MusicScore is still used by
+   ["Score"]/MusicPlot/Sound.) *)
 voiceAudio[p_CyclicPattern, nCycles_] := With[{ev = Select[p["Query", 0, nCycles], hasOnset]},
-    fitTo[mix[{sampleLayer[ev], musicLayer[ev, nCycles]}], nCycles]]
+    fitTo[mix[{sampleLayer[ev], oscLayer[ev, $DefaultWave]}], nCycles]]
 
 renderAudio[Track[voices_List], nCycles_] := AudioNormalize @ fitDuration[mix[voiceAudio[#, nCycles] & /@ voices], nCycles cycleSeconds[]]
 renderAudio[v_, nCycles_] := fitTo[voiceAudio[v, nCycles], nCycles]
@@ -502,20 +510,26 @@ renderVisual["PianoRoll", pat_, n_, phase_, stream_] := pianoRoll[pat, n, phase]
 renderVisual["Oscilloscope", pat_, n_, phase_, stream_] := scopeFrame[stream["CurrentAudio"]]
 renderVisual[_, pat_, n_, phase_, stream_] := visualBar[phase, n]
 
+(* safe playhead read: a not-yet-ready / replaced stream can return a non-Quantity, which
+   used to throw inside the refresh and break the whole visualization -- guard it. *)
+streamPhase[stream_] := With[{pos = Quiet @ stream["Position"]},
+    If[QuantityQ[pos], (QuantityMagnitude[pos] - $AudioLatency) $CyclesPerSecond, $Failed]]
+
 (* the unified live player behind StandardForm and ["Play"]: loop the audio, scrub the
    playhead, click the visual to play/pause (right-click resets).  Paused unless autoplay. *)
 livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[{aud = renderAudio[patOrTrack, n], vis = visualOf[patOrTrack]},
     DynamicModule[{stream = AudioStream[aud, Looping -> True], playing = autoplay, phase = 0.},
-        If[autoplay, AudioPlay[stream]];
         EventHandler[
             Dynamic @ Refresh[
-                If[playing, phase = (QuantityMagnitude[stream["Position"]] - $AudioLatency) $CyclesPerSecond];
+                If[playing, With[{ph = streamPhase[stream]}, If[NumericQ[ph], phase = ph]]];
                 renderVisual[vis, patOrTrack, n, phase, stream],
                 TrackedSymbols :> {}, UpdateInterval -> 0.03],
             {
-                {"MouseDown", 1} :> If[playing, (AudioStop[stream]; playing = False), (AudioPlay[stream]; playing = True)],
-                {"MouseDown", 2} :> (AudioStop[stream]; RemoveAudioStream[stream]; stream = AudioStream[aud, Looping -> True]; phase = 0.; playing = False)
+                {"MouseDown", 1} :> If[playing, (Quiet @ AudioStop[stream]; playing = False), (Quiet @ AudioPlay[stream]; playing = True)],
+                {"MouseDown", 2} :> (Quiet @ AudioStop[stream]; phase = 0.; playing = False)
             }],
+        (* AudioPlay once, on first appearance -- not on every body re-eval *)
+        Initialization :> If[autoplay, Quiet @ AudioPlay[stream]],
         Deinitialization :> Quiet[AudioStop[stream]; RemoveAudioStream[stream]],
         SaveDefinitions -> True
     ]

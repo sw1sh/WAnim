@@ -81,13 +81,12 @@ highlightedString[str_, active_] := Row[Table[
      - editing=True : a stable InputField (no refresh, so the cursor survives) over the visual.
    `curPat` tracks the live-parsed pattern so an edit also updates the piano-roll visual. *)
 miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
-    DynamicModule[{src = source, curPat = pat, stream = Null, phase = 0., playing = True, editing = False, sched = <||>},
-        sched = scheduleOf[pat, n];
-        stream = AudioStream[Audio[pat, n], Looping -> True]; AudioPlay[stream];
+    DynamicModule[{src = source, curPat = pat, stream = AudioStream[Audio[pat, n], Looping -> True],
+                   phase = 0., playing = True, editing = False, sched = scheduleOf[pat, n]},
         reparse[] := Module[{p = CyclicPattern[src]},
             curPat = p; sched = scheduleOf[p, n];
             Quiet[AudioStop[stream]; RemoveAudioStream[stream]];
-            stream = AudioStream[Audio[p, n], Looping -> True]; AudioPlay[stream]; playing = True];
+            stream = AudioStream[Audio[p, n], Looping -> True]; Quiet @ AudioPlay[stream]; playing = True];
         Deploy @ Panel[
             Dynamic[
                 If[editing,
@@ -98,15 +97,15 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
                         renderVisual[vis, curPat, n, phase, stream]
                     }, Spacings -> 0.4],
                     Refresh[
-                        If[playing, phase = (QuantityMagnitude[stream["Position"]] - $AudioLatency) $CyclesPerSecond];
+                        If[playing, With[{ph = streamPhase[stream]}, If[NumericQ[ph], phase = ph]]];
                         Column[{
                             EventHandler[
                                 Tooltip[highlightedString[src, activeSpans[sched, phase, n]], "click to edit"],
                                 {"MouseClicked" :> (Quiet @ AudioStop[stream]; playing = False; editing = True)}],
                             EventHandler[
                                 renderVisual[vis, curPat, n, phase, stream],
-                                {{"MouseDown", 1} :> If[playing, (AudioStop[stream]; playing = False), (AudioPlay[stream]; playing = True)],
-                                 {"MouseDown", 2} :> (AudioStop[stream]; phase = 0.; playing = False)}]
+                                {{"MouseDown", 1} :> If[playing, (Quiet @ AudioStop[stream]; playing = False), (Quiet @ AudioPlay[stream]; playing = True)],
+                                 {"MouseDown", 2} :> (Quiet @ AudioStop[stream]; phase = 0.; playing = False)}]
                         }, Spacings -> 0.4],
                         TrackedSymbols :> {}, UpdateInterval -> 0.03]
                 ],
@@ -114,11 +113,11 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
             ],
             Background -> GrayLevel[0.1], FrameMargins -> 10
         ],
-        (* NO SaveDefinitions: the edit's reparse must use the LIVE WolframParser grammar.  A
-           saved snapshot loses the compiled grammar, so CyclicPattern[edited] returned Silence
-           and editing changed nothing.  The cell relies on WolfAnim being loaded (it is). *)
-        (* free the stream on re-eval / cell delete so loops don't pile up and overlap *)
-        Deinitialization :> Quiet[If[stream =!= Null, AudioStop[stream]; RemoveAudioStream[stream]]]]]
+        (* AudioPlay once on first appearance.  NO SaveDefinitions: the edit's reparse must use
+           the LIVE WolframParser grammar (a saved snapshot loses the compiled grammar, so
+           CyclicPattern[edited] returned Silence and editing changed nothing). *)
+        Initialization :> Quiet @ AudioPlay[stream],
+        Deinitialization :> Quiet[AudioStop[stream]; RemoveAudioStream[stream]]]]
 
 (* ---------- extractable trace of the dynamic play (for debugging headless) ---------- *)
 (* p["Trace", n] returns every event (token, cycle interval, audio-time in seconds, char span)
