@@ -70,9 +70,16 @@ mapEventTime[f_][ev_] := <|ev,
 (* ::Subsection:: Constructors *)
 
 (* the canonical form is CyclicPattern[queryFunction]; these are its query methods *)
-CyclicPattern[q_]["Query", b_, e_] := q[{b, e}]
-CyclicPattern[q_]["Cycle", c_ : 0] := q[{c, c + 1}]
-CyclicPattern[q_]["Onsets", b_ : 0, e_ : 1] := Select[q[{b, e}], hasOnset]
+CyclicPattern[q_, ___]["Query", b_, e_] := q[{b, e}]
+CyclicPattern[q_, ___]["Cycle", c_ : 0] := q[{c, c + 1}]
+CyclicPattern[q_, ___]["Onsets", b_ : 0, e_ : 1] := Select[q[{b, e}], hasOnset]
+
+(* a string-parsed pattern carries its source + AST as an optional 2nd arg (an Association);
+   derived patterns (from combinators) are single-arg and have no source. *)
+CyclicPattern[_, meta_Association]["Source"] := Lookup[meta, "Source", None]
+CyclicPattern[_, meta_Association]["AST"] := Lookup[meta, "AST", None]
+CyclicPattern[_]["Source"] := None
+CyclicPattern[_]["AST"] := None
 
 (* Steady[v] -- TidalCycles "pure": one event per cycle carrying value v *)
 Steady[v_] := CyclicPattern[Function[span,
@@ -88,14 +95,14 @@ CyclicPattern[s_String] := parseSequence[StringTrim[s]]
 (* ::Subsection:: The combinator algebra (query rewriters) *)
 
 (* Fast[r] compresses time by r; Slow[r] stretches it. Operator forms: Fast[2] @ p. *)
-Fast[r_][CyclicPattern[q_]] := CyclicPattern[Function[span,
+Fast[r_][CyclicPattern[q_, ___]] := CyclicPattern[Function[span,
     mapEventTime[#/r &] /@ q[r # & /@ span]
 ]]
 Fast[_][Silence] := Silence
 Slow[r_][p_] := Fast[1/r][p]
 
 (* Reverse a pattern within each cycle (overloads System`Reverse on the new type) *)
-CyclicPattern /: Reverse[CyclicPattern[q_]] := CyclicPattern[Function[span,
+CyclicPattern /: Reverse[CyclicPattern[q_, ___]] := CyclicPattern[Function[span,
     Join @@ (reverseCycle[q, #] & /@ spanCycles[span])
 ]]
 reverseCycle[q_, {b_, e_}] := With[{c = sam[b]},
@@ -130,7 +137,7 @@ fastcatList[{p_}] := p
 fastcatList[ps_List] := Fast[Length[ps]][Alternate @@ ps]
 
 (* Every[n, f] applies transform f only on cycles where Mod[cycle, n] == 0 *)
-Every[n_, f_][CyclicPattern[q_]] := CyclicPattern[Function[span,
+Every[n_, f_][CyclicPattern[q_, ___]] := CyclicPattern[Function[span,
     Join @@ (Function[piece,
         If[Mod[sam[piece[[1]]], n] == 0,
             f[CyclicPattern[q]]["Query", piece[[1]], piece[[2]]],
@@ -161,13 +168,13 @@ bjork[a_, b_] := If[Length[b] <= 1,
    The unary form is restricted to a pattern argument so the operator form
    Degrade[0.5] does NOT match it (which would recurse Degrade[0.5][0.5]...). *)
 Degrade[p_CyclicPattern] := Degrade[0.5][p]
-Degrade[fraction_][CyclicPattern[q_]] := CyclicPattern[Function[span,
+Degrade[fraction_][CyclicPattern[q_, ___]] := CyclicPattern[Function[span,
     Select[q[span], stableHash[#] >= fraction &]
 ]]
 stableHash[ev_] := Mod[Hash[{ev["Whole"], ev["Value"]}], 1000]/1000.
 
 (* time shift, and layering combinators *)
-Late[t_][CyclicPattern[q_]] := CyclicPattern[Function[span, mapEventTime[# + t &] /@ q[# - t & /@ span]]]
+Late[t_][CyclicPattern[q_, ___]] := CyclicPattern[Function[span, mapEventTime[# + t &] /@ q[# - t & /@ span]]]
 Early[t_] := Late[-t]
 Superimpose[f_][p_] := Layer[p, f[p]]
 Stagger[t_, f_][p_] := Layer[p, Late[t][f[p]]]
@@ -388,7 +395,7 @@ pianoRoll[patsOrTrack_, nCycles_ : 1, highlight_ : None] := Module[{lanes, data,
     ]
 ]
 
-CyclicPattern[q_]["PianoRoll", nCycles_ : 1] := pianoRoll[CyclicPattern[q], nCycles]
+CyclicPattern[q_, ___]["PianoRoll", nCycles_ : 1] := pianoRoll[CyclicPattern[q], nCycles]
 Track[voices_List]["PianoRoll", nCycles_ : 1] := pianoRoll[Track[voices], nCycles]
 
 (* live: loop the rendered bar through an AudioStream and scrub the playhead across the
@@ -414,7 +421,7 @@ patternPlay[patsOrTrack_, nCycles_ : 1] := With[{aud = renderAudio[patsOrTrack, 
         SaveDefinitions -> True
     ]
 ]
-CyclicPattern[q_]["Play", nCycles_ : 1] := patternPlay[CyclicPattern[q], nCycles]
+CyclicPattern[q_, ___]["Play", nCycles_ : 1] := patternPlay[CyclicPattern[q], nCycles]
 Track[voices_List]["Play", nCycles_ : 1] := patternPlay[Track[voices], nCycles]
 
 (* ["Scope"] plays the loop and shows a live oscilloscope of the audio stream's current
@@ -444,7 +451,7 @@ scopePlay[patsOrTrack_, nCycles_ : 2] := With[{aud = renderAudio[patsOrTrack, nC
         SaveDefinitions -> True
     ]
 ]
-CyclicPattern[q_]["Scope", nCycles_ : 2] := scopePlay[CyclicPattern[q], nCycles]
+CyclicPattern[q_, ___]["Scope", nCycles_ : 2] := scopePlay[CyclicPattern[q], nCycles]
 Track[voices_List]["Scope", nCycles_ : 2] := scopePlay[Track[voices], nCycles]
 
 
@@ -475,7 +482,7 @@ $LiveAtomHeads = {CyclicPattern}
 
 (* tag an atom's events with a source id so we can map events back to the box they came from;
    combinators preserve the extra "Source" key (mapEventTime/reverseCycle now merge it). *)
-tagPat[id_][CyclicPattern[q_]] := CyclicPattern[Function[span, (Append[#, "Source" -> id] &) /@ q[span]]]
+tagPat[id_][CyclicPattern[q_, ___]] := CyclicPattern[Function[span, (Append[#, "Source" -> id] &) /@ q[span]]]
 
 (* hlAtom is an inert box-time marker: render the atom's own boxes wrapped in a StyleBox whose
    Background lights up while any of its events is sounding (Dynamic on the shared livePhase). *)
@@ -528,14 +535,14 @@ LiveCode[expr_, nCycles_ : 2] := Module[{held = Hold[expr], atomPos, pat, events
 
 (* ::Subsection:: Formatting -- a pattern shows itself as its piano roll *)
 
-CyclicPattern /: MakeBoxes[p : CyclicPattern[_Function | _Symbol], StandardForm] :=
+CyclicPattern /: MakeBoxes[p : CyclicPattern[_Function | _Symbol, ___],StandardForm] :=
     With[{boxes = ToBoxes[pianoRoll[p, 1], StandardForm]}, InterpretationBox[boxes, p]]
 Track /: MakeBoxes[t : Track[_List], StandardForm] :=
     With[{boxes = ToBoxes[pianoRoll[t, 1], StandardForm]}, InterpretationBox[boxes, t]]
 
 (* TraditionalForm renders the pattern as its live ["Play"] piano roll: left-click
    play/pause, right-click reset, playhead scrubbing the loop.  Switch with Cell > Convert To. *)
-CyclicPattern /: MakeBoxes[p : CyclicPattern[_Function | _Symbol], StandardForm] :=
-    With[{boxes = ToBoxes[patternPlay[p, 1]]}, InterpretationBox[boxes, p]]
-Track /: MakeBoxes[t : Track[_List], StandardForm] :=
-    With[{boxes = ToBoxes[patternPlay[t, 1]]}, InterpretationBox[boxes, t]]
+CyclicPattern /: MakeBoxes[p : CyclicPattern[_Function | _Symbol, ___] /; p["Source"] === None, TraditionalForm] :=
+    With[{boxes = ToBoxes[patternPlay[p, 2]]}, InterpretationBox[boxes, p]]
+Track /: MakeBoxes[t : Track[_List], TraditionalForm] :=
+    With[{boxes = ToBoxes[patternPlay[t, 2]]}, InterpretationBox[boxes, t]]
