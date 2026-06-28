@@ -365,8 +365,11 @@ Track /: Sound[Track[voices_List], nCycles_ : 1] := Sound[patternScore[voices, n
 
 (* ::Subsection:: Vision renderer: piano roll (static) and an audio-synced animation *)
 
+(* pitched tokens take their MIDI row; sample / non-pitch tokens (bd, hh, ...) get a stable
+   low percussion row so a drum pattern still draws instead of an empty (black) roll. *)
+laneValue[val_] := With[{m = valueMidi[val]}, If[NumericQ[m], Round[m], 36 + Mod[Hash[val], 8]]]
 rollData[v_, nCycles_] := With[{evs = Select[patternOf[v]["Query", 0, nCycles], hasOnset]},
-    {#["Whole"], valueMidi[#["Value"]]} & /@ DeleteCases[evs, _?(MissingQ[valueMidi[#["Value"]]] &)]
+    {#["Whole"], laneValue[#["Value"]]} & /@ evs
 ]
 
 pianoRoll[patsOrTrack_, nCycles_ : 1, highlight_ : None] := Module[{lanes, data, mids, lo, hi},
