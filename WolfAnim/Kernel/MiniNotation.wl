@@ -92,7 +92,7 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], sched0 = scheduleOf[p
                 BaseStyle -> {FontFamily -> "Source Code Pro", FontSize -> 15}],
         EventHandler[
             Dynamic @ Refresh[
-                If[playing && stream =!= Null, phase = QuantityMagnitude[stream["Position"]] $CyclesPerSecond];
+                If[playing && stream =!= Null, phase = (QuantityMagnitude[stream["Position"]] - $AudioLatency) $CyclesPerSecond];
                 highlightedString[src, activeSpans[sched, phase, n]],
                 TrackedSymbols :> {phase, src}, UpdateInterval -> 0.03],
             {
@@ -102,6 +102,8 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], sched0 = scheduleOf[p
         Dynamic @ Refresh[ProgressIndicator[Mod[phase, n], {0, n}, ImageSize -> {Scaled[1], 3}],
             TrackedSymbols :> {phase}, UpdateInterval -> 0.05]
     }, Spacings -> 0.6], Background -> GrayLevel[0.1], FrameMargins -> 12],
+    (* free the stream on re-eval / cell delete so loops don't pile up and overlap *)
+    Deinitialization :> Quiet[If[stream =!= Null, AudioStop[stream]; RemoveAudioStream[stream]]],
     SaveDefinitions -> True]]
 
 WolfAnim`CyclicPattern /: MakeBoxes[p : WolfAnim`CyclicPattern[_, meta_Association] /; KeyExistsQ[meta, "Source"], TraditionalForm] :=
