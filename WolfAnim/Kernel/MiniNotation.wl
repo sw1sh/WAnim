@@ -60,8 +60,13 @@ WolfAnim`CyclicPattern[str_String] := With[{ast = parseMini[StringTrim[str]]},
 (* ---------- editable, event-highlighting TraditionalForm ---------- *)
 onsetQ[ev_] := ev["Whole"] =!= None && ev["Part"][[1]] == ev["Whole"][[1]]
 scheduleOf[pat_, n_] := GroupBy[Select[pat["Query", 0, n], onsetQ], #["Source"] &, Function[es, #["Whole"] & /@ es]]
+(* flash each atom briefly on every onset (Strudel-style) instead of lighting it for the note's
+   whole duration -- so back-to-back repeats (bd*4) pulse in time with the hits rather than
+   staying solidly lit (which reads as "out of sync" with the audio).  Window = the note's
+   duration, clamped to [0.05, 0.1] cycle. *)
+flashEnd[{on_, off_}] := on + Clip[off - on, {0.05, 0.1}]
 activeSpans[sched_, phase_, n_] := With[{p = Mod[phase, n]},
-    Keys @ Select[sched, AnyTrue[#, #[[1]] <= p < Max[#[[2]], #[[1]] + 0.06] &] &]]
+    Keys @ Select[sched, AnyTrue[#, #[[1]] <= p < flashEnd[#] &] &]]
 litQ[i_, active_] := AnyTrue[active, #[[1]] <= i < #[[2]] &]   (* span {s,e} covers chars s..e-1 *)
 highlightedString[str_, active_] := Row[Table[
     Style[StringTake[str, {i}], Background -> If[litQ[i, active], RGBColor[1, 0.82, 0.3, 0.8], Automatic]],
