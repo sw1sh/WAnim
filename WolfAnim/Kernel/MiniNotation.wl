@@ -73,38 +73,50 @@ highlightedString[str_, active_] := Row[Table[
     {i, StringLength[str]}],
     BaseStyle -> {FontFamily -> "Source Code Pro", FontWeight -> Bold, FontSize -> 17, FontColor -> GrayLevel[0.9]}]
 
-(* one Dynamic both advances the phase from the audio Position AND re-renders the highlighted
-   string -- so the highlight tracks the clock directly (no cross-Dynamic dependency to drop). *)
-(* The schedule + audio are BAKED from `pat` here (in MakeBoxes, with the full grammar
-   available), NOT re-parsed inside the Dynamic -- re-parsing under SaveDefinitions loses the
-   compiled WolframParser grammar, which silently gave Silence (no sound, no highlight, but a
-   moving playhead).  Editing the field re-parses live. *)
-miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], sched0 = scheduleOf[pat, n], aud0 = Audio[pat, n]},
-    DynamicModule[{src = source, stream = Null, phase = 0., playing = True, sched = sched0},
-        stream = AudioStream[aud0, Looping -> True]; AudioPlay[stream];
-        Deploy @ Panel[Column[{
-            InputField[Dynamic[src, Function[new, src = new;
-                Quiet @ Module[{p = CyclicPattern[new]},
-                    sched = scheduleOf[p, n];
-                    If[stream =!= Null, AudioStop[stream]; RemoveAudioStream[stream]];
-                    stream = AudioStream[Audio[p, n], Looping -> True]; AudioPlay[stream]; playing = True; phase = 0.]]],
-                String, FieldSize -> {Scaled[1], 1}, ContinuousAction -> False,
-                BaseStyle -> {FontFamily -> "Source Code Pro", FontSize -> 15}],
-        EventHandler[
-            Dynamic @ Refresh[
-                If[playing && stream =!= Null, phase = (QuantityMagnitude[stream["Position"]] - $AudioLatency) $CyclesPerSecond];
-                highlightedString[src, activeSpans[sched, phase, n]],
-                TrackedSymbols :> {phase, src}, UpdateInterval -> 0.03],
-            {
-                {"MouseDown", 1} :> If[playing, (AudioStop[stream]; playing = False), (AudioPlay[stream]; playing = True)],
-                {"MouseDown", 2} :> (AudioStop[stream]; phase = 0.; playing = False)
-            }],
-        Dynamic @ Refresh[ProgressIndicator[Mod[phase, n], {0, n}, ImageSize -> {Scaled[1], 3}],
-            TrackedSymbols :> {phase}, UpdateInterval -> 0.05]
-    }, Spacings -> 0.6], Background -> GrayLevel[0.1], FrameMargins -> 12],
-    (* free the stream on re-eval / cell delete so loops don't pile up and overlap *)
-    Deinitialization :> Quiet[If[stream =!= Null, AudioStop[stream]; RemoveAudioStream[stream]]],
-    SaveDefinitions -> True]]
+(* The editable TraditionalForm: the highlighted source IS the editor -- click it to enter
+   text mode (a stable InputField), click the Visual below to play/pause (right-click resets).
+   The Visual (visualOf[pat]: Bar/PianoRoll/Oscilloscope) is the SAME one StandardForm shows,
+   rendered from `renderVisual` (shared from Pattern.wl).  Two states via `editing`:
+     - editing=False: ONE refreshing Dynamic draws [highlight] over [visual], 30 ms ticks.
+     - editing=True : a stable InputField (no refresh, so the cursor survives) over the visual.
+   `curPat` tracks the live-parsed pattern so an edit also updates the piano-roll visual. *)
+miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
+    DynamicModule[{src = source, curPat = pat, stream = Null, phase = 0., playing = False, editing = False, sched = <||>},
+        sched = scheduleOf[pat, n];
+        stream = AudioStream[Audio[pat, n], Looping -> True];
+        reparse[] := Module[{p = CyclicPattern[src]},
+            curPat = p; sched = scheduleOf[p, n];
+            Quiet[AudioStop[stream]; RemoveAudioStream[stream]];
+            stream = AudioStream[Audio[p, n], Looping -> True]; AudioPlay[stream]; playing = True];
+        Deploy @ Panel[
+            Dynamic[
+                If[editing,
+                    Column[{
+                        InputField[Dynamic[src, Function[new, src = new; reparse[]; editing = False]], String,
+                            FieldSize -> {Scaled[1], 1}, ContinuousAction -> False,
+                            BaseStyle -> {FontFamily -> "Source Code Pro", FontSize -> 16}],
+                        renderVisual[vis, curPat, n, phase, stream]
+                    }, Spacings -> 0.4],
+                    Refresh[
+                        If[playing, phase = (QuantityMagnitude[stream["Position"]] - $AudioLatency) $CyclesPerSecond];
+                        Column[{
+                            EventHandler[
+                                Tooltip[highlightedString[src, activeSpans[sched, phase, n]], "click to edit"],
+                                {"MouseClicked" :> (Quiet @ AudioStop[stream]; playing = False; editing = True)}],
+                            EventHandler[
+                                renderVisual[vis, curPat, n, phase, stream],
+                                {{"MouseDown", 1} :> If[playing, (AudioStop[stream]; playing = False), (AudioPlay[stream]; playing = True)],
+                                 {"MouseDown", 2} :> (AudioStop[stream]; phase = 0.; playing = False)}]
+                        }, Spacings -> 0.4],
+                        TrackedSymbols :> {}, UpdateInterval -> 0.03]
+                ],
+                TrackedSymbols :> {editing}
+            ],
+            Background -> GrayLevel[0.1], FrameMargins -> 10
+        ],
+        (* free the stream on re-eval / cell delete so loops don't pile up and overlap *)
+        Deinitialization :> Quiet[If[stream =!= Null, AudioStop[stream]; RemoveAudioStream[stream]]],
+        SaveDefinitions -> True]]
 
 WolfAnim`CyclicPattern /: MakeBoxes[p : WolfAnim`CyclicPattern[_, meta_Association] /; KeyExistsQ[meta, "Source"], TraditionalForm] :=
     With[{boxes = ToBoxes[miniDisplay[p, 2]]}, InterpretationBox[boxes, p]]
