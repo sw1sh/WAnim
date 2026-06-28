@@ -81,9 +81,9 @@ highlightedString[str_, active_] := Row[Table[
      - editing=True : a stable InputField (no refresh, so the cursor survives) over the visual.
    `curPat` tracks the live-parsed pattern so an edit also updates the piano-roll visual. *)
 miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
-    DynamicModule[{src = source, curPat = pat, stream = Null, phase = 0., playing = False, editing = False, sched = <||>},
+    DynamicModule[{src = source, curPat = pat, stream = Null, phase = 0., playing = True, editing = False, sched = <||>},
         sched = scheduleOf[pat, n];
-        stream = AudioStream[Audio[pat, n], Looping -> True];
+        stream = AudioStream[Audio[pat, n], Looping -> True]; AudioPlay[stream];
         reparse[] := Module[{p = CyclicPattern[src]},
             curPat = p; sched = scheduleOf[p, n];
             Quiet[AudioStop[stream]; RemoveAudioStream[stream]];
@@ -114,9 +114,29 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
             ],
             Background -> GrayLevel[0.1], FrameMargins -> 10
         ],
+        (* NO SaveDefinitions: the edit's reparse must use the LIVE WolframParser grammar.  A
+           saved snapshot loses the compiled grammar, so CyclicPattern[edited] returned Silence
+           and editing changed nothing.  The cell relies on WolfAnim being loaded (it is). *)
         (* free the stream on re-eval / cell delete so loops don't pile up and overlap *)
-        Deinitialization :> Quiet[If[stream =!= Null, AudioStop[stream]; RemoveAudioStream[stream]]],
-        SaveDefinitions -> True]]
+        Deinitialization :> Quiet[If[stream =!= Null, AudioStop[stream]; RemoveAudioStream[stream]]]]]
+
+(* ---------- extractable trace of the dynamic play (for debugging headless) ---------- *)
+(* p["Trace", n] returns every event (token, cycle interval, audio-time in seconds, char span)
+   PLUS the highlight timeline (phase -> the source substrings lit), so the text<->audio<->visual
+   correspondence is fully inspectable without a front end. *)
+traceText[src_, span_] := If[ListQ[span] && span =!= None, StringTake[src, {span[[1]], span[[2]] - 1}], Missing[]]
+traceOf[pat_, n_, steps_] := Module[{src = pat["Source"], events, sched, cs = N[1/$CyclesPerSecond]},
+    events = SortBy[Select[pat["Query", 0, n], onsetQ], #["Whole"][[1]] &];
+    sched = scheduleOf[pat, n];
+    <|
+        "Source" -> src, "Visual" -> visualOf[pat], "Cycles" -> n, "CycleSeconds" -> cs,
+        "Events" -> (<|"Token" -> #["Value"], "Cycle" -> N[#["Whole"]], "AudioTime" -> N[#["Whole"][[1]] cs],
+                       "Span" -> #["Source"], "Text" -> traceText[src, #["Source"]]|> & /@ events),
+        "Highlight" -> Table[With[{ph = N[n k/steps]},
+            <|"Phase" -> ph, "Lit" -> (traceText[src, #] & /@ activeSpans[sched, ph, n])|>], {k, 0, steps - 1}]
+    |>
+]
+WolfAnim`CyclicPattern[q_, m___]["Trace", n_ : 2, steps_ : 32] := traceOf[CyclicPattern[q, m], n, steps]
 
 WolfAnim`CyclicPattern /: MakeBoxes[p : WolfAnim`CyclicPattern[_, meta_Association] /; KeyExistsQ[meta, "Source"], TraditionalForm] :=
     With[{boxes = ToBoxes[miniDisplay[p, 2]]}, InterpretationBox[boxes, p]]
