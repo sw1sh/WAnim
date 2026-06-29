@@ -560,11 +560,25 @@ Track[voices_List, ___]["Play", nCycles_ : 2] := livePlayer[Track[voices], nCycl
 
 (* ["Scope"] plays the loop and shows a live oscilloscope of the audio stream's current
    buffer; same click mechanics as ["Play"] (left = play/pause, right = reset). *)
-scopeFrame[snippet_] := With[{wave = Quiet @ Check[Flatten @ AudioData[snippet], {0.}]},
-    ListLinePlot[wave, PlotRange -> {All, {-1.05, 1.05}}, AspectRatio -> 1/3, Axes -> False,
-        Frame -> True, FrameTicks -> None, FrameStyle -> GrayLevel[0.3], Background -> GrayLevel[0.08],
-        PlotStyle -> Directive[RGBColor[0.25, 1, 0.55], Thickness[0.004]],
-        GridLines -> {None, {0}}, GridLinesStyle -> GrayLevel[0.25], ImageSize -> 480, ImagePadding -> 4]]
+Options[scopeFrame] = {ImageSize -> 480, AspectRatio -> 1/3, Background -> GrayLevel[0.08],
+    "WaveColor" -> RGBColor[0.25, 1, 0.55], FrameStyle -> GrayLevel[0.3], "GridColor" -> GrayLevel[0.25]};
+(* one live oscilloscope frame as RAW Graphics (NOT ListLinePlot) + downsample to <=512 points.
+   This is the real speed lever: WL exposes no GPU 2D-render path, so smooth animation depends on
+   each frame being cheap to build+typeset, and a bare Graphics[Line] is far lighter than a plot.
+   Honors ImageSize / AspectRatio / Background / "WaveColor" / FrameStyle / "GridColor". *)
+scopeFrame[snippet_, opts : OptionsPattern[]] := Module[{w, m},
+    w = Quiet @ Check[Flatten @ AudioData[snippet], {}];
+    If[! VectorQ[w, NumericQ], w = {}];
+    m = Length[w];
+    If[m > 512, w = w[[1 ;; m ;; Ceiling[m / 512]]]];
+    If[Length[w] < 2, w = {0., 0.}];
+    m = Length[w];
+    Graphics[{
+        OptionValue["GridColor"], AbsoluteThickness[0.6], Line[{{1, 0}, {m, 0}}],
+        OptionValue["WaveColor"], AbsoluteThickness[1.2], Line[Transpose[{Range[m], w}]]},
+        PlotRange -> {{1, m}, {-1.05, 1.05}}, AspectRatio -> OptionValue[AspectRatio],
+        Background -> OptionValue[Background], Frame -> True, FrameTicks -> None,
+        FrameStyle -> OptionValue[FrameStyle], ImageSize -> OptionValue[ImageSize], ImagePadding -> 4]]
 
 scopePlay[patsOrTrack_, nCycles_ : 2] := With[{aud = renderAudio[patsOrTrack, nCycles]},
     DynamicModule[{stream = AudioStream[aud, Looping -> True], playing = True, frame = 0},
@@ -645,7 +659,7 @@ visualBar[phase_, n_] := With[{x = Mod[phase, n]},
    stream's live buffer.  renderVisuals stacks a list of specs into a Column (... // Oscilloscope
    // PianoRoll).  Shared (PackageScoped) so MiniNotation's TraditionalForm shows the same. *)
 renderVisual["PianoRoll", pat_, n_, phase_, stream_, opts_] := pianoRoll[pat, n, phase, Sequence @@ FilterRules[opts, Options[pianoRoll]]]
-renderVisual["Oscilloscope", pat_, n_, phase_, stream_, opts_] := scopeFrame[stream["CurrentAudio"]]
+renderVisual["Oscilloscope", pat_, n_, phase_, stream_, opts_] := scopeFrame[stream["CurrentAudio"], Sequence @@ FilterRules[opts, Options[scopeFrame]]]
 renderVisual[_, pat_, n_, phase_, stream_, opts_] := visualBar[phase, n]
 renderVisuals[specs_, pat_, n_, phase_, stream_] := With[{ss = If[specs === {}, {{$DefaultVisual, {}}}, specs]},
     If[Length[ss] == 1,
@@ -699,16 +713,17 @@ livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
 
 (* ::Subsection:: Visualizations -- waveform and spectrogram of a pattern / track / audio *)
 
-scopeStatic[a_] := AudioPlot[a, AspectRatio -> 1/3, Background -> GrayLevel[0.08],
-    PlotStyle -> RGBColor[0.25, 1, 0.55], Frame -> True, FrameTicks -> None,
-    FrameStyle -> GrayLevel[0.3], ImageSize -> 480]
+Options[scopeStatic] = Options[scopeFrame];
+scopeStatic[a_, opts : OptionsPattern[]] := AudioPlot[a, AspectRatio -> OptionValue[AspectRatio],
+    Background -> OptionValue[Background], PlotStyle -> OptionValue["WaveColor"], Frame -> True,
+    FrameTicks -> None, FrameStyle -> OptionValue[FrameStyle], ImageSize -> OptionValue[ImageSize]]
 (* static scope of audio/a pattern.  The Except guard keeps this catch-all from firing on the
    heads of the OTHER Oscilloscope forms: _Rule/_RuleDelayed so an options-only
    Oscilloscope[Background->..] stays the operator above, and _Pattern so that on a RELOAD --
    when this DownValue already exists -- defining the curried Oscilloscope[opts:OptionsPattern[]]
    subvalue doesn't evaluate its head Oscilloscope[Pattern[opts,OptionsPattern[]]] into a scope
    (which would hit renderAudio[Pattern[..],2] and throw Duration/AudioPlot errors). *)
-Oscilloscope[x : Except[_Rule | _RuleDelayed | _Pattern], nCycles_ : 2] := scopeStatic @ If[MatchQ[x, _Audio], x, renderAudio[x, nCycles]]
+Oscilloscope[x : Except[_Rule | _RuleDelayed | _Pattern], nCycles_ : 2, opts : OptionsPattern[scopeStatic]] := scopeStatic[If[MatchQ[x, _Audio], x, renderAudio[x, nCycles]], opts]
 
 Track /: Spectrogram[p_Track, nCycles_ : 2, opts : OptionsPattern[]] := Spectrogram[renderAudio[p, nCycles], opts, ImageSize -> 480]
 Track /: Spectrogram[t_Track, nCycles_ : 2, opts : OptionsPattern[]] := Spectrogram[renderAudio[t, nCycles], opts, ImageSize -> 480]
