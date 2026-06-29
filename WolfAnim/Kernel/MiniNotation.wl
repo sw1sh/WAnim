@@ -149,7 +149,7 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]
                 Dynamic @ Refresh[
                     If[$Playing && enabledQ[id], phase = clockPhase[n]];
                     frameIfDisabled[id, renderVisuals[viss, curPat, n, phase, stream]],
-                    TrackedSymbols :> {}, UpdateInterval -> 0.03],
+                    TrackedSymbols :> {$Streams}, UpdateInterval -> 0.03],
                 {{"MouseDown", 1} :> (If[AbsoluteTime[] - lastClick < 0.3, soloStream[id, stream, n], If[$Playing, TrackPause[], TrackPlay[]]]; lastClick = AbsoluteTime[]),
                  {"MouseDown", 2} :> If[enabledQ[id], (Quiet @ AudioStop[stream]; unregisterStream[id]), registerStream[id, stream, n]]}]
         }, Spacings -> 0.5, Alignment -> Left], Background -> GrayLevel[0.1], FrameMargins -> 10],

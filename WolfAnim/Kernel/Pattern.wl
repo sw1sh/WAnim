@@ -646,7 +646,7 @@ livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
         With[{visual = Dynamic @ Refresh[
                 If[$Playing && enabledQ[id], phase = clockPhase[n]];
                 frameIfDisabled[id, renderVisuals[viss, patOrTrack, n, phase, stream]],
-                TrackedSymbols :> {}, UpdateInterval -> 0.03]},
+                TrackedSymbols :> {$Streams}, UpdateInterval -> 0.03]},
             If[buttons,
                 (* buttons: play/pause = global; disable = this track on/off; solo = only this *)
                 Column[{
@@ -668,8 +668,9 @@ livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
            transport is running); a Solo-marked track silences the rest on appearance; autoplay
            starts the transport if nothing is playing yet *)
         Initialization :> (registerStream[id, stream, n]; If[solo, soloStream[id, stream, n]]; If[autoplay && ! $Playing, TrackPlay[]]),
-        Deinitialization :> (unregisterStream[id]; Quiet[AudioStop[stream]; RemoveAudioStream[stream]]),
-        SaveDefinitions -> True
+        Deinitialization :> (unregisterStream[id]; Quiet[AudioStop[stream]; RemoveAudioStream[stream]])
+        (* NO SaveDefinitions: it snapshots & re-injects the SHARED $Streams registry per player,
+           clobbering live cross-player state (disable/solo/frame) on every (re)display. *)
     ]
 ]
 
