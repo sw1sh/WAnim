@@ -42,7 +42,9 @@ parseMini[str_String] := Quiet @ Check[Parse[$grammar, str], $Failed]
 
 (* ---------- AST -> Track, tagging each atom's events with its char span ---------- *)
 tagSpan[span_][cp_] := With[{q = First[cp]}, Track[Function[sp, (Append[#, "Source" -> span] &) /@ q[sp]]]]
-ap[LeafNode["Atom", "~", _]]   := Silence
+(* a rest "~" is still an EVENT: tag it like any atom so its step highlights in the source and
+   occupies the cycle, but it carries the value "~" which the audio + roll skip (see restQ). *)
+ap[LeafNode["Atom", "~", m_]]  := tagSpan[m["Source"]][Steady["~"]]
 ap[LeafNode["Atom", v_, m_]]   := tagSpan[m["Source"]][Steady[v]]
 ap[GroupNode["Seq", st_, _]]   := Fastcat @@ (ap /@ st)
 ap[GroupNode["Sub", {x_}, _]]  := ap[x]

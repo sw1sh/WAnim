@@ -343,6 +343,9 @@ valueMidi[_] := Missing[]
 valuePitches[mc_MusicChord] := Quiet @ Check[#["MIDINumber"] & /@ mc["PitchList"], {}]
 valuePitches[SoundNote[ps_List, ___]] := Flatten[valuePitches /@ ps]
 valuePitches[v_] := With[{m = valueMidi[v]}, If[NumericQ[m], {Round[m]}, {}]]
+(* a rest "~" is a SILENT event: it occupies its step and highlights in the source, but the audio
+   and the piano roll skip it (so it neither sounds nor draws a block). *)
+restQ[v_] := v === "~"
 (* short label for the roll: strings as-is, otherwise the pitch name(s) *)
 midiName[m_] := Quiet @ Check[ToString[MusicPitch[Round @ m]["Key"]] <> ToString[MusicPitch[Round @ m]["Octave"]], ToString[Round @ m]]
 labelOf[v_String] := v
@@ -417,7 +420,7 @@ synthDrum[v_] := synthDrum[v] = AudioNormalize @ Switch[ToLowerCase[v],
 drumSound[v_] := If[sampleQ[v], $SampleBank[v], synthDrum[v]]
 (* drum/percussion events (a loaded sample, or any non-pitch token) placed at their onsets *)
 sampleLayer[events_] := mix[AudioPad[drumSound[#["Value"]], {at[#["Whole"][[1]]], 0}] & /@
-    Select[events, sampleQ[#["Value"]] || valuePitches[#["Value"]] === {} &]]
+    Select[events, ! restQ[#["Value"]] && (sampleQ[#["Value"]] || valuePitches[#["Value"]] === {}) &]]
 (* pitched events -> MusicScore -> Audio (acoustic-ish) *)
 musicLayer[events_, nCycles_] := With[{pe = Select[events, ! sampleQ[#["Value"]] && NumericQ[valueMidi[#["Value"]]] &]},
     If[pe === {}, Nothing, Audio[MusicScore[{eventsToVoice[pe, nCycles]}, MusicTimeSignature[4, 4], MusicTempo -> patternTempo[]]]]]
@@ -475,7 +478,7 @@ Track /: Sound[Track[voices_List, ___], nCycles_ : 1] := Sound[patternScore[voic
    low percussion row so a drum pattern still draws instead of an empty (black) roll. *)
 laneValue[val_] := With[{ps = valuePitches[val]}, If[ps =!= {}, First[ps], 36 + Mod[Hash[val], 8]]]
 (* one block per sounding pitch (a chord draws a block per note); drums get a synthetic row *)
-rollData[v_, nCycles_] := With[{evs = Select[patternOf[v]["Query", 0, nCycles], hasOnset]},
+rollData[v_, nCycles_] := With[{evs = Select[patternOf[v]["Query", 0, nCycles], hasOnset[#] && ! restQ[#["Value"]] &]},
     Flatten[Function[ev, With[{ps = valuePitches[ev["Value"]]},
         If[ps === {},
             {{ev["Whole"], 36 + Mod[Hash[ev["Value"]], 8], labelOf[ev["Value"]]}},
