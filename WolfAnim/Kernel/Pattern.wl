@@ -47,11 +47,13 @@ $ClockAccum = 0.
 $ClockStart = None
 $Playing = False
 $Streams = <||>
+$SoloMaster = None   (* id of the track currently soloing (via double-click / Solo), or None *)
+$SoloSaved = <||>    (* the registry entries THIS solo froze, restored verbatim on un-solo *)
 clockSeconds[] := If[$ClockStart === None, $ClockAccum, $ClockAccum + (AbsoluteTime[] - $ClockStart)]
 clockPhase[n_] := Mod[clockSeconds[] $CyclesPerSecond, n]
 seekStream[{stream_, n_}] := Quiet[stream["Position"] = Quantity[Mod[clockPhase[n], n] / $CyclesPerSecond, "Seconds"]]
 registerStream[id_, stream_, n_] := ($Streams[id] = {stream, n}; If[$Playing, seekStream[{stream, n}]; Quiet @ AudioPlay[stream]])
-unregisterStream[id_] := ($Streams = KeyDrop[$Streams, id];)
+unregisterStream[id_] := ($Streams = KeyDrop[$Streams, id]; If[$SoloMaster === id, soloRestore[]];)
 (* user-facing global transport (exported): act on every registered stream at once.
    TrackPlay[]/TrackPause[] run/halt the shared clock; TrackSeek[cyclePos] jumps the whole
    transport to a cycle position (seeking every stream there); TrackReset[] == TrackSeek[0]. *)
@@ -60,16 +62,27 @@ TrackPause[] := (If[$ClockStart =!= None, $ClockAccum += AbsoluteTime[] - $Clock
 TrackSeek[pos_] := ($ClockAccum = pos / $CyclesPerSecond; $ClockStart = If[$Playing, AbsoluteTime[], None]; Scan[Function[sn, seekStream[sn]; If[$Playing, Quiet @ AudioPlay[First @ sn]]], Values @ $Streams])
 TrackReset[] := TrackSeek[0]
 
-(* a track is "enabled" iff it is in the registry; right-click toggles that.  soloStream drops
-   every OTHER track from the registry (stopping it) and plays only this one -- a double-click
-   solo.  Both are observed across players through the shared $Streams, so a solo on one player
-   shows the rest as disabled. *)
+(* a track is "enabled" iff it is in the registry; right-click toggles that.  Solo is a TOGGLE:
+   the first double-click freezes every OTHER currently-active track (saving their registry entries
+   in $SoloSaved) and plays only this one.  Double-clicking the SAME track again restores exactly
+   those it froze -- tracks already frozen beforehand are untouched, since they were never in
+   $Streams to be saved.  Switching the solo to another track first un-solos the previous one.
+   All of it propagates across players through the shared $Streams. *)
 enabledQ[id_] := KeyExistsQ[$Streams, id]
-soloStream[id_, stream_, n_] := (
-    Scan[Function[k, Quiet @ AudioStop[First @ $Streams[k]]], DeleteCases[Keys @ $Streams, id]];
-    $Streams = <|id -> {stream, n}|>;
-    If[$ClockStart === None, $ClockStart = AbsoluteTime[]]; $Playing = True;
-    seekStream[{stream, n}]; Quiet @ AudioPlay[stream])
+soloRestore[] := (
+    Scan[Function[k, $Streams[k] = $SoloSaved[k];
+        If[$Playing, seekStream[$SoloSaved[k]]; Quiet @ AudioPlay[First @ $SoloSaved[k]]]], Keys @ $SoloSaved];
+    $SoloSaved = <||>; $SoloMaster = None)
+soloStream[id_, stream_, n_] := If[$SoloMaster === id,
+    soloRestore[],   (* 2nd double-click on the soloing track -> un-solo, thaw only its victims *)
+    (If[$SoloMaster =!= None, soloRestore[]];     (* switching solo -> undo the previous one first *)
+     $Streams[id] = {stream, n};
+     With[{victims = DeleteCases[Keys @ $Streams, id]},
+        $SoloSaved = KeyTake[$Streams, victims];
+        Scan[Function[k, Quiet @ AudioStop[First @ $Streams[k]]], victims]];
+     $Streams = <|id -> {stream, n}|>; $SoloMaster = id;
+     If[$ClockStart === None, $ClockStart = AbsoluteTime[]]; $Playing = True;
+     seekStream[{stream, n}]; Quiet @ AudioPlay[stream])]
 (* disabled tracks are wrapped in a thick red frame so they read as muted at a glance *)
 frameIfDisabled[id_, viz_] := If[enabledQ[id], viz,
     Framed[viz, FrameStyle -> Directive[RGBColor[1, 0.25, 0.25], AbsoluteThickness[3]], FrameMargins -> 5, RoundingRadius -> 7, Background -> None]]
