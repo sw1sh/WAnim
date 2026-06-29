@@ -519,20 +519,24 @@ streamPhase[stream_] := With[{pos = Quiet @ stream["Position"]},
     If[QuantityQ[pos], (QuantityMagnitude[pos] - $AudioLatency) $CyclesPerSecond, $Failed]]
 
 (* the unified live player behind StandardForm and ["Play"]: loop the audio, scrub the
-   playhead, click the visual to play/pause (right-click resets).  Paused unless autoplay. *)
+   playhead, click the visual to play/pause (right-click resets).  Paused unless autoplay.
+   Playhead is WALL-CLOCK (t0), not stream Position -- polling the stream was what broke the
+   player for combinator-derived patterns (Fast/Reverse/...) shown as StandardForm. *)
 livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[{aud = renderAudio[patOrTrack, n], vis = visualOf[patOrTrack]},
-    DynamicModule[{stream = AudioStream[aud, Looping -> True], playing = autoplay, phase = 0.},
+    DynamicModule[{stream = AudioStream[aud, Looping -> True], playing = autoplay, phase = 0., t0 = 0.},
         EventHandler[
             Dynamic @ Refresh[
-                If[playing, With[{ph = streamPhase[stream]}, If[NumericQ[ph], phase = ph]]];
+                If[playing, phase = Mod[(AbsoluteTime[] - t0) $CyclesPerSecond, n]];
                 renderVisual[vis, patOrTrack, n, phase, stream],
                 TrackedSymbols :> {}, UpdateInterval -> 0.03],
             {
-                {"MouseDown", 1} :> If[playing, (Quiet @ AudioPause[stream]; playing = False), (Quiet @ AudioPlay[stream]; playing = True)],
-                {"MouseDown", 2} :> (Quiet @ AudioStop[stream]; phase = 0.; playing = False)
+                {"MouseDown", 1} :> If[playing,
+                        (Quiet @ AudioPause[stream]; playing = False),
+                        (t0 = AbsoluteTime[] - phase / $CyclesPerSecond; Quiet @ AudioPlay[stream]; playing = True)],
+                {"MouseDown", 2} :> (Quiet @ AudioStop[stream]; phase = 0.; t0 = AbsoluteTime[]; playing = False)
             }],
-        (* AudioPlay once, on first appearance -- not on every body re-eval *)
-        Initialization :> If[autoplay, Quiet @ AudioPlay[stream]],
+        (* start clock + (optionally) audio once, on first appearance *)
+        Initialization :> (t0 = AbsoluteTime[]; If[autoplay, Quiet @ AudioPlay[stream]]),
         Deinitialization :> Quiet[AudioStop[stream]; RemoveAudioStream[stream]],
         SaveDefinitions -> True
     ]
