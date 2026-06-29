@@ -6,7 +6,7 @@
 PackageExported[{CyclicPattern, Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Fastcat, LiveCode, $LiveAtomHeads}]
 
 (* shared with MiniNotation.wl so the TraditionalForm can render the same live Visual *)
-PackageScoped[{renderVisual, visualOf, streamPhase}]
+PackageScoped[{renderVisual, visualOf, visualOptsOf, buttonsQ, streamPhase}]
 
 
 
@@ -517,11 +517,17 @@ Track[voices_List]["Scope", nCycles_ : 2] := scopePlay[Track[voices], nCycles]
 visualOf[CyclicPattern[_, m_Association]] := Lookup[m, "Visual", $DefaultVisual]
 visualOf[_Track] := "PianoRoll"
 visualOf[_] := $DefaultVisual
-setVisual[CyclicPattern[q_, m_Association], v_] := CyclicPattern[q, <|m, "Visual" -> v|>]
-setVisual[CyclicPattern[q_], v_] := CyclicPattern[q, <|"Visual" -> v|>]
+visualOptsOf[CyclicPattern[_, m_Association]] := Lookup[m, "VisualOpts", {}]
+visualOptsOf[_] := {}
+buttonsQ[pat_] := TrueQ @ Lookup[Association @ visualOptsOf[pat], "Buttons", False]
+setVisual[CyclicPattern[q_, m_Association], v_, o_ : {}] := CyclicPattern[q, <|m, "Visual" -> v, "VisualOpts" -> o|>]
+setVisual[CyclicPattern[q_], v_, o_ : {}] := CyclicPattern[q, <|"Visual" -> v, "VisualOpts" -> o|>]
 
-PianoRoll[p_CyclicPattern] := setVisual[p, "PianoRoll"]
-Oscilloscope[p_CyclicPattern] := setVisual[p, "Oscilloscope"]
+(* PianoRoll[p, opts] / Oscilloscope[p, opts] set the Visual AND stash its options: the
+   pianoRoll styling (FontSize/Background/"BlockColor"/...) plus "Buttons"->True to show
+   explicit transport buttons instead of the click-the-visual EventHandler. *)
+PianoRoll[p_CyclicPattern, opts___] := setVisual[p, "PianoRoll", {opts}]
+Oscilloscope[p_CyclicPattern, opts___] := setVisual[p, "Oscilloscope", {opts}]
 CyclicPattern[_, m_Association]["Visual"] := Lookup[m, "Visual", "Bar"]
 CyclicPattern[_]["Visual"] := "Bar"
 
@@ -536,7 +542,7 @@ visualBar[phase_, n_] := With[{x = Mod[phase, n]},
 
 (* render the chosen Visual at the current playhead phase; the scope reads the stream's
    live buffer.  Shared (PackageScoped) so MiniNotation's TraditionalForm shows the same. *)
-renderVisual["PianoRoll", pat_, n_, phase_, stream_] := pianoRoll[pat, n, phase]
+renderVisual["PianoRoll", pat_, n_, phase_, stream_] := pianoRoll[pat, n, phase, Sequence @@ FilterRules[visualOptsOf[pat], Options[pianoRoll]]]
 renderVisual["Oscilloscope", pat_, n_, phase_, stream_] := scopeFrame[stream["CurrentAudio"]]
 renderVisual[_, pat_, n_, phase_, stream_] := visualBar[phase, n]
 
@@ -549,20 +555,30 @@ streamPhase[stream_] := With[{pos = Quiet @ stream["Position"]},
    playhead, click the visual to play/pause (right-click resets).  Paused unless autoplay.
    Playhead is WALL-CLOCK (t0), not stream Position -- polling the stream was what broke the
    player for combinator-derived patterns (Fast/Reverse/...) shown as StandardForm. *)
-livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[{aud = renderAudio[patOrTrack, n], vis = visualOf[patOrTrack]},
+livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
+    {aud = renderAudio[patOrTrack, n], vis = visualOf[patOrTrack], buttons = buttonsQ[patOrTrack]},
     DynamicModule[{stream = AudioStream[aud, Looping -> True], playing = autoplay, phase = 0., t0 = 0.},
-        EventHandler[
-            Dynamic @ Refresh[
+        With[{visual = Dynamic @ Refresh[
                 If[playing, phase = Mod[(AbsoluteTime[] - t0) $CyclesPerSecond, n]];
                 renderVisual[vis, patOrTrack, n, phase, stream],
-                TrackedSymbols :> {}, UpdateInterval -> 0.03],
-            {
-                {"MouseDown", 1} :> If[playing,
-                        (Quiet @ AudioPause[stream]; playing = False),
-                        (t0 = AbsoluteTime[] - phase / $CyclesPerSecond; Quiet @ AudioPlay[stream]; playing = True)],
-                {"MouseDown", 2} :> (Quiet @ AudioStop[stream]; phase = 0.; t0 = AbsoluteTime[]; playing = False)
-            }],
-        (* start clock + (optionally) audio once, on first appearance *)
+                TrackedSymbols :> {}, UpdateInterval -> 0.03]},
+            If[buttons,
+                (* explicit transport buttons; the visual itself is not click-interactive *)
+                Column[{
+                    Row[{
+                        Button["\:25b6", (t0 = AbsoluteTime[] - phase / $CyclesPerSecond; Quiet @ AudioPlay[stream]; playing = True)],
+                        Button["\:23f8", (Quiet @ AudioPause[stream]; playing = False)],
+                        Button["\:23f9", (Quiet @ AudioStop[stream]; phase = 0.; t0 = AbsoluteTime[]; playing = False)]
+                    }, Spacer[3]],
+                    visual
+                }, Spacings -> 0.4, Alignment -> Left],
+                (* click the visual: left = play/pause, right = reset *)
+                EventHandler[visual,
+                    {{"MouseDown", 1} :> If[playing,
+                            (Quiet @ AudioPause[stream]; playing = False),
+                            (t0 = AbsoluteTime[] - phase / $CyclesPerSecond; Quiet @ AudioPlay[stream]; playing = True)],
+                     {"MouseDown", 2} :> (Quiet @ AudioStop[stream]; phase = 0.; t0 = AbsoluteTime[]; playing = False)}]
+            ]],
         Initialization :> (t0 = AbsoluteTime[]; If[autoplay, Quiet @ AudioPlay[stream]]),
         Deinitialization :> Quiet[AudioStop[stream]; RemoveAudioStream[stream]],
         SaveDefinitions -> True
