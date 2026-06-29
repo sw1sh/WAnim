@@ -104,9 +104,9 @@ highlightedString[str_, active_] := Row[Table[
      - editing=False: ONE refreshing Dynamic draws [highlight] over [visual], 30 ms ticks.
      - editing=True : a stable InputField (no refresh, so the cursor survives) over the visual.
    `curPat` tracks the live-parsed pattern so an edit also updates the piano-roll visual. *)
-miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
+miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]},
     DynamicModule[{src = source, curPat = pat, stream = AudioStream[Audio[pat, n], Looping -> True],
-                   phase = 0., t0 = 0., playing = True, editing = False, sched = scheduleOf[pat, n]},
+                   phase = 0., playing = True, editing = False, sched = scheduleOf[pat, n]},
         (* The apply (re-parse) action is INLINED into the apply Button + Enter handler below.
            A DynamicModule-local f[]:= and Method->"Queued" both write to the wrong (un-localized)
            symbols, so the new pattern never reached the display.  Inline + default (preemptive)
@@ -126,12 +126,12 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
                                 {"ReturnKeyDown" :> (
                                     curPat = CyclicPattern[src]; sched = scheduleOf[curPat, n];
                                     Quiet @ AudioStop[stream]; stream = AudioStream[Audio[curPat, n], Looping -> True];
-                                    phase = 0.; t0 = AbsoluteTime[]; Quiet @ AudioPlay[stream]; playing = True; editing = False)}],
+                                    syncPlay[stream, n]; playing = True; editing = False)}],
                             Spacer[8],
                             Button[Style["\:25b6 apply", 13], (
                                 curPat = CyclicPattern[src]; sched = scheduleOf[curPat, n];
                                 Quiet @ AudioStop[stream]; stream = AudioStream[Audio[curPat, n], Looping -> True];
-                                phase = 0.; t0 = AbsoluteTime[]; Quiet @ AudioPlay[stream]; playing = True; editing = False)]
+                                syncPlay[stream, n]; playing = True; editing = False)]
                         }, Alignment -> Center],
                         Dynamic[Style["\:2192 " <> src, 11, GrayLevel[0.5], FontFamily -> "Source Code Pro"]]
                     }, Alignment -> Left, Spacings -> 0.3],
@@ -147,17 +147,17 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
                (keeps position), right-click = reset. *)
             EventHandler[
                 Dynamic @ Refresh[
-                    If[playing, phase = Mod[(AbsoluteTime[] - t0) $CyclesPerSecond, n]];
-                    renderVisual[vis, curPat, n, phase, stream],
+                    If[playing, phase = clockPhase[n]];
+                    renderVisuals[viss, curPat, n, phase, stream],
                     TrackedSymbols :> {}, UpdateInterval -> 0.03],
                 {{"MouseDown", 1} :> If[playing,
                         (Quiet @ AudioPause[stream]; playing = False),
-                        (t0 = AbsoluteTime[] - phase / $CyclesPerSecond; Quiet @ AudioPlay[stream]; playing = True)],
-                 {"MouseDown", 2} :> (Quiet @ AudioStop[stream]; phase = 0.; t0 = AbsoluteTime[]; playing = False)}]
+                        (syncPlay[stream, n]; playing = True)],
+                 {"MouseDown", 2} :> (Quiet @ AudioStop[stream]; playing = False)}]
         }, Spacings -> 0.5, Alignment -> Left], Background -> GrayLevel[0.1], FrameMargins -> 10],
         (* start the clock + audio together on first appearance.  NO SaveDefinitions: the edit's
            reparse needs the LIVE grammar. *)
-        Initialization :> (t0 = AbsoluteTime[]; Quiet @ AudioPlay[stream]),
+        Initialization :> syncPlay[stream, n],
         Deinitialization :> Quiet[AudioStop[stream]; RemoveAudioStream[stream]]]]
 
 (* ---------- extractable trace of the dynamic play (for debugging headless) ---------- *)
