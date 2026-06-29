@@ -372,7 +372,7 @@ patternVoice[v_, nCycles_ : 1] := eventsToVoice[Select[patternOf[v]["Query", 0, 
 
 patternScore[voices_List, nCycles_] := MusicScore[patternVoice[#, nCycles] & /@ voices, MusicTimeSignature[4, 4], MusicTempo -> patternTempo[]]
 patternScore[v : _Track | _SynthVoice | _GainVoice, nCycles_] := patternScore[{v}, nCycles]
-patternScore[Track[voices_List], nCycles_] := patternScore[voices, nCycles]
+patternScore[Track[voices_List, ___], nCycles_] := patternScore[voices, nCycles]
 
 
 (* ::Subsection:: Audio renderer: drum samples + oscillator synth + MusicScore, overlaid *)
@@ -436,7 +436,10 @@ voiceAudio[SynthVoice[wave_, p_], nCycles_] := fitTo[oscLayer[Select[p["Query", 
 voiceAudio[p_Track, nCycles_] := With[{ev = Select[p["Query", 0, nCycles], hasOnset]},
     fitTo[mix[{sampleLayer[ev], oscLayer[ev, $DefaultWave]}], nCycles]]
 
-renderAudio[Track[voices_List], nCycles_] := AudioNormalize @ fitDuration[mix[voiceAudio[#, nCycles] & /@ voices], nCycles cycleSeconds[]]
+(* sum the voices at their natural per-voice level -- NO peak-normalize, so a Track[a,b,c]
+   sounds exactly like playing a, b, c in separate players (which the speakers also just sum).
+   nCycles comes from cyclesOf via the player, so // Bars[n] widens the window. *)
+renderAudio[Track[voices_List, ___], nCycles_] := fitDuration[mix[voiceAudio[#, nCycles] & /@ voices], nCycles cycleSeconds[]]
 renderAudio[v_, nCycles_] := fitTo[voiceAudio[v, nCycles], nCycles]
 
 Track /: Audio[p_Track, nCycles_ : 1] := renderAudio[p, nCycles]
@@ -449,15 +452,21 @@ GainVoice /: Audio[v_GainVoice, nCycles_ : 1] := renderAudio[v, nCycles]
 (* ::Subsection:: Track: a multi-voice composition (each line its own timbre/voice) *)
 
 voiceQ[v_] := MatchQ[v, _Track | _SynthVoice | _GainVoice]
+voiceLikeQ[v_] := StringQ[v] || voiceQ[v]
+asVoice[s_String] := Track[s]
+asVoice[v_] := v
 Track[ps__?voiceQ] := Track[{ps}]
+(* mini-notation strings compose as voices too: Track["bass", "chords", "arp"] -- >=2 args, at
+   least one a String (a lone Track[s_String] stays the single mini-notation parse). *)
+Track[a_?voiceLikeQ, b__?voiceLikeQ] /; ! AllTrue[{a, b}, voiceQ] := Track[asVoice /@ {a, b}]
 Track[t_Track] := t
 
-Track[voices_List]["Voices"] := voices
-Track[voices_List]["Score", nCycles_ : 1] := patternScore[voices, nCycles]
+Track[voices_List, ___]["Voices"] := voices
+Track[voices_List, ___]["Score", nCycles_ : 1] := patternScore[voices, nCycles]
 
-Track /: Audio[Track[voices_List], nCycles_ : 1] := renderAudio[Track[voices], nCycles]
-Track /: MusicPlot[Track[voices_List], nCycles_ : 1, opts___] := MusicPlot[patternScore[voices, nCycles], opts]
-Track /: Sound[Track[voices_List], nCycles_ : 1] := Sound[patternScore[voices, nCycles]]
+Track /: Audio[Track[voices_List, ___], nCycles_ : 1] := renderAudio[Track[voices], nCycles]
+Track /: MusicPlot[Track[voices_List, ___], nCycles_ : 1, opts___] := MusicPlot[patternScore[voices, nCycles], opts]
+Track /: Sound[Track[voices_List, ___], nCycles_ : 1] := Sound[patternScore[voices, nCycles]]
 
 
 (* ::Subsection:: Vision renderer: piano roll (static) and an audio-synced animation *)
@@ -486,7 +495,7 @@ blockColor[Automatic, hue_] := LightDarkSwitched[Hue[hue, 0.7, 0.7], Hue[hue, 0.
 blockColor[c_, _] := c
 pianoRoll[patsOrTrack_, nCycles_ : 1, highlight_ : None, opts : OptionsPattern[]] := Module[
     {lanes, data, mids, lo, hi, bg, blk, labelCol, playCol, gridCol, frameCol, fs, lab},
-    lanes = Which[MatchQ[patsOrTrack, Track[_List]], patsOrTrack["Voices"], MatchQ[patsOrTrack, _List], patsOrTrack, True, {patsOrTrack}];
+    lanes = Which[MatchQ[patsOrTrack, Track[_List, ___]], patsOrTrack["Voices"], MatchQ[patsOrTrack, _List], patsOrTrack, True, {patsOrTrack}];
     data = MapIndexed[Function[{lane, i}, {First[i], #} & /@ rollData[lane, nCycles]], lanes];
     mids = Cases[Flatten[data, 1][[All, 2, 2]], _Integer];
     If[mids === {}, Return[Graphics[{}, ImageSize -> OptionValue[ImageSize]]]];
@@ -518,7 +527,7 @@ pianoRoll[patsOrTrack_, nCycles_ : 1, highlight_ : None, opts : OptionsPattern[]
 ]
 
 Track[q : (_Function | _Symbol), ___]["PianoRoll", nCycles_ : 1, opts : OptionsPattern[pianoRoll]] := pianoRoll[Track[q], nCycles, None, opts]
-Track[voices_List]["PianoRoll", nCycles_ : 1, opts : OptionsPattern[pianoRoll]] := pianoRoll[Track[voices], nCycles, None, opts]
+Track[voices_List, ___]["PianoRoll", nCycles_ : 1, opts : OptionsPattern[pianoRoll]] := pianoRoll[Track[voices], nCycles, None, opts]
 
 (* live: loop the rendered bar through an AudioStream and scrub the playhead across the
    piano roll from the stream's true position (the master clock).  Returns a Dynamic. *)
@@ -547,7 +556,7 @@ patternPlay[patsOrTrack_, nCycles_ : 1] := With[{aud = renderAudio[patsOrTrack, 
     ]
 ]
 Track[q : (_Function | _Symbol), m___]["Play", nCycles_ : 2] := livePlayer[Track[q, m], nCycles, True]
-Track[voices_List]["Play", nCycles_ : 2] := livePlayer[Track[voices], nCycles, True]
+Track[voices_List, ___]["Play", nCycles_ : 2] := livePlayer[Track[voices], nCycles, True]
 
 (* ["Scope"] plays the loop and shows a live oscilloscope of the audio stream's current
    buffer; same click mechanics as ["Play"] (left = play/pause, right = reset). *)
@@ -577,7 +586,7 @@ scopePlay[patsOrTrack_, nCycles_ : 2] := With[{aud = renderAudio[patsOrTrack, nC
     ]
 ]
 Track[q : (_Function | _Symbol), ___]["Scope", nCycles_ : 2] := scopePlay[Track[q], nCycles]
-Track[voices_List]["Scope", nCycles_ : 2] := scopePlay[Track[voices], nCycles]
+Track[voices_List, ___]["Scope", nCycles_ : 2] := scopePlay[Track[voices], nCycles]
 
 
 (* ::Subsection:: The "Visual" property + the unified live player *)
@@ -778,7 +787,7 @@ LiveCode[expr_, nCycles_ : 2] := Module[{held = Hold[expr], atomPos, pat, events
    across it, left-click play/pause, right-click reset.  (Get the static still via ["PianoRoll"].) *)
 Track /: MakeBoxes[p : Track[_Function | _Symbol, ___],StandardForm] :=
     With[{boxes = ToBoxes[livePlayer[p, cyclesOf[p], True]]}, InterpretationBox[boxes, p]]
-Track /: MakeBoxes[t : Track[_List], StandardForm] :=
+Track /: MakeBoxes[t : Track[_List, ___], StandardForm] :=
     With[{boxes = ToBoxes[livePlayer[t, cyclesOf[t], True]]}, InterpretationBox[boxes, t]]
 
 (* TraditionalForm is the editable mini-notation code with per-onset highlighting (defined in
@@ -787,5 +796,5 @@ Track /: MakeBoxes[t : Track[_List], StandardForm] :=
    Switch forms with Cell > Convert To. *)
 Track /: MakeBoxes[p : Track[_Function | _Symbol, ___] /; p["Source"] === None, TraditionalForm] :=
     With[{boxes = ToBoxes[pianoRoll[p, 2], StandardForm]}, InterpretationBox[boxes, p]]
-Track /: MakeBoxes[t : Track[_List], TraditionalForm] :=
+Track /: MakeBoxes[t : Track[_List, ___], TraditionalForm] :=
     With[{boxes = ToBoxes[pianoRoll[t, 2], StandardForm]}, InterpretationBox[boxes, t]]
