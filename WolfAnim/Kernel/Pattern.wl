@@ -3,7 +3,7 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{CyclicPattern, Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, $ClockOrigin, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Fastcat, LiveCode, $LiveAtomHeads}]
+PackageExported[{CyclicPattern, Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Fastcat, LiveCode, $LiveAtomHeads}]
 
 (* shared with MiniNotation.wl so the TraditionalForm can render the same live Visual *)
 PackageScoped[{renderVisual, renderVisuals, visualsOf, visualOf, buttonsQ, clockPhase, seekStream, registerStream, unregisterStream, globalPlay, globalPause, globalReset, $Playing, $Streams}]
@@ -39,16 +39,21 @@ $DefaultVisual = "PianoRoll"
    current clock position.  $Playing is the shared transport state; $Streams maps a per-player
    id to {stream, nCycles}.  Set $ClockOrigin = AbsoluteTime[] (or right-click/reset) to re-zero
    the downbeat for everything. *)
-$ClockOrigin = None
+(* TRANSPORT clock (not wall clock): it accumulates only the time spent PLAYING, so pausing
+   freezes it and resuming continues -- no jump.  $ClockAccum = transport seconds banked while
+   paused; $ClockStart = AbsoluteTime[] of the current playing segment (None while paused). *)
+$ClockAccum = 0.
+$ClockStart = None
 $Playing = False
 $Streams = <||>
-clockPhase[n_] := (If[$ClockOrigin === None, $ClockOrigin = AbsoluteTime[]]; Mod[(AbsoluteTime[] - $ClockOrigin) $CyclesPerSecond, n])
+clockSeconds[] := If[$ClockStart === None, $ClockAccum, $ClockAccum + (AbsoluteTime[] - $ClockStart)]
+clockPhase[n_] := Mod[clockSeconds[] $CyclesPerSecond, n]
 seekStream[{stream_, n_}] := Quiet[stream["Position"] = Quantity[Mod[clockPhase[n], n] / $CyclesPerSecond, "Seconds"]]
 registerStream[id_, stream_, n_] := ($Streams[id] = {stream, n}; If[$Playing, seekStream[{stream, n}]; Quiet @ AudioPlay[stream]])
 unregisterStream[id_] := ($Streams = KeyDrop[$Streams, id];)
-globalPlay[]  := (If[$ClockOrigin === None, $ClockOrigin = AbsoluteTime[]]; $Playing = True;  Scan[Function[sn, seekStream[sn]; Quiet @ AudioPlay[First @ sn]], Values @ $Streams])
-globalPause[] := ($Playing = False; Scan[Function[sn, Quiet @ AudioPause[First @ sn]], Values @ $Streams])
-globalReset[] := ($ClockOrigin = AbsoluteTime[]; Scan[Function[sn, seekStream[sn]; If[$Playing, Quiet @ AudioPlay[First @ sn]]], Values @ $Streams])
+globalPlay[]  := (If[$ClockStart === None, $ClockStart = AbsoluteTime[]]; $Playing = True; Scan[Function[sn, seekStream[sn]; Quiet @ AudioPlay[First @ sn]], Values @ $Streams])
+globalPause[] := (If[$ClockStart =!= None, $ClockAccum += AbsoluteTime[] - $ClockStart; $ClockStart = None]; $Playing = False; Scan[Function[sn, Quiet @ AudioPause[First @ sn]], Values @ $Streams])
+globalReset[] := ($ClockAccum = 0.; $ClockStart = If[$Playing, AbsoluteTime[], None]; Scan[Function[sn, seekStream[sn]; If[$Playing, Quiet @ AudioPlay[First @ sn]]], Values @ $Streams])
 
 patternTempo[] := 240 $CyclesPerSecond
 
