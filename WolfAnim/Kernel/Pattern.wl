@@ -402,37 +402,52 @@ rollData[v_, nCycles_] := With[{evs = Select[patternOf[v]["Query", 0, nCycles], 
     {#["Whole"], laneValue[#["Value"]], #["Value"]} & /@ evs   (* {whole, row, token} *)
 ]
 
-pianoRoll[patsOrTrack_, nCycles_ : 1, highlight_ : None] := Module[{lanes, data, mids, lo, hi},
-    lanes = Which[
-        MatchQ[patsOrTrack, _Track], patsOrTrack["Voices"],
-        MatchQ[patsOrTrack, _List], patsOrTrack,
-        True, {patsOrTrack}
-    ];
+(* all colors are LightDarkSwitched[light, dark] so the roll adapts to the FE appearance;
+   every default is overridable via the options below (FontSize, Background, BlockColor,
+   LabelColor, PlayheadColor, GridColor, FrameStyle, AspectRatio, ImageSize), and any extra
+   Graphics options pass through. *)
+Options[pianoRoll] = {
+    FontSize -> 9, Background -> Automatic, "BlockColor" -> Automatic, "LabelColor" -> Automatic,
+    "PlayheadColor" -> Automatic, "GridColor" -> Automatic, FrameStyle -> Automatic,
+    AspectRatio -> 1/3, ImageSize -> 480
+};
+blockColor[Automatic, hue_] := LightDarkSwitched[Hue[hue, 0.7, 0.7], Hue[hue, 0.55, 0.95]]
+blockColor[c_, _] := c
+pianoRoll[patsOrTrack_, nCycles_ : 1, highlight_ : None, opts : OptionsPattern[]] := Module[
+    {lanes, data, mids, lo, hi, bg, blk, labelCol, playCol, gridCol, frameCol, fs, lab},
+    lanes = Which[MatchQ[patsOrTrack, _Track], patsOrTrack["Voices"], MatchQ[patsOrTrack, _List], patsOrTrack, True, {patsOrTrack}];
     data = MapIndexed[Function[{lane, i}, {First[i], #} & /@ rollData[lane, nCycles]], lanes];
     mids = Cases[Flatten[data, 1][[All, 2, 2]], _Integer];
-    If[mids === {}, Return[Graphics[{}, ImageSize -> 360]]];
+    If[mids === {}, Return[Graphics[{}, ImageSize -> OptionValue[ImageSize]]]];
     lo = Min[mids] - 2; hi = Max[mids] + 2;
+    fs = OptionValue[FontSize];   blk = OptionValue["BlockColor"];
+    bg       = OptionValue[Background]      /. Automatic -> LightDarkSwitched[GrayLevel[0.96], GrayLevel[0.13]];
+    labelCol = OptionValue["LabelColor"]    /. Automatic -> LightDarkSwitched[GrayLevel[0.1], GrayLevel[0.95]];
+    playCol  = OptionValue["PlayheadColor"] /. Automatic -> LightDarkSwitched[RGBColor[0.15, 0.15, 0.2, 0.85], GrayLevel[1, 0.85]];
+    gridCol  = OptionValue["GridColor"]     /. Automatic -> LightDarkSwitched[GrayLevel[0.8], GrayLevel[0.28]];
+    frameCol = OptionValue[FrameStyle]      /. Automatic -> LightDarkSwitched[GrayLevel[0.6], GrayLevel[0.4]];
+    (* label rides a background-coloured pill so it stays legible whether the block is wide
+       (label inside) or narrow (label overflows onto the roll background). *)
+    lab[token_, ctr_] := Text[Style[token, fs, FontFamily -> "Source Code Pro", FontWeight -> Bold, FontColor -> labelCol, Background -> bg], ctr];
     Graphics[{
-        EdgeForm[{GrayLevel[0.1]}],
-        (* each block is its mini-notation token, drawn as a labeled rectangle *)
+        EdgeForm[LightDarkSwitched[GrayLevel[0.75], GrayLevel[0.1]]],
         MapThread[Function[{laneData, hue},
             Function[{li, wrt}, {
-                Hue[hue, 0.55, 0.95], Rectangle[{wrt[[1, 1]], wrt[[2]] - 0.42}, {wrt[[1, 2]], wrt[[2]] + 0.42}],
-                GrayLevel[0.1], Text[Style[wrt[[3]], 9, FontFamily -> "Source Code Pro", FontWeight -> Bold], {Mean[wrt[[1]]], wrt[[2]]}]
+                blockColor[blk, hue], Rectangle[{wrt[[1, 1]], wrt[[2]] - 0.42}, {wrt[[1, 2]], wrt[[2]] + 0.42}],
+                lab[wrt[[3]], {Mean[wrt[[1]]], wrt[[2]]}]
             }] @@@ laneData
         ], {data, If[Length[lanes] == 1, {0.58}, Range[0, Length[lanes] - 1]/Length[lanes]]}],
-        If[highlight === None, {},
-            {GrayLevel[1, 0.85], Thickness[0.006], Line[{{Mod[highlight, nCycles], lo}, {Mod[highlight, nCycles], hi}}]}]
+        If[highlight === None, {}, {playCol, Thickness[0.006], Line[{{Mod[highlight, nCycles], lo}, {Mod[highlight, nCycles], hi}}]}]
     },
-        PlotRange -> {{0, nCycles}, {lo, hi}}, AspectRatio -> 1/3, Background -> GrayLevel[0.13],
-        GridLines -> {Range[0, nCycles], None}, GridLinesStyle -> GrayLevel[0.28],
-        Frame -> True, FrameStyle -> GrayLevel[0.4], FrameTicks -> {{None, None}, {Range[0, nCycles], None}},
-        ImageSize -> 480
+        PlotRange -> {{0, nCycles}, {lo, hi}}, AspectRatio -> OptionValue[AspectRatio], Background -> bg,
+        GridLines -> {Range[0, nCycles], None}, GridLinesStyle -> gridCol,
+        Frame -> True, FrameStyle -> frameCol, FrameTicks -> {{None, None}, {Range[0, nCycles], None}},
+        ImageSize -> OptionValue[ImageSize], FilterRules[{opts}, Options[Graphics]]
     ]
 ]
 
-CyclicPattern[q_, ___]["PianoRoll", nCycles_ : 1] := pianoRoll[CyclicPattern[q], nCycles]
-Track[voices_List]["PianoRoll", nCycles_ : 1] := pianoRoll[Track[voices], nCycles]
+CyclicPattern[q_, ___]["PianoRoll", nCycles_ : 1, opts : OptionsPattern[pianoRoll]] := pianoRoll[CyclicPattern[q], nCycles, None, opts]
+Track[voices_List]["PianoRoll", nCycles_ : 1, opts : OptionsPattern[pianoRoll]] := pianoRoll[Track[voices], nCycles, None, opts]
 
 (* live: loop the rendered bar through an AudioStream and scrub the playhead across the
    piano roll from the stream's true position (the master clock).  Returns a Dynamic. *)
