@@ -442,8 +442,14 @@ voiceAudio[p_Track, nCycles_] := With[{ev = Select[p["Query", 0, nCycles], hasOn
 (* sum the voices at their natural per-voice level -- NO peak-normalize, so a Track[a,b,c]
    sounds exactly like playing a, b, c in separate players (which the speakers also just sum).
    nCycles comes from cyclesOf via the player, so // Bars[n] widens the window. *)
-renderAudio[Track[voices_List, ___], nCycles_] := fitDuration[mix[voiceAudio[#, nCycles] & /@ voices], nCycles cycleSeconds[]]
-renderAudio[v_, nCycles_] := fitTo[voiceAudio[v, nCycles], nCycles]
+(* auto-normalize PER VOICE (peak), never on the summed mix: an individual track plays at a healthy
+   level, and a combined Track is the SUM of those same normalized voices -- so a voice sounds the
+   same solo or in the mix (the mix is just louder, like separate players summed by the speakers).
+   A silent voice passes through untouched (no divide-by-zero boost). *)
+normAudio[a_] := With[{pk = Quiet @ Check[QuantityMagnitude @ AudioMeasurements[a, "Max"], 0.]},
+    If[NumericQ[pk] && pk > 0.0001, AudioNormalize[a], a]]
+renderAudio[Track[voices_List, ___], nCycles_] := fitDuration[mix[(normAudio @ voiceAudio[#, nCycles]) & /@ voices], nCycles cycleSeconds[]]
+renderAudio[v_, nCycles_] := normAudio @ fitTo[voiceAudio[v, nCycles], nCycles]
 
 Track /: Audio[p_Track, nCycles_ : 1] := renderAudio[p, nCycles]
 Track /: MusicPlot[p_Track, nCycles_ : 1, opts___] := MusicPlot[patternScore[p, nCycles], opts]
@@ -636,12 +642,16 @@ Track[_]["Visual"] := "Bar"
    (Named Bars, not Cycles: System`Cycles is protected.) *)
 setMeta[Track[q_, m_Association], k_, v_] := Track[q, <|m, k -> v|>]
 setMeta[Track[q_], k_, v_] := Track[q, <|k -> v|>]
+(* a combined Track inherits the MAX Bars of its voices (so a 4-cycle voice in the mix isn't
+   truncated to 2), unless // Bars[n] set an explicit window on the whole composition. *)
+maxCycles[voices_] := If[voices === {}, 2, Max[cyclesOf /@ voices]]
+cyclesOf[Track[voices_List, m_Association]] := Lookup[m, "Cycles", maxCycles[voices]]
+cyclesOf[Track[voices_List]] := maxCycles[voices]
 cyclesOf[Track[_, m_Association]] := Lookup[m, "Cycles", 2]
 cyclesOf[_] := 2
 Bars[n_][p_Track] := setMeta[p, "Cycles", n]
 Bars[p_Track, n_] := setMeta[p, "Cycles", n]
-Track[_, m_Association]["Cycles"] := Lookup[m, "Cycles", 2]
-Track[_]["Cycles"] := 2
+(pat_Track)["Cycles"] := cyclesOf[pat]
 
 (* Solo[p] marks a track so that, when its player appears, it silences every OTHER live track
    (i.e. disables everything but this one).  Postfix operator too:  p // Solo.  Verb form. *)
