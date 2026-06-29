@@ -83,14 +83,11 @@ highlightedString[str_, active_] := Row[Table[
 miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
     DynamicModule[{src = source, curPat = pat, stream = AudioStream[Audio[pat, n], Looping -> True],
                    phase = 0., t0 = 0., playing = True, editing = False, sched = scheduleOf[pat, n]},
-        (* re-render on edit.  The render is fast (~10ms); what froze the FE was POLLING the
-           stream's Position while swapping the stream.  So the playhead clock is now WALL TIME
-           (t0 = play-start), not the stream -- nothing reads the stream during the swap. *)
-        reparse[] := (
-            curPat = CyclicPattern[src]; sched = scheduleOf[curPat, n];
-            Quiet @ AudioStop[stream];
-            stream = AudioStream[Audio[curPat, n], Looping -> True];
-            phase = 0.; t0 = AbsoluteTime[]; Quiet @ AudioPlay[stream]; playing = True);
+        (* The apply (re-parse) action is INLINED into the apply Button + Enter handler below.
+           A DynamicModule-local f[]:= and Method->"Queued" both write to the wrong (un-localized)
+           symbols, so the new pattern never reached the display.  Inline + default (preemptive)
+           keeps the writes in the DM scope.  Safe because the render is ~10ms and the wall-clock
+           playhead never reads the stream. *)
         Panel[Column[{
             (* SOURCE: highlight (play) <-> editor (edit).  The highlight self-refreshes off the
                shared `phase`.  Click it to edit; type, then Enter or the apply Button. *)
@@ -102,9 +99,15 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
                                 InputField[Dynamic[src, (src = #) &], String, ContinuousAction -> True,
                                     FieldSize -> {Scaled[0.7], 1},
                                     BaseStyle -> {FontFamily -> "Source Code Pro", FontSize -> 16, FontColor -> GrayLevel[0.9]}],
-                                {"ReturnKeyDown" :> (reparse[]; editing = False)}, Method -> "Queued"],
+                                {"ReturnKeyDown" :> (
+                                    curPat = CyclicPattern[src]; sched = scheduleOf[curPat, n];
+                                    Quiet @ AudioStop[stream]; stream = AudioStream[Audio[curPat, n], Looping -> True];
+                                    phase = 0.; t0 = AbsoluteTime[]; Quiet @ AudioPlay[stream]; playing = True; editing = False)}],
                             Spacer[8],
-                            Button[Style["\:25b6 apply", 13], (reparse[]; editing = False), Method -> "Queued"]
+                            Button[Style["\:25b6 apply", 13], (
+                                curPat = CyclicPattern[src]; sched = scheduleOf[curPat, n];
+                                Quiet @ AudioStop[stream]; stream = AudioStream[Audio[curPat, n], Looping -> True];
+                                phase = 0.; t0 = AbsoluteTime[]; Quiet @ AudioPlay[stream]; playing = True; editing = False)]
                         }, Alignment -> Center],
                         Dynamic[Style["\:2192 " <> src, 11, GrayLevel[0.5], FontFamily -> "Source Code Pro"]]
                     }, Alignment -> Left, Spacings -> 0.3],
@@ -125,7 +128,7 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
                     TrackedSymbols :> {}, UpdateInterval -> 0.03],
                 {{"MouseDown", 1} :> If[playing,
                         (Quiet @ AudioPause[stream]; playing = False),
-                        (t0 = AbsoluteTime[] - phase / $CyclesPerSecond; Quiet @ AudioResume[stream]; playing = True)],
+                        (t0 = AbsoluteTime[] - phase / $CyclesPerSecond; Quiet @ AudioPlay[stream]; playing = True)],
                  {"MouseDown", 2} :> (Quiet @ AudioStop[stream]; phase = 0.; t0 = AbsoluteTime[]; playing = False)}]
         }, Spacings -> 0.5, Alignment -> Left], Background -> GrayLevel[0.1], FrameMargins -> 10],
         (* start the clock + audio together on first appearance.  NO SaveDefinitions: the edit's
