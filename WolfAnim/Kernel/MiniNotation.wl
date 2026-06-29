@@ -82,19 +82,18 @@ highlightedString[str_, active_] := Row[Table[
    `curPat` tracks the live-parsed pattern so an edit also updates the piano-roll visual. *)
 miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
     DynamicModule[{src = source, curPat = pat, stream = AudioStream[Audio[pat, n], Looping -> True],
-                   phase = 0., playing = True, editing = False, sched = scheduleOf[pat, n]},
-        (* re-render on edit.  Only AudioStop the old stream -- do NOT RemoveAudioStream it: the
-           visual's Dynamic is polling it every 30ms and removing it mid-poll hangs the kernel.
-           The orphaned (stopped) stream is cleaned up on cell re-eval/Deinitialization. *)
+                   phase = 0., t0 = 0., playing = True, editing = False, sched = scheduleOf[pat, n]},
+        (* re-render on edit.  The render is fast (~10ms); what froze the FE was POLLING the
+           stream's Position while swapping the stream.  So the playhead clock is now WALL TIME
+           (t0 = play-start), not the stream -- nothing reads the stream during the swap. *)
         reparse[] := (
             curPat = CyclicPattern[src]; sched = scheduleOf[curPat, n];
             Quiet @ AudioStop[stream];
-            stream = AudioStream[Audio[curPat, n], Looping -> True]; Quiet @ AudioPlay[stream]; playing = True);
+            stream = AudioStream[Audio[curPat, n], Looping -> True];
+            phase = 0.; t0 = AbsoluteTime[]; Quiet @ AudioPlay[stream]; playing = True);
         Panel[Column[{
-            (* SOURCE: the highlight (play) toggles with an editor (edit) -- audio keeps playing
-               through both.  The highlight SELF-refreshes (its own UpdateInterval) so it never
-               depends on another Dynamic to push it the phase.  Click it to edit; in edit mode
-               type freely and hit Enter or the apply button (a real Button = reliable commit). *)
+            (* SOURCE: highlight (play) <-> editor (edit).  The highlight self-refreshes off the
+               shared `phase`.  Click it to edit; type, then Enter or the apply Button. *)
             Dynamic[
                 If[editing,
                     Column[{
@@ -107,7 +106,6 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
                             Spacer[8],
                             Button[Style["\:25b6 apply", 13], (reparse[]; editing = False), Method -> "Queued"]
                         }, Alignment -> Center],
-                        (* live echo: SEE src update as you type, and that apply re-parses THIS text *)
                         Dynamic[Style["\:2192 " <> src, 11, GrayLevel[0.5], FontFamily -> "Source Code Pro"]]
                     }, Alignment -> Left, Spacings -> 0.3],
                     Button[
@@ -117,20 +115,22 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
                 ],
                 TrackedSymbols :> {editing}
             ],
-            (* VISUAL: always live -- drives the phase and keeps playing/animating even while you
-               edit; click to play/pause, right-click to reset. *)
+            (* VISUAL: wall-clock playhead -- advances phase from elapsed real time, never reads
+               the stream, so swapping the stream on edit cannot freeze it.  Click = play/pause
+               (keeps position), right-click = reset. *)
             EventHandler[
                 Dynamic @ Refresh[
-                    If[playing, With[{ph = streamPhase[stream]}, If[NumericQ[ph], phase = ph]]];
+                    If[playing, phase = Mod[(AbsoluteTime[] - t0) $CyclesPerSecond, n]];
                     renderVisual[vis, curPat, n, phase, stream],
                     TrackedSymbols :> {}, UpdateInterval -> 0.03],
-                {{"MouseDown", 1} :> If[playing, (Quiet @ AudioPause[stream]; playing = False), (Quiet @ AudioResume[stream]; playing = True)],
-                 {"MouseDown", 2} :> (Quiet @ AudioStop[stream]; phase = 0.; playing = False)}]
+                {{"MouseDown", 1} :> If[playing,
+                        (Quiet @ AudioPause[stream]; playing = False),
+                        (t0 = AbsoluteTime[] - phase / $CyclesPerSecond; Quiet @ AudioResume[stream]; playing = True)],
+                 {"MouseDown", 2} :> (Quiet @ AudioStop[stream]; phase = 0.; t0 = AbsoluteTime[]; playing = False)}]
         }, Spacings -> 0.5, Alignment -> Left], Background -> GrayLevel[0.1], FrameMargins -> 10],
-        (* AudioPlay once on first appearance.  NO SaveDefinitions: the edit's reparse must use
-           the LIVE WolframParser grammar (a saved snapshot loses the compiled grammar, so
-           CyclicPattern[edited] returned Silence and editing changed nothing). *)
-        Initialization :> Quiet @ AudioPlay[stream],
+        (* start the clock + audio together on first appearance.  NO SaveDefinitions: the edit's
+           reparse needs the LIVE grammar. *)
+        Initialization :> (t0 = AbsoluteTime[]; Quiet @ AudioPlay[stream]),
         Deinitialization :> Quiet[AudioStop[stream]; RemoveAudioStream[stream]]]]
 
 (* ---------- extractable trace of the dynamic play (for debugging headless) ---------- *)
