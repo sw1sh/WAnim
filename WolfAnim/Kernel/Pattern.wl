@@ -528,6 +528,9 @@ setVisual[CyclicPattern[q_], v_, o_ : {}] := CyclicPattern[q, <|"Visual" -> v, "
    explicit transport buttons instead of the click-the-visual EventHandler. *)
 PianoRoll[p_CyclicPattern, opts___] := setVisual[p, "PianoRoll", {opts}]
 Oscilloscope[p_CyclicPattern, opts___] := setVisual[p, "Oscilloscope", {opts}]
+(* curried / operator form so it chains postfix:  p // PianoRoll[Background -> Red] *)
+PianoRoll[opts : OptionsPattern[]][p_CyclicPattern] := setVisual[p, "PianoRoll", {opts}]
+Oscilloscope[opts : OptionsPattern[]][p_CyclicPattern] := setVisual[p, "Oscilloscope", {opts}]
 CyclicPattern[_, m_Association]["Visual"] := Lookup[m, "Visual", "Bar"]
 CyclicPattern[_]["Visual"] := "Bar"
 
@@ -591,7 +594,9 @@ livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
 scopeStatic[a_] := AudioPlot[a, AspectRatio -> 1/3, Background -> GrayLevel[0.08],
     PlotStyle -> RGBColor[0.25, 1, 0.55], Frame -> True, FrameTicks -> None,
     FrameStyle -> GrayLevel[0.3], ImageSize -> 480]
-Oscilloscope[x_, nCycles_ : 2] := scopeStatic @ If[MatchQ[x, _Audio], x, renderAudio[x, nCycles]]
+(* static scope of audio/a pattern; Except[_Rule] so an options-only Oscilloscope[Background->..]
+   stays an operator (handled above) instead of being treated as a thing to scope. *)
+Oscilloscope[x : Except[_Rule | _RuleDelayed], nCycles_ : 2] := scopeStatic @ If[MatchQ[x, _Audio], x, renderAudio[x, nCycles]]
 
 CyclicPattern /: Spectrogram[p_CyclicPattern, nCycles_ : 2, opts : OptionsPattern[]] := Spectrogram[renderAudio[p, nCycles], opts, ImageSize -> 480]
 Track /: Spectrogram[t_Track, nCycles_ : 2, opts : OptionsPattern[]] := Spectrogram[renderAudio[t, nCycles], opts, ImageSize -> 480]
