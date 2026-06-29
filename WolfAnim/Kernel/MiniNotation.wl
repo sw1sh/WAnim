@@ -83,10 +83,13 @@ highlightedString[str_, active_] := Row[Table[
 miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
     DynamicModule[{src = source, curPat = pat, stream = AudioStream[Audio[pat, n], Looping -> True],
                    phase = 0., playing = True, editing = False, sched = scheduleOf[pat, n]},
-        reparse[] := Module[{p = CyclicPattern[src]},
-            curPat = p; sched = scheduleOf[p, n];
-            Quiet[AudioStop[stream]; RemoveAudioStream[stream]];
-            stream = AudioStream[Audio[p, n], Looping -> True]; Quiet @ AudioPlay[stream]; playing = True];
+        (* re-render on edit.  Only AudioStop the old stream -- do NOT RemoveAudioStream it: the
+           visual's Dynamic is polling it every 30ms and removing it mid-poll hangs the kernel.
+           The orphaned (stopped) stream is cleaned up on cell re-eval/Deinitialization. *)
+        reparse[] := (
+            curPat = CyclicPattern[src]; sched = scheduleOf[curPat, n];
+            Quiet @ AudioStop[stream];
+            stream = AudioStream[Audio[curPat, n], Looping -> True]; Quiet @ AudioPlay[stream]; playing = True);
         Panel[Column[{
             (* SOURCE: the highlight (play) toggles with an editor (edit) -- audio keeps playing
                through both.  The highlight SELF-refreshes (its own UpdateInterval) so it never
@@ -99,9 +102,9 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
                             InputField[Dynamic[src], String, ContinuousAction -> True,
                                 FieldSize -> {Scaled[0.78], 1},
                                 BaseStyle -> {FontFamily -> "Source Code Pro", FontSize -> 16, FontColor -> GrayLevel[0.9]}],
-                            {"ReturnKeyDown" :> (reparse[]; editing = False)}],
+                            {"ReturnKeyDown" :> (reparse[]; editing = False)}, Method -> "Queued"],
                         Spacer[8],
-                        Button[Style["apply", 12], (reparse[]; editing = False)]
+                        Button[Style["apply", 12], (reparse[]; editing = False), Method -> "Queued"]
                     }, Alignment -> Center],
                     Button[
                         Tooltip[Dynamic @ Refresh[highlightedString[src, activeSpans[sched, phase, n]],
