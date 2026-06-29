@@ -3,10 +3,10 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Fastcat, LiveCode, $LiveAtomHeads}]
+PackageExported[{Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Bars, TrackPlay, TrackPause, TrackReset, TrackSeek, Fastcat, LiveCode, $LiveAtomHeads}]
 
 (* shared with MiniNotation.wl so the TraditionalForm can render the same live Visual *)
-PackageScoped[{renderVisual, renderVisuals, visualsOf, visualOf, buttonsQ, clockPhase, seekStream, registerStream, unregisterStream, globalPlay, globalPause, globalReset, $Playing, $Streams}]
+PackageScoped[{renderVisual, renderVisuals, visualsOf, visualOf, cyclesOf, buttonsQ, clockPhase, seekStream, registerStream, unregisterStream, $Playing, $Streams}]
 
 
 
@@ -34,11 +34,12 @@ $DefaultWave = "Sawtooth"
 (* default live Visual for patterns with none set: "PianoRoll" (labeled blocks), "Bar", "Oscilloscope". *)
 $DefaultVisual = "PianoRoll"
 
-(* ONE global transport: a single clock origin + a registry of every live stream.  play /
-   pause / reset act on ALL playing patterns at once, and a newly-created player joins at the
-   current clock position.  $Playing is the shared transport state; $Streams maps a per-player
-   id to {stream, nCycles}.  Set $ClockOrigin = AbsoluteTime[] (or right-click/reset) to re-zero
-   the downbeat for everything. *)
+(* ONE global transport: a shared clock + a registry of every live stream.  TrackPlay /
+   TrackPause / TrackSeek[cyclePos] / TrackReset act on ALL patterns at once, and a newly-created
+   player joins at the current clock position.  $Playing is the shared transport state; $Streams
+   maps a per-player id to {stream, nCycles}.  In a player: LEFT-click toggles global play/pause;
+   RIGHT-click (or the stop button) disables just THAT track -- stops it and drops it from the
+   registry so global play/pause no longer touch it; right-click again re-registers/re-enables. *)
 (* TRANSPORT clock (not wall clock): it accumulates only the time spent PLAYING, so pausing
    freezes it and resuming continues -- no jump.  $ClockAccum = transport seconds banked while
    paused; $ClockStart = AbsoluteTime[] of the current playing segment (None while paused). *)
@@ -51,9 +52,13 @@ clockPhase[n_] := Mod[clockSeconds[] $CyclesPerSecond, n]
 seekStream[{stream_, n_}] := Quiet[stream["Position"] = Quantity[Mod[clockPhase[n], n] / $CyclesPerSecond, "Seconds"]]
 registerStream[id_, stream_, n_] := ($Streams[id] = {stream, n}; If[$Playing, seekStream[{stream, n}]; Quiet @ AudioPlay[stream]])
 unregisterStream[id_] := ($Streams = KeyDrop[$Streams, id];)
-globalPlay[]  := (If[$ClockStart === None, $ClockStart = AbsoluteTime[]]; $Playing = True; Scan[Function[sn, seekStream[sn]; Quiet @ AudioPlay[First @ sn]], Values @ $Streams])
-globalPause[] := (If[$ClockStart =!= None, $ClockAccum += AbsoluteTime[] - $ClockStart; $ClockStart = None]; $Playing = False; Scan[Function[sn, Quiet @ AudioPause[First @ sn]], Values @ $Streams])
-globalReset[] := ($ClockAccum = 0.; $ClockStart = If[$Playing, AbsoluteTime[], None]; Scan[Function[sn, seekStream[sn]; If[$Playing, Quiet @ AudioPlay[First @ sn]]], Values @ $Streams])
+(* user-facing global transport (exported): act on every registered stream at once.
+   TrackPlay[]/TrackPause[] run/halt the shared clock; TrackSeek[cyclePos] jumps the whole
+   transport to a cycle position (seeking every stream there); TrackReset[] == TrackSeek[0]. *)
+TrackPlay[]  := (If[$ClockStart === None, $ClockStart = AbsoluteTime[]]; $Playing = True; Scan[Function[sn, seekStream[sn]; Quiet @ AudioPlay[First @ sn]], Values @ $Streams])
+TrackPause[] := (If[$ClockStart =!= None, $ClockAccum += AbsoluteTime[] - $ClockStart; $ClockStart = None]; $Playing = False; Scan[Function[sn, Quiet @ AudioPause[First @ sn]], Values @ $Streams])
+TrackSeek[pos_] := ($ClockAccum = pos / $CyclesPerSecond; $ClockStart = If[$Playing, AbsoluteTime[], None]; Scan[Function[sn, seekStream[sn]; If[$Playing, Quiet @ AudioPlay[First @ sn]]], Values @ $Streams])
+TrackReset[] := TrackSeek[0]
 
 patternTempo[] := 240 $CyclesPerSecond
 
@@ -573,6 +578,18 @@ Oscilloscope[opts : OptionsPattern[]][p_Track] := setVisual[p, "Oscilloscope", {
 Track[_, m_Association]["Visual"] := Lookup[m, "Visuals", {{"Bar"}}][[1, 1]]
 Track[_]["Visual"] := "Bar"
 
+(* Bars[n] sets the loop/display window -- how many cycles (= bars) the player + its audio span
+   (default 2).  Curried, so it chains postfix:  p // Bars[4]  (e.g. <a b c d> shows all four).
+   (Named Bars, not Cycles: System`Cycles is protected.) *)
+setMeta[Track[q_, m_Association], k_, v_] := Track[q, <|m, k -> v|>]
+setMeta[Track[q_], k_, v_] := Track[q, <|k -> v|>]
+cyclesOf[Track[_, m_Association]] := Lookup[m, "Cycles", 2]
+cyclesOf[_] := 2
+Bars[n_][p_Track] := setMeta[p, "Cycles", n]
+Bars[p_Track, n_] := setMeta[p, "Cycles", n]
+Track[_, m_Association]["Cycles"] := Lookup[m, "Cycles", 2]
+Track[_]["Cycles"] := 2
+
 (* the default Visual: a simple clickable progress bar with a playhead *)
 visualBar[phase_, n_] := With[{x = Mod[phase, n]},
     Graphics[{
@@ -604,29 +621,29 @@ streamPhase[stream_] := With[{pos = Quiet @ stream["Position"]},
    player for combinator-derived patterns (Fast/Reverse/...) shown as StandardForm. *)
 livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
     {aud = renderAudio[patOrTrack, n], viss = visualsOf[patOrTrack], buttons = buttonsQ[patOrTrack]},
-    DynamicModule[{id = Unique[], stream = AudioStream[aud, Looping -> True], phase = 0.},
+    DynamicModule[{id = Unique[], stream = AudioStream[aud, Looping -> True], phase = 0., enabled = True},
         With[{visual = Dynamic @ Refresh[
-                If[$Playing, phase = clockPhase[n]];
+                If[$Playing && enabled, phase = clockPhase[n]];
                 renderVisuals[viss, patOrTrack, n, phase, stream],
                 TrackedSymbols :> {}, UpdateInterval -> 0.03]},
             If[buttons,
                 (* transport buttons drive the GLOBAL transport (every playing pattern at once) *)
                 Column[{
                     Row[{
-                        Button["\:25b6", globalPlay[]],
-                        Button["\:23f8", globalPause[]],
-                        Button["\:23f9", globalReset[]]
+                        Button["\:25b6", TrackPlay[]],
+                        Button["\:23f8", TrackPause[]],
+                        Button["\:23f9", If[enabled, (Quiet @ AudioStop[stream]; unregisterStream[id]; enabled = False), (registerStream[id, stream, n]; enabled = True)]]
                     }, Spacer[3]],
                     visual
                 }, Spacings -> 0.4, Alignment -> Left],
                 (* click anywhere: left = global play/pause, right = global reset (all streams) *)
                 EventHandler[visual,
-                    {{"MouseDown", 1} :> If[$Playing, globalPause[], globalPlay[]],
-                     {"MouseDown", 2} :> globalReset[]}]
+                    {{"MouseDown", 1} :> If[$Playing, TrackPause[], TrackPlay[]],
+                     {"MouseDown", 2} :> If[enabled, (Quiet @ AudioStop[stream]; unregisterStream[id]; enabled = False), (registerStream[id, stream, n]; enabled = True)]}]
             ]],
         (* join the global transport: register this stream (plays at the clock position if the
            transport is running); autoplay starts the transport if nothing is playing yet *)
-        Initialization :> (registerStream[id, stream, n]; If[autoplay && ! $Playing, globalPlay[]]),
+        Initialization :> (registerStream[id, stream, n]; If[autoplay && ! $Playing, TrackPlay[]]),
         Deinitialization :> (unregisterStream[id]; Quiet[AudioStop[stream]; RemoveAudioStream[stream]]),
         SaveDefinitions -> True
     ]
@@ -718,9 +735,9 @@ LiveCode[expr_, nCycles_ : 2] := Module[{held = Hold[expr], atomPos, pat, events
 (* StandardForm is the LIVE piano roll: a looping AudioStream with the playhead scrubbing
    across it, left-click play/pause, right-click reset.  (Get the static still via ["PianoRoll"].) *)
 Track /: MakeBoxes[p : Track[_Function | _Symbol, ___],StandardForm] :=
-    With[{boxes = ToBoxes[livePlayer[p, 2, True]]}, InterpretationBox[boxes, p]]
+    With[{boxes = ToBoxes[livePlayer[p, cyclesOf[p], True]]}, InterpretationBox[boxes, p]]
 Track /: MakeBoxes[t : Track[_List], StandardForm] :=
-    With[{boxes = ToBoxes[livePlayer[t, 2, True]]}, InterpretationBox[boxes, t]]
+    With[{boxes = ToBoxes[livePlayer[t, cyclesOf[t], True]]}, InterpretationBox[boxes, t]]
 
 (* TraditionalForm is the editable mini-notation code with per-onset highlighting (defined in
    MiniNotation.wl, for source-bearing patterns).  A pattern with no source string -- a

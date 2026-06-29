@@ -106,7 +106,7 @@ highlightedString[str_, active_] := Row[Table[
    `curPat` tracks the live-parsed pattern so an edit also updates the piano-roll visual. *)
 miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]},
     DynamicModule[{id = Unique[], src = source, curPat = pat, stream = AudioStream[Audio[pat, n], Looping -> True],
-                   phase = 0., editing = False, sched = scheduleOf[pat, n]},
+                   phase = 0., enabled = True, editing = False, sched = scheduleOf[pat, n]},
         (* The apply (re-parse) action is INLINED into the apply Button + Enter handler below.
            A DynamicModule-local f[]:= and Method->"Queued" both write to the wrong (un-localized)
            symbols, so the new pattern never reached the display.  Inline + default (preemptive)
@@ -147,15 +147,15 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]
                (keeps position), right-click = reset. *)
             EventHandler[
                 Dynamic @ Refresh[
-                    If[$Playing, phase = clockPhase[n]];
+                    If[$Playing && enabled, phase = clockPhase[n]];
                     renderVisuals[viss, curPat, n, phase, stream],
                     TrackedSymbols :> {}, UpdateInterval -> 0.03],
-                {{"MouseDown", 1} :> If[$Playing, globalPause[], globalPlay[]],
-                 {"MouseDown", 2} :> globalReset[]}]
+                {{"MouseDown", 1} :> If[$Playing, TrackPause[], TrackPlay[]],
+                 {"MouseDown", 2} :> If[enabled, (Quiet @ AudioStop[stream]; unregisterStream[id]; enabled = False), (registerStream[id, stream, n]; enabled = True)]}]
         }, Spacings -> 0.5, Alignment -> Left], Background -> GrayLevel[0.1], FrameMargins -> 10],
         (* start the clock + audio together on first appearance.  NO SaveDefinitions: the edit's
            reparse needs the LIVE grammar. *)
-        Initialization :> (registerStream[id, stream, n]; If[! $Playing, globalPlay[]]),
+        Initialization :> (registerStream[id, stream, n]; If[! $Playing, TrackPlay[]]),
         Deinitialization :> (unregisterStream[id]; Quiet[AudioStop[stream]; RemoveAudioStream[stream]])]]
 
 (* ---------- extractable trace of the dynamic play (for debugging headless) ---------- *)
@@ -177,6 +177,6 @@ traceOf[pat_, n_, steps_] := Module[{src = pat["Source"], events, sched, cs = N[
 WolfAnim`Track[q_, m___]["Trace", n_ : 2, steps_ : 32] := traceOf[Track[q, m], n, steps]
 
 WolfAnim`Track /: MakeBoxes[p : WolfAnim`Track[_, meta_Association] /; KeyExistsQ[meta, "Source"], TraditionalForm] :=
-    With[{boxes = ToBoxes[miniDisplay[p, 2]]}, InterpretationBox[boxes, p]]
+    With[{boxes = ToBoxes[miniDisplay[p, cyclesOf[p]]]}, InterpretationBox[boxes, p]]
 
 
