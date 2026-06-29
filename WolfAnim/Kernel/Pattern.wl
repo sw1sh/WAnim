@@ -673,9 +673,13 @@ livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
 scopeStatic[a_] := AudioPlot[a, AspectRatio -> 1/3, Background -> GrayLevel[0.08],
     PlotStyle -> RGBColor[0.25, 1, 0.55], Frame -> True, FrameTicks -> None,
     FrameStyle -> GrayLevel[0.3], ImageSize -> 480]
-(* static scope of audio/a pattern; Except[_Rule] so an options-only Oscilloscope[Background->..]
-   stays an operator (handled above) instead of being treated as a thing to scope. *)
-Oscilloscope[x : Except[_Rule | _RuleDelayed], nCycles_ : 2] := scopeStatic @ If[MatchQ[x, _Audio], x, renderAudio[x, nCycles]]
+(* static scope of audio/a pattern.  The Except guard keeps this catch-all from firing on the
+   heads of the OTHER Oscilloscope forms: _Rule/_RuleDelayed so an options-only
+   Oscilloscope[Background->..] stays the operator above, and _Pattern so that on a RELOAD --
+   when this DownValue already exists -- defining the curried Oscilloscope[opts:OptionsPattern[]]
+   subvalue doesn't evaluate its head Oscilloscope[Pattern[opts,OptionsPattern[]]] into a scope
+   (which would hit renderAudio[Pattern[..],2] and throw Duration/AudioPlot errors). *)
+Oscilloscope[x : Except[_Rule | _RuleDelayed | _Pattern], nCycles_ : 2] := scopeStatic @ If[MatchQ[x, _Audio], x, renderAudio[x, nCycles]]
 
 Track /: Spectrogram[p_Track, nCycles_ : 2, opts : OptionsPattern[]] := Spectrogram[renderAudio[p, nCycles], opts, ImageSize -> 480]
 Track /: Spectrogram[t_Track, nCycles_ : 2, opts : OptionsPattern[]] := Spectrogram[renderAudio[t, nCycles], opts, ImageSize -> 480]
