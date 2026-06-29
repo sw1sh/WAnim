@@ -91,17 +91,29 @@ CyclicPattern[s_String] := parseSequence[StringTrim[s]]
 
 (* ::Subsection:: The combinator algebra (query rewriters) *)
 
+(* BIJECTION: every pattern keeps a source.  A combinator applied to a SOURCE-BEARING pattern
+   appends a postfix " // <op>" to its source string, so Fast[2]/Reverse/... round-trip to
+   editable text (parsed back by the // chain handler in MiniNotation.wl).  Source-LESS in ->
+   source-less out, so the grammar's own internal use of Fast/Euclidean/... while building a
+   pattern attaches nothing. *)
+patSource[CyclicPattern[_, m_Association]] := Lookup[m, "Source", None]
+patSource[_] := None
+chainNum[r_] := Which[IntegerQ[r], ToString[r], Head[r] === Rational, ToString[r, InputForm], True, ToString[N[r]]]
+chainFnName[Reverse] := "rev"
+chainFnName[Degrade] := "degrade"
+chainFnName[f_] := ToString[f, InputForm]
+chain[p_, frag_, derived_] := With[{s = patSource[p]},
+    If[s === None, derived, CyclicPattern[First[derived], <|"Source" -> s <> " // " <> frag|>]]]
+
 (* Fast[r] compresses time by r; Slow[r] stretches it. Operator forms: Fast[2] @ p. *)
-Fast[r_][CyclicPattern[q_, ___]] := CyclicPattern[Function[span,
-    mapEventTime[#/r &] /@ q[r # & /@ span]
-]]
+Fast[r_][p : CyclicPattern[q_, ___]] := chain[p, "fast " <> chainNum[r],
+    CyclicPattern[Function[span, mapEventTime[#/r &] /@ q[r # & /@ span]]]]
 Fast[_][Silence] := Silence
-Slow[r_][p_] := Fast[1/r][p]
+Slow[r_][p_CyclicPattern] := chain[p, "slow " <> chainNum[r], Fast[1/r][p]]
 
 (* Reverse a pattern within each cycle (overloads System`Reverse on the new type) *)
-CyclicPattern /: Reverse[CyclicPattern[q_, ___]] := CyclicPattern[Function[span,
-    Join @@ (reverseCycle[q, #] & /@ spanCycles[span])
-]]
+CyclicPattern /: Reverse[p : CyclicPattern[q_, ___]] := chain[p, "rev",
+    CyclicPattern[Function[span, Join @@ (reverseCycle[q, #] & /@ spanCycles[span])]]]
 reverseCycle[q_, {b_, e_}] := With[{c = sam[b]},
     With[{reflect = Function[{x, y}, {2 c + 1 - y, 2 c + 1 - x}]},
         Function[ev, <|ev,
@@ -134,16 +146,16 @@ fastcatList[{p_}] := p
 fastcatList[ps_List] := Fast[Length[ps]][Alternate @@ ps]
 
 (* Every[n, f] applies transform f only on cycles where Mod[cycle, n] == 0 *)
-Every[n_, f_][CyclicPattern[q_, ___]] := CyclicPattern[Function[span,
-    Join @@ (Function[piece,
-        If[Mod[sam[piece[[1]]], n] == 0,
-            f[CyclicPattern[q]]["Query", piece[[1]], piece[[2]]],
-            q[piece]
-        ]] /@ spanCycles[span])
-]]
+Every[n_, f_][p : CyclicPattern[q_, ___]] := chain[p, "every " <> ToString[n] <> " " <> chainFnName[f],
+    CyclicPattern[Function[span,
+        Join @@ (Function[piece,
+            If[Mod[sam[piece[[1]]], n] == 0,
+                f[CyclicPattern[q]]["Query", piece[[1]], piece[[2]]],
+                q[piece]
+            ]] /@ spanCycles[span])]]]
 
 (* Euclidean[k, n] -- Bjorklund rhythm: k onsets spread maximally evenly over n steps *)
-Euclidean[k_, n_][p_] := Euclidean[k, n, 0][p]
+Euclidean[k_, n_][p_CyclicPattern] := chain[p, "euclid " <> ToString[k] <> " " <> ToString[n], Euclidean[k, n, 0][p]]
 Euclidean[k_, n_, rot_][p_] := fastcatList[If[#, p, Silence] & /@ RotateLeft[bjorklund[k, n], rot]]
 
 bjorklund[k_, n_] := Which[
@@ -165,14 +177,14 @@ bjork[a_, b_] := If[Length[b] <= 1,
    The unary form is restricted to a pattern argument so the operator form
    Degrade[0.5] does NOT match it (which would recurse Degrade[0.5][0.5]...). *)
 Degrade[p_CyclicPattern] := Degrade[0.5][p]
-Degrade[fraction_][CyclicPattern[q_, ___]] := CyclicPattern[Function[span,
-    Select[q[span], stableHash[#] >= fraction &]
-]]
+Degrade[fraction_][p : CyclicPattern[q_, ___]] := chain[p, If[TrueQ[fraction == 0.5], "degrade", "degrade " <> chainNum[fraction]],
+    CyclicPattern[Function[span, Select[q[span], stableHash[#] >= fraction &]]]]
 stableHash[ev_] := Mod[Hash[{ev["Whole"], ev["Value"]}], 1000]/1000.
 
 (* time shift, and layering combinators *)
-Late[t_][CyclicPattern[q_, ___]] := CyclicPattern[Function[span, mapEventTime[# + t &] /@ q[# - t & /@ span]]]
-Early[t_] := Late[-t]
+Late[t_][p : CyclicPattern[q_, ___]] := chain[p, "late " <> chainNum[t],
+    CyclicPattern[Function[span, mapEventTime[# + t &] /@ q[# - t & /@ span]]]]
+Early[t_][p_CyclicPattern] := chain[p, "early " <> chainNum[t], Late[-t][p]]
 Superimpose[f_][p_] := Layer[p, f[p]]
 Stagger[t_, f_][p_] := Layer[p, Late[t][f[p]]]
 

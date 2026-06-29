@@ -53,8 +53,32 @@ ap[GroupNode["Euclid", {x_}, m_]] := Euclidean[m["Args"][[1]], m["Args"][[2]]] @
 ap[_] := Silence
 
 (* override the string constructor: parse to AST, derive the query, HOLD source + AST *)
-WolfAnim`CyclicPattern[str_String] := With[{ast = parseMini[StringTrim[str]]},
-    If[ast === $Failed, Silence, Append[ap[ast], <|"Source" -> StringTrim[str], "AST" -> ast|>]]]
+(* A source string is mini-notation, optionally followed by a postfix " // <op>" chain
+   (fast/slow/rev/degrade/euclid/every/late/early).  This is the inverse of the combinators'
+   source-building (Pattern.wl `chain`), so Fast[2][p] and CyclicPattern["... // fast 2"] are
+   the same pattern -- the bijection. *)
+WolfAnim`CyclicPattern[str0_String] := With[{str = StringTrim[str0]},
+    If[StringContainsQ[str, "//"],
+        Fold[applyChainStep, CyclicPattern[StringTrim @ First @ StringSplit[str, "//"]],
+            StringTrim /@ Rest @ StringSplit[str, "//"]],
+        With[{ast = parseMini[str]},
+            If[ast === $Failed, Silence, Append[ap[ast], <|"Source" -> str, "AST" -> ast|>]]]]]
+
+parseChainNum[s_] := Which[
+    StringContainsQ[s, "/"], With[{ab = ToExpression /@ StringSplit[s, "/"]}, ab[[1]]/ab[[2]]],
+    StringContainsQ[s, "."], ToExpression[s], True, FromDigits[s]]
+chainFnOf[name_] := Switch[name, "rev", Reverse, "degrade", Degrade, _, Identity]
+applyChainStep[pat_, stepStr_] := With[{toks = StringSplit[stepStr]},
+    Switch[First[toks, ""],
+        "fast", Fast[parseChainNum[toks[[2]]]][pat],
+        "slow", Slow[parseChainNum[toks[[2]]]][pat],
+        "rev", Reverse[pat],
+        "degrade", If[Length[toks] >= 2, Degrade[parseChainNum[toks[[2]]]][pat], Degrade[pat]],
+        "euclid", Euclidean[FromDigits[toks[[2]]], FromDigits[toks[[3]]]][pat],
+        "every", Every[FromDigits[toks[[2]]], chainFnOf[toks[[3]]]][pat],
+        "late", Late[parseChainNum[toks[[2]]]][pat],
+        "early", Early[parseChainNum[toks[[2]]]][pat],
+        _, pat]]
 
 
 (* ---------- editable, event-highlighting TraditionalForm ---------- *)
