@@ -97,15 +97,19 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
                type freely and hit Enter or the apply button (a real Button = reliable commit). *)
             Dynamic[
                 If[editing,
-                    Row[{
-                        EventHandler[
-                            InputField[Dynamic[src], String, ContinuousAction -> True,
-                                FieldSize -> {Scaled[0.78], 1},
-                                BaseStyle -> {FontFamily -> "Source Code Pro", FontSize -> 16, FontColor -> GrayLevel[0.9]}],
-                            {"ReturnKeyDown" :> (reparse[]; editing = False)}, Method -> "Queued"],
-                        Spacer[8],
-                        Button[Style["apply", 12], (reparse[]; editing = False), Method -> "Queued"]
-                    }, Alignment -> Center],
+                    Column[{
+                        Row[{
+                            EventHandler[
+                                InputField[Dynamic[src, (src = #) &], String, ContinuousAction -> True,
+                                    FieldSize -> {Scaled[0.7], 1},
+                                    BaseStyle -> {FontFamily -> "Source Code Pro", FontSize -> 16, FontColor -> GrayLevel[0.9]}],
+                                {"ReturnKeyDown" :> (reparse[]; editing = False)}, Method -> "Queued"],
+                            Spacer[8],
+                            Button[Style["\:25b6 apply", 13], (reparse[]; editing = False), Method -> "Queued"]
+                        }, Alignment -> Center],
+                        (* live echo: SEE src update as you type, and that apply re-parses THIS text *)
+                        Dynamic[Style["\:2192 " <> src, 11, GrayLevel[0.5], FontFamily -> "Source Code Pro"]]
+                    }, Alignment -> Left, Spacings -> 0.3],
                     Button[
                         Tooltip[Dynamic @ Refresh[highlightedString[src, activeSpans[sched, phase, n]],
                             TrackedSymbols :> {}, UpdateInterval -> 0.04], "click to edit"],
@@ -120,7 +124,7 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], vis = visualOf[pat]},
                     If[playing, With[{ph = streamPhase[stream]}, If[NumericQ[ph], phase = ph]]];
                     renderVisual[vis, curPat, n, phase, stream],
                     TrackedSymbols :> {}, UpdateInterval -> 0.03],
-                {{"MouseDown", 1} :> If[playing, (Quiet @ AudioStop[stream]; playing = False), (Quiet @ AudioPlay[stream]; playing = True)],
+                {{"MouseDown", 1} :> If[playing, (Quiet @ AudioPause[stream]; playing = False), (Quiet @ AudioResume[stream]; playing = True)],
                  {"MouseDown", 2} :> (Quiet @ AudioStop[stream]; phase = 0.; playing = False)}]
         }, Spacings -> 0.5, Alignment -> Left], Background -> GrayLevel[0.1], FrameMargins -> 10],
         (* AudioPlay once on first appearance.  NO SaveDefinitions: the edit's reparse must use

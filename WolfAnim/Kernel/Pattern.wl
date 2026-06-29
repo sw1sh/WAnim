@@ -528,7 +528,7 @@ livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[{aud = renderAudio[pa
                 renderVisual[vis, patOrTrack, n, phase, stream],
                 TrackedSymbols :> {}, UpdateInterval -> 0.03],
             {
-                {"MouseDown", 1} :> If[playing, (Quiet @ AudioStop[stream]; playing = False), (Quiet @ AudioPlay[stream]; playing = True)],
+                {"MouseDown", 1} :> If[playing, (Quiet @ AudioPause[stream]; playing = False), (Quiet @ AudioResume[stream]; playing = True)],
                 {"MouseDown", 2} :> (Quiet @ AudioStop[stream]; phase = 0.; playing = False)
             }],
         (* AudioPlay once, on first appearance -- not on every body re-eval *)
