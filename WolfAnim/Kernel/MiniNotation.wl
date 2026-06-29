@@ -1,7 +1,7 @@
 (* ::Package:: *)
 
 (* WolfAnim`MiniNotation`  --  a proper AST parser for the mini-notation, built on the
-   Wolfram`Parser` paclet.  It makes CyclicPattern HOLD its source string + AST (as the
+   Wolfram`Parser` paclet.  It makes Track HOLD its source string + AST (as the
    pattern's 2nd metadata arg), and renders an EDITABLE, event-highlighting TraditionalForm:
    the input string is reconstructed as boxes, each atom's characters light up the instant
    its events sound, and editing the field re-parses + re-plays live.
@@ -40,8 +40,8 @@ $grammar := $grammar = Module[
 
 parseMini[str_String] := Quiet @ Check[Parse[$grammar, str], $Failed]
 
-(* ---------- AST -> CyclicPattern, tagging each atom's events with its char span ---------- *)
-tagSpan[span_][cp_] := With[{q = First[cp]}, CyclicPattern[Function[sp, (Append[#, "Source" -> span] &) /@ q[sp]]]]
+(* ---------- AST -> Track, tagging each atom's events with its char span ---------- *)
+tagSpan[span_][cp_] := With[{q = First[cp]}, Track[Function[sp, (Append[#, "Source" -> span] &) /@ q[sp]]]]
 ap[LeafNode["Atom", "~", _]]   := Silence
 ap[LeafNode["Atom", v_, m_]]   := tagSpan[m["Source"]][Steady[v]]
 ap[GroupNode["Seq", st_, _]]   := Fastcat @@ (ap /@ st)
@@ -55,11 +55,11 @@ ap[_] := Silence
 (* override the string constructor: parse to AST, derive the query, HOLD source + AST *)
 (* A source string is mini-notation, optionally followed by a postfix " // <op>" chain
    (fast/slow/rev/degrade/euclid/every/late/early).  This is the inverse of the combinators'
-   source-building (Pattern.wl `chain`), so Fast[2][p] and CyclicPattern["... // fast 2"] are
+   source-building (Pattern.wl `chain`), so Fast[2][p] and Track["... // fast 2"] are
    the same pattern -- the bijection. *)
-WolfAnim`CyclicPattern[str0_String] := With[{str = StringTrim[str0]},
+WolfAnim`Track[str0_String] := With[{str = StringTrim[str0]},
     If[StringContainsQ[str, "//"],
-        Fold[applyChainStep, CyclicPattern[StringTrim @ First @ StringSplit[str, "//"]],
+        Fold[applyChainStep, Track[StringTrim @ First @ StringSplit[str, "//"]],
             StringTrim /@ Rest @ StringSplit[str, "//"]],
         With[{ast = parseMini[str]},
             If[ast === $Failed, Silence, Append[ap[ast], <|"Source" -> str, "AST" -> ast|>]]]]]
@@ -124,12 +124,12 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]
                                     FieldSize -> {Scaled[0.7], 1},
                                     BaseStyle -> {FontFamily -> "Source Code Pro", FontSize -> 16, FontColor -> GrayLevel[0.9]}],
                                 {"ReturnKeyDown" :> (
-                                    curPat = CyclicPattern[src]; sched = scheduleOf[curPat, n];
+                                    curPat = Track[src]; sched = scheduleOf[curPat, n];
                                     Quiet @ AudioStop[stream]; stream = AudioStream[Audio[curPat, n], Looping -> True];
                                     registerStream[id, stream, n]; editing = False)}],
                             Spacer[8],
                             Button[Style["\:25b6 apply", 13], (
-                                curPat = CyclicPattern[src]; sched = scheduleOf[curPat, n];
+                                curPat = Track[src]; sched = scheduleOf[curPat, n];
                                 Quiet @ AudioStop[stream]; stream = AudioStream[Audio[curPat, n], Looping -> True];
                                 registerStream[id, stream, n]; editing = False)]
                         }, Alignment -> Center],
@@ -174,9 +174,9 @@ traceOf[pat_, n_, steps_] := Module[{src = pat["Source"], events, sched, cs = N[
             <|"Phase" -> ph, "Lit" -> (traceText[src, #] & /@ activeSpans[sched, ph, n])|>], {k, 0, steps - 1}]
     |>
 ]
-WolfAnim`CyclicPattern[q_, m___]["Trace", n_ : 2, steps_ : 32] := traceOf[CyclicPattern[q, m], n, steps]
+WolfAnim`Track[q_, m___]["Trace", n_ : 2, steps_ : 32] := traceOf[Track[q, m], n, steps]
 
-WolfAnim`CyclicPattern /: MakeBoxes[p : WolfAnim`CyclicPattern[_, meta_Association] /; KeyExistsQ[meta, "Source"], TraditionalForm] :=
+WolfAnim`Track /: MakeBoxes[p : WolfAnim`Track[_, meta_Association] /; KeyExistsQ[meta, "Source"], TraditionalForm] :=
     With[{boxes = ToBoxes[miniDisplay[p, 2]]}, InterpretationBox[boxes, p]]
 
 

@@ -13,10 +13,10 @@
 
 BeginPackage["WolfAnim`Strudel`", {"WolfAnim`"}]
 
-s::usage          = "s[str] = CyclicPattern[str] -- a sample/sound pattern.";
-sound::usage      = "sound[str] = CyclicPattern[str].";
-note::usage       = "note[str] = CyclicPattern[str] -- a melodic pattern.";
-n::usage          = "n[str] = CyclicPattern[str].";
+s::usage          = "s[str] = Track[str] -- a sample/sound pattern.";
+sound::usage      = "sound[str] = Track[str].";
+note::usage       = "note[str] = Track[str] -- a melodic pattern.";
+n::usage          = "n[str] = Track[str].";
 fast::usage       = "fast = Fast (compress time).";
 slow::usage       = "slow = Slow (stretch time).";
 rev::usage        = "rev = Reverse (a pattern within each cycle).";
@@ -34,10 +34,10 @@ gain::usage       = "gain = Gain.";
 silence::usage    = "silence = Silence.";
 
 (* atom constructors: down-values so the heads stay introspectable for LiveCode highlighting *)
-s[a_]     := CyclicPattern[a]
-sound[a_] := CyclicPattern[a]
-note[a_]  := CyclicPattern[a]
-n[a_]     := CyclicPattern[a]
+s[a_]     := Track[a]
+sound[a_] := Track[a]
+note[a_]  := Track[a]
+n[a_]     := Track[a]
 
 (* combinator aliases *)
 fast        = Fast
