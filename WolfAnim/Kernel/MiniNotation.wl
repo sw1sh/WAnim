@@ -106,7 +106,7 @@ highlightedString[str_, active_] := Row[Table[
    `curPat` tracks the live-parsed pattern so an edit also updates the piano-roll visual. *)
 miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]},
     DynamicModule[{id = Unique[], src = source, curPat = pat, stream = AudioStream[Audio[pat, n], Looping -> True],
-                   phase = 0., enabled = True, editing = False, sched = scheduleOf[pat, n]},
+                   phase = 0., editing = False, sched = scheduleOf[pat, n]},
         (* The apply (re-parse) action is INLINED into the apply Button + Enter handler below.
            A DynamicModule-local f[]:= and Method->"Queued" both write to the wrong (un-localized)
            symbols, so the new pattern never reached the display.  Inline + default (preemptive)
@@ -142,16 +142,17 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]
                 ],
                 TrackedSymbols :> {editing}
             ],
-            (* VISUAL: wall-clock playhead -- advances phase from elapsed real time, never reads
-               the stream, so swapping the stream on edit cannot freeze it.  Click = play/pause
-               (keeps position), right-click = reset. *)
+            (* VISUAL: transport-clock playhead -- advances phase from the shared clock, never reads
+               the stream, so swapping the stream on edit cannot freeze it.  Click = global play/
+               pause, right-click = disable/enable this track, double-click = solo (only this). *)
             EventHandler[
                 Dynamic @ Refresh[
-                    If[$Playing && enabled, phase = clockPhase[n]];
-                    renderVisuals[viss, curPat, n, phase, stream],
+                    If[$Playing && enabledQ[id], phase = clockPhase[n]];
+                    frameIfDisabled[id, renderVisuals[viss, curPat, n, phase, stream]],
                     TrackedSymbols :> {}, UpdateInterval -> 0.03],
                 {{"MouseDown", 1} :> If[$Playing, TrackPause[], TrackPlay[]],
-                 {"MouseDown", 2} :> If[enabled, (Quiet @ AudioStop[stream]; unregisterStream[id]; enabled = False), (registerStream[id, stream, n]; enabled = True)]}]
+                 {"MouseDown", 2} :> If[enabledQ[id], (Quiet @ AudioStop[stream]; unregisterStream[id]), registerStream[id, stream, n]],
+                 {"MouseClicked", 2} :> soloStream[id, stream, n]}]
         }, Spacings -> 0.5, Alignment -> Left], Background -> GrayLevel[0.1], FrameMargins -> 10],
         (* start the clock + audio together on first appearance.  NO SaveDefinitions: the edit's
            reparse needs the LIVE grammar. *)
