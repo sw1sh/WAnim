@@ -298,9 +298,23 @@ sampleQ[v_] := KeyExistsQ[$SampleBank, v]
 
 (* ::Subsection:: Notation: pitched events -> MusicScore (drives Sound / MusicPlot) *)
 
+(* a value's pitch.  A token can be a pitch-name string ("c4"), a raw MIDI integer, a WL 15
+   Music* object (MusicNote/MusicPitch/MusicChord), or an old SoundNote -- all first-class. *)
 valueMidi[v_Integer] := v
-valueMidi[v_String] := Quiet@Check[MusicPitch[v]["MIDINumber"], Missing[]]
+valueMidi[v_String] := Quiet @ Check[MusicPitch[v]["MIDINumber"], Missing[]]
+valueMidi[mp_MusicPitch] := Quiet @ Check[mp["MIDINumber"], Missing[]]
+valueMidi[mn_MusicNote] := Quiet @ Check[mn["Pitch"]["MIDINumber"], Missing[]]
+valueMidi[SoundNote[p_Integer, ___]] := 60 + p
+valueMidi[SoundNote[p_String, ___]] := valueMidi[p]
 valueMidi[_] := Missing[]
+(* every sounding MIDI pitch of a value: one for a note, several for a chord, none for a drum *)
+valuePitches[mc_MusicChord] := Quiet @ Check[#["MIDINumber"] & /@ mc["PitchList"], {}]
+valuePitches[SoundNote[ps_List, ___]] := Flatten[valuePitches /@ ps]
+valuePitches[v_] := With[{m = valueMidi[v]}, If[NumericQ[m], {Round[m]}, {}]]
+(* short label for the roll: strings as-is, otherwise the pitch name(s) *)
+midiName[m_] := Quiet @ Check[ToString[MusicPitch[Round @ m]["Key"]] <> ToString[MusicPitch[Round @ m]["Octave"]], ToString[Round @ m]]
+labelOf[v_String] := v
+labelOf[v_] := With[{ps = valuePitches[v]}, If[ps === {}, ToString[v, InputForm], StringRiffle[midiName /@ ps, "+"]]]
 
 (* a voice is a bare pattern or a Synth / Gain wrapper; patternOf recovers the pattern *)
 patternOf[SynthVoice[_, p_]] := p
@@ -371,14 +385,14 @@ synthDrum[v_] := synthDrum[v] = AudioNormalize @ Switch[ToLowerCase[v],
 drumSound[v_] := If[sampleQ[v], $SampleBank[v], synthDrum[v]]
 (* drum/percussion events (a loaded sample, or any non-pitch token) placed at their onsets *)
 sampleLayer[events_] := mix[AudioPad[drumSound[#["Value"]], {at[#["Whole"][[1]]], 0}] & /@
-    Select[events, sampleQ[#["Value"]] || ! NumericQ[valueMidi[#["Value"]]] &]]
+    Select[events, sampleQ[#["Value"]] || valuePitches[#["Value"]] === {} &]]
 (* pitched events -> MusicScore -> Audio (acoustic-ish) *)
 musicLayer[events_, nCycles_] := With[{pe = Select[events, ! sampleQ[#["Value"]] && NumericQ[valueMidi[#["Value"]]] &]},
     If[pe === {}, Nothing, Audio[MusicScore[{eventsToVoice[pe, nCycles]}, MusicTimeSignature[4, 4], MusicTempo -> patternTempo[]]]]]
 (* pitched events -> oscillator synth -> Audio *)
-oscLayer[events_, wave_] := mix[Function[ev,
-    AudioPad[oscNote[wave, midiToFreq[valueMidi[ev["Value"]]], eventDuration[ev] cycleSeconds[]], {at[ev["Whole"][[1]]], 0}]] /@
-    Select[events, NumericQ[valueMidi[#["Value"]]] &]]
+oscLayer[events_, wave_] := mix[Flatten[Function[ev,
+    Function[m, AudioPad[oscNote[wave, midiToFreq[m], eventDuration[ev] cycleSeconds[]], {at[ev["Whole"][[1]]], 0}]] /@ valuePitches[ev["Value"]]
+] /@ Select[events, valuePitches[#["Value"]] =!= {} && ! sampleQ[#["Value"]] &]]]
 
 voiceAudio[GainVoice[g_, v_], nCycles_] := AudioAmplify[voiceAudio[v, nCycles], g]
 voiceAudio[SynthVoice[wave_, p_], nCycles_] := fitTo[oscLayer[Select[p["Query", 0, nCycles], hasOnset], wave], nCycles]
@@ -418,9 +432,13 @@ Track /: Sound[Track[voices_List], nCycles_ : 1] := Sound[patternScore[voices, n
 
 (* pitched tokens take their MIDI row; sample / non-pitch tokens (bd, hh, ...) get a stable
    low percussion row so a drum pattern still draws instead of an empty (black) roll. *)
-laneValue[val_] := With[{m = valueMidi[val]}, If[NumericQ[m], Round[m], 36 + Mod[Hash[val], 8]]]
+laneValue[val_] := With[{ps = valuePitches[val]}, If[ps =!= {}, First[ps], 36 + Mod[Hash[val], 8]]]
+(* one block per sounding pitch (a chord draws a block per note); drums get a synthetic row *)
 rollData[v_, nCycles_] := With[{evs = Select[patternOf[v]["Query", 0, nCycles], hasOnset]},
-    {#["Whole"], laneValue[#["Value"]], #["Value"]} & /@ evs   (* {whole, row, token} *)
+    Flatten[Function[ev, With[{ps = valuePitches[ev["Value"]]},
+        If[ps === {},
+            {{ev["Whole"], 36 + Mod[Hash[ev["Value"]], 8], labelOf[ev["Value"]]}},
+            {ev["Whole"], #, If[StringQ[ev["Value"]], ev["Value"], midiName[#]]} & /@ ps]]] /@ evs, 1]
 ]
 
 (* all colors are LightDarkSwitched[light, dark] so the roll adapts to the FE appearance;
@@ -436,7 +454,7 @@ blockColor[Automatic, hue_] := LightDarkSwitched[Hue[hue, 0.7, 0.7], Hue[hue, 0.
 blockColor[c_, _] := c
 pianoRoll[patsOrTrack_, nCycles_ : 1, highlight_ : None, opts : OptionsPattern[]] := Module[
     {lanes, data, mids, lo, hi, bg, blk, labelCol, playCol, gridCol, frameCol, fs, lab},
-    lanes = Which[MatchQ[patsOrTrack, _Track], patsOrTrack["Voices"], MatchQ[patsOrTrack, _List], patsOrTrack, True, {patsOrTrack}];
+    lanes = Which[MatchQ[patsOrTrack, Track[_List]], patsOrTrack["Voices"], MatchQ[patsOrTrack, _List], patsOrTrack, True, {patsOrTrack}];
     data = MapIndexed[Function[{lane, i}, {First[i], #} & /@ rollData[lane, nCycles]], lanes];
     mids = Cases[Flatten[data, 1][[All, 2, 2]], _Integer];
     If[mids === {}, Return[Graphics[{}, ImageSize -> OptionValue[ImageSize]]]];
