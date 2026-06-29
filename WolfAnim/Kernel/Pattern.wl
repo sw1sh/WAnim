@@ -3,10 +3,10 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Bars, TrackPlay, TrackPause, TrackReset, TrackSeek, Fastcat, LiveCode, $LiveAtomHeads}]
+PackageExported[{Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Bars, Solo, TrackPlay, TrackPause, TrackReset, TrackSeek, Fastcat, LiveCode, $LiveAtomHeads}]
 
 (* shared with MiniNotation.wl so the TraditionalForm can render the same live Visual *)
-PackageScoped[{renderVisual, renderVisuals, visualsOf, visualOf, cyclesOf, buttonsQ, clockPhase, seekStream, registerStream, unregisterStream, enabledQ, soloStream, frameIfDisabled, $Playing, $Streams}]
+PackageScoped[{renderVisual, renderVisuals, visualsOf, visualOf, cyclesOf, buttonsQ, clockPhase, seekStream, registerStream, unregisterStream, enabledQ, soloStream, soloFlagQ, frameIfDisabled, $Playing, $Streams}]
 
 
 
@@ -70,9 +70,9 @@ soloStream[id_, stream_, n_] := (
     $Streams = <|id -> {stream, n}|>;
     If[$ClockStart === None, $ClockStart = AbsoluteTime[]]; $Playing = True;
     seekStream[{stream, n}]; Quiet @ AudioPlay[stream])
-(* disabled tracks are wrapped in a red frame so they read as muted at a glance *)
+(* disabled tracks are wrapped in a thick red frame so they read as muted at a glance *)
 frameIfDisabled[id_, viz_] := If[enabledQ[id], viz,
-    Framed[viz, FrameStyle -> Directive[Red, AbsoluteThickness[2.5]], FrameMargins -> 2, RoundingRadius -> 5, Background -> None]]
+    Framed[viz, FrameStyle -> Directive[RGBColor[1, 0.25, 0.25], AbsoluteThickness[3]], FrameMargins -> 5, RoundingRadius -> 7, Background -> None]]
 
 patternTempo[] := 240 $CyclesPerSecond
 
@@ -604,6 +604,12 @@ Bars[p_Track, n_] := setMeta[p, "Cycles", n]
 Track[_, m_Association]["Cycles"] := Lookup[m, "Cycles", 2]
 Track[_]["Cycles"] := 2
 
+(* Solo[p] marks a track so that, when its player appears, it silences every OTHER live track
+   (i.e. disables everything but this one).  Postfix operator too:  p // Solo.  Verb form. *)
+Solo[p_Track] := setMeta[p, "Solo", True]
+soloFlagQ[Track[_, m_Association]] := TrueQ @ Lookup[m, "Solo", False]
+soloFlagQ[_] := False
+
 (* the default Visual: a simple clickable progress bar with a playhead *)
 visualBar[phase_, n_] := With[{x = Mod[phase, n]},
     Graphics[{
@@ -635,8 +641,8 @@ streamPhase[stream_] := With[{pos = Quiet @ stream["Position"]},
    Playhead is WALL-CLOCK (t0), not stream Position -- polling the stream was what broke the
    player for combinator-derived patterns (Fast/Reverse/...) shown as StandardForm. *)
 livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
-    {aud = renderAudio[patOrTrack, n], viss = visualsOf[patOrTrack], buttons = buttonsQ[patOrTrack]},
-    DynamicModule[{id = Unique[], stream = AudioStream[aud, Looping -> True], phase = 0.},
+    {aud = renderAudio[patOrTrack, n], viss = visualsOf[patOrTrack], buttons = buttonsQ[patOrTrack], solo = soloFlagQ[patOrTrack]},
+    DynamicModule[{id = Unique[], stream = AudioStream[aud, Looping -> True], phase = 0., lastClick = 0.},
         With[{visual = Dynamic @ Refresh[
                 If[$Playing && enabledQ[id], phase = clockPhase[n]];
                 frameIfDisabled[id, renderVisuals[viss, patOrTrack, n, phase, stream]],
@@ -655,13 +661,13 @@ livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
                 (* click the visual: left = play/pause (all); right = disable/enable this track;
                    double-click = solo -- play only this track, disable every other *)
                 EventHandler[visual,
-                    {{"MouseDown", 1} :> If[$Playing, TrackPause[], TrackPlay[]],
-                     {"MouseDown", 2} :> If[enabledQ[id], (Quiet @ AudioStop[stream]; unregisterStream[id]), registerStream[id, stream, n]],
-                     {"MouseClicked", 2} :> soloStream[id, stream, n]}]
+                    {{"MouseDown", 1} :> (If[AbsoluteTime[] - lastClick < 0.3, soloStream[id, stream, n], If[$Playing, TrackPause[], TrackPlay[]]]; lastClick = AbsoluteTime[]),
+                     {"MouseDown", 2} :> If[enabledQ[id], (Quiet @ AudioStop[stream]; unregisterStream[id]), registerStream[id, stream, n]]}]
             ]],
         (* join the global transport: register this stream (plays at the clock position if the
-           transport is running); autoplay starts the transport if nothing is playing yet *)
-        Initialization :> (registerStream[id, stream, n]; If[autoplay && ! $Playing, TrackPlay[]]),
+           transport is running); a Solo-marked track silences the rest on appearance; autoplay
+           starts the transport if nothing is playing yet *)
+        Initialization :> (registerStream[id, stream, n]; If[solo, soloStream[id, stream, n]]; If[autoplay && ! $Playing, TrackPlay[]]),
         Deinitialization :> (unregisterStream[id]; Quiet[AudioStop[stream]; RemoveAudioStream[stream]]),
         SaveDefinitions -> True
     ]

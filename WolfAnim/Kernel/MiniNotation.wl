@@ -104,9 +104,9 @@ highlightedString[str_, active_] := Row[Table[
      - editing=False: ONE refreshing Dynamic draws [highlight] over [visual], 30 ms ticks.
      - editing=True : a stable InputField (no refresh, so the cursor survives) over the visual.
    `curPat` tracks the live-parsed pattern so an edit also updates the piano-roll visual. *)
-miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]},
+miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat], solo = soloFlagQ[pat]},
     DynamicModule[{id = Unique[], src = source, curPat = pat, stream = AudioStream[Audio[pat, n], Looping -> True],
-                   phase = 0., editing = False, sched = scheduleOf[pat, n]},
+                   phase = 0., editing = False, lastClick = 0., sched = scheduleOf[pat, n]},
         (* The apply (re-parse) action is INLINED into the apply Button + Enter handler below.
            A DynamicModule-local f[]:= and Method->"Queued" both write to the wrong (un-localized)
            symbols, so the new pattern never reached the display.  Inline + default (preemptive)
@@ -150,13 +150,12 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]
                     If[$Playing && enabledQ[id], phase = clockPhase[n]];
                     frameIfDisabled[id, renderVisuals[viss, curPat, n, phase, stream]],
                     TrackedSymbols :> {}, UpdateInterval -> 0.03],
-                {{"MouseDown", 1} :> If[$Playing, TrackPause[], TrackPlay[]],
-                 {"MouseDown", 2} :> If[enabledQ[id], (Quiet @ AudioStop[stream]; unregisterStream[id]), registerStream[id, stream, n]],
-                 {"MouseClicked", 2} :> soloStream[id, stream, n]}]
+                {{"MouseDown", 1} :> (If[AbsoluteTime[] - lastClick < 0.3, soloStream[id, stream, n], If[$Playing, TrackPause[], TrackPlay[]]]; lastClick = AbsoluteTime[]),
+                 {"MouseDown", 2} :> If[enabledQ[id], (Quiet @ AudioStop[stream]; unregisterStream[id]), registerStream[id, stream, n]]}]
         }, Spacings -> 0.5, Alignment -> Left], Background -> GrayLevel[0.1], FrameMargins -> 10],
         (* start the clock + audio together on first appearance.  NO SaveDefinitions: the edit's
            reparse needs the LIVE grammar. *)
-        Initialization :> (registerStream[id, stream, n]; If[! $Playing, TrackPlay[]]),
+        Initialization :> (registerStream[id, stream, n]; If[solo, soloStream[id, stream, n]]; If[! $Playing, TrackPlay[]]),
         Deinitialization :> (unregisterStream[id]; Quiet[AudioStop[stream]; RemoveAudioStream[stream]])]]
 
 (* ---------- extractable trace of the dynamic play (for debugging headless) ---------- *)
