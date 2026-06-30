@@ -146,10 +146,9 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]
                frame off the transport clock.  Rebuilt only on edit (curPat/stream change) or on
                enable/disable ($Streams).  Click = global play/pause, right-click = disable/enable
                this track, double-click = solo (only this). *)
-            insetClicks[
+            EventHandler[
                 Dynamic[frameIfDisabled[id, renderVisuals[viss, curPat, n, stream]],
                     TrackedSymbols :> {curPat, stream, $Streams}],
-                viss,
                 {{"MouseDown", 1} :> (If[AbsoluteTime[] - lastClick < 0.3, soloStream[id, stream, n], If[$Playing, TrackPause[], TrackPlay[]]]; lastClick = AbsoluteTime[]),
                  {"MouseDown", 2} :> If[enabledQ[id], (Quiet @ AudioStop[stream]; unregisterStream[id]), registerStream[id, stream, n]]}]
         }, Spacings -> 0.5, Alignment -> Left], Background -> GrayLevel[0.1], FrameMargins -> 10],
