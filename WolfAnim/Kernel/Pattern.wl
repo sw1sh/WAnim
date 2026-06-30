@@ -6,7 +6,7 @@
 PackageExported[{Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Bars, Solo, TrackPlay, TrackPause, TrackReset, TrackSeek, Fastcat, LiveCode, $LiveAtomHeads}]
 
 (* shared with MiniNotation.wl so the TraditionalForm can render the same live Visual *)
-PackageScoped[{renderVisual, renderVisuals, visualsOf, visualOf, cyclesOf, buttonsQ, clockPhase, seekStream, registerStream, unregisterStream, enabledQ, soloStream, soloFlagQ, frameIfDisabled, $Playing, $Streams}]
+PackageScoped[{renderVisual, renderVisuals, visualsOf, visualOf, cyclesOf, buttonsQ, clockPhase, seekStream, registerStream, unregisterStream, enabledQ, soloStream, soloFlagQ, frameIfDisabled, insetClicks, $Playing, $Streams}]
 
 
 
@@ -86,6 +86,23 @@ soloStream[id_, stream_, n_] := If[$SoloMaster === id,
 (* disabled tracks are wrapped in a thick red frame so they read as muted at a glance *)
 frameIfDisabled[id_, viz_] := If[enabledQ[id], viz,
     Framed[viz, FrameStyle -> Directive[RGBColor[1, 0.25, 0.25], AbsoluteThickness[3]], FrameMargins -> 5, RoundingRadius -> 7, Background -> None]]
+
+(* The click/EventHandler region is shrunk to the visual's INTERIOR (a ~visInset px border is left
+   free) by overlaying a transparent, smaller EventHandler pane over the visual: clicks in the
+   middle drive play/pause/solo/disable, but the border falls through so the Graphics underneath
+   stays selectable + resizable in the notebook.  visBox estimates the visual's pixel box from each
+   Visual's ImageSize (default 480) and aspect (scope/roll 1/3, bar 1/24). *)
+visInset = 14;
+visAspect["Oscilloscope"] = 1/3;
+visAspect["PianoRoll"] = 1/3;
+visAspect[_] = 1/24;
+visBox[viss_] := Module[{ss = If[viss === {}, {{$DefaultVisual, {}}}, viss], ws},
+    ws = Lookup[Association @ #[[2]], ImageSize, 480] & /@ ss;
+    {Max @ ws, Total @ MapThread[#1 visAspect[#2[[1]]] + 12 &, {ws, ss}] + 6 (Length[ss] - 1)}]
+insetClicks[visual_, viss_, events_] := With[{wh = visBox[viss]},
+    Overlay[{visual,
+        EventHandler[Pane[Spacer[0], ImageSize -> {Max[24, wh[[1]] - 2 visInset], Max[24, wh[[2]] - 2 visInset]}, Background -> None], events]},
+       Alignment -> Center]]
 
 patternTempo[] := 240 $CyclesPerSecond
 
@@ -715,9 +732,10 @@ livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
                     }, Spacer[3]],
                     visual
                 }, Spacings -> 0.4, Alignment -> Left],
-                (* click the visual: left = play/pause (all); right = disable/enable this track;
-                   double-click = solo -- play only this track, disable every other *)
-                EventHandler[visual,
+                (* click the visual INTERIOR: left = play/pause (all); right = disable/enable this
+                   track; double-click = solo.  insetClicks leaves a border free so the graphic
+                   stays selectable/resizable. *)
+                insetClicks[visual, viss,
                     {{"MouseDown", 1} :> (If[AbsoluteTime[] - lastClick < 0.3, soloStream[id, stream, n], If[$Playing, TrackPause[], TrackPlay[]]]; lastClick = AbsoluteTime[]),
                      {"MouseDown", 2} :> If[enabledQ[id], (Quiet @ AudioStop[stream]; unregisterStream[id]), registerStream[id, stream, n]]}]
             ]],
