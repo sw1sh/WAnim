@@ -571,23 +571,31 @@ Track[voices_List, ___]["Play", nCycles_ : 2] := livePlayer[Track[voices], nCycl
    buffer; same click mechanics as ["Play"] (left = play/pause, right = reset). *)
 Options[scopeFrame] = {ImageSize -> 480, AspectRatio -> 1/3, Background -> GrayLevel[0.08],
     "WaveColor" -> RGBColor[0.25, 1, 0.55], FrameStyle -> GrayLevel[0.3], "GridColor" -> GrayLevel[0.25]};
-(* one live oscilloscope frame as RAW Graphics (NOT ListLinePlot) + downsample to <=512 points.
-   This is the real speed lever: WL exposes no GPU 2D-render path, so smooth animation depends on
-   each frame being cheap to build+typeset, and a bare Graphics[Line] is far lighter than a plot.
-   Honors ImageSize / AspectRatio / Background / "WaveColor" / FrameStyle / "GridColor". *)
-scopeFrame[snippet_, opts : OptionsPattern[]] := Module[{w, m},
+(* waveform as a PACKED [0,1] x amplitude point list, downsampled to <=256 points: few points +
+   a FIXED x-range keep both the data and the Graphics shell cheap and static. *)
+scopePoints[snippet_] := Module[{w, m},
     w = Quiet @ Check[Flatten @ AudioData[snippet], {}];
     If[! VectorQ[w, NumericQ], w = {}];
     m = Length[w];
-    If[m > 512, w = w[[1 ;; m ;; Ceiling[m / 512]]]];
+    If[m > 256, w = w[[1 ;; m ;; Ceiling[m / 256]]]];
     If[Length[w] < 2, w = {0., 0.}];
     m = Length[w];
-    Graphics[{
-        OptionValue["GridColor"], AbsoluteThickness[0.6], Line[{{1, 0}, {m, 0}}],
-        OptionValue["WaveColor"], AbsoluteThickness[1.2], Line[Transpose[{Range[m], w}]]},
-        PlotRange -> {{1, m}, {-1.05, 1.05}}, AspectRatio -> OptionValue[AspectRatio],
-        Background -> OptionValue[Background], Frame -> True, FrameTicks -> None,
-        FrameStyle -> OptionValue[FrameStyle], ImageSize -> OptionValue[ImageSize], ImagePadding -> 4]]
+    Developer`ToPackedArray @ N @ Transpose[{Subdivide[0., 1., m - 1], w}]]
+(* the Graphics SHELL (frame / background / zero line / fixed range) holding `line` as its wave.
+   Built ONCE; for the live visual `line` is a Dynamic[Line[..]] so ONLY the waveform primitive
+   re-rasterizes each frame -- the FE never re-typesets the frame/axes (the real fps lever, since
+   WL has no GPU 2D-render path).  Raw Graphics, never ListLinePlot. *)
+scopeShell[line_, o : OptionsPattern[scopeFrame]] := Graphics[{
+        OptionValue[scopeFrame, {o}, "GridColor"], AbsoluteThickness[0.6], Line[{{0, 0}, {1, 0}}],
+        OptionValue[scopeFrame, {o}, "WaveColor"], AbsoluteThickness[1.2], line},
+    PlotRange -> {{0, 1}, {-1.05, 1.05}}, AspectRatio -> OptionValue[scopeFrame, {o}, AspectRatio],
+    Background -> OptionValue[scopeFrame, {o}, Background], Frame -> True, FrameTicks -> None,
+    FrameStyle -> OptionValue[scopeFrame, {o}, FrameStyle], ImageSize -> OptionValue[scopeFrame, {o}, ImageSize], ImagePadding -> 4]
+(* static one-shot scope (used by the ["Scope"] method's own refresh) *)
+scopeFrame[snippet_, opts : OptionsPattern[]] := scopeShell[Line @ scopePoints[snippet], opts]
+(* the LIVE oscilloscope visual: shell built once, inner Dynamic re-draws only the wave Line *)
+scopeWidget[stream_, opts : OptionsPattern[]] := scopeShell[
+    Dynamic[Line @ scopePoints @ stream["CurrentAudio"], TrackedSymbols :> {}, UpdateInterval -> 0.03], opts]
 
 scopePlay[patsOrTrack_, nCycles_ : 2] := With[{aud = renderAudio[patsOrTrack, nCycles]},
     DynamicModule[{stream = AudioStream[aud, Looping -> True], playing = True, frame = 0},
@@ -668,16 +676,17 @@ visualBar[phase_, n_] := With[{x = Mod[phase, n]},
     }, PlotRange -> {{0, n}, {0, 1}}, AspectRatio -> 1/24, ImageSize -> 480, Background -> GrayLevel[0.13],
         ImagePadding -> 1, Frame -> True, FrameTicks -> None, FrameStyle -> GrayLevel[0.3]]]
 
-(* render one visual (name + its options) at the current playhead phase; the scope reads the
-   stream's live buffer.  renderVisuals stacks a list of specs into a Column (... // Oscilloscope
-   // PianoRoll).  Shared (PackageScoped) so MiniNotation's TraditionalForm shows the same. *)
-renderVisual["PianoRoll", pat_, n_, phase_, stream_, opts_] := pianoRoll[pat, n, phase, Sequence @@ FilterRules[opts, Options[pianoRoll]]]
-renderVisual["Oscilloscope", pat_, n_, phase_, stream_, opts_] := scopeFrame[stream["CurrentAudio"], Sequence @@ FilterRules[opts, Options[scopeFrame]]]
-renderVisual[_, pat_, n_, phase_, stream_, opts_] := visualBar[phase, n]
-renderVisuals[specs_, pat_, n_, phase_, stream_] := With[{ss = If[specs === {}, {{$DefaultVisual, {}}}, specs]},
+(* render one visual (name + its options) as a SELF-UPDATING widget: each reads the clock / stream
+   itself on its own UpdateInterval, so the host player builds the visual ONCE (no per-frame
+   rebuild of the whole graphic) and only the playhead / wave-Line re-rasterizes.  renderVisuals
+   stacks a list of specs into a Column.  Shared (PackageScoped) so TraditionalForm matches. *)
+renderVisual["PianoRoll", pat_, n_, stream_, opts_] := Dynamic[pianoRoll[pat, n, clockPhase[n], Sequence @@ FilterRules[opts, Options[pianoRoll]]], TrackedSymbols :> {}, UpdateInterval -> 0.03]
+renderVisual["Oscilloscope", pat_, n_, stream_, opts_] := scopeWidget[stream, Sequence @@ FilterRules[opts, Options[scopeFrame]]]
+renderVisual[_, pat_, n_, stream_, opts_] := Dynamic[visualBar[clockPhase[n], n], TrackedSymbols :> {}, UpdateInterval -> 0.03]
+renderVisuals[specs_, pat_, n_, stream_] := With[{ss = If[specs === {}, {{$DefaultVisual, {}}}, specs]},
     If[Length[ss] == 1,
-        renderVisual[ss[[1, 1]], pat, n, phase, stream, ss[[1, 2]]],
-        Column[Function[s, renderVisual[s[[1]], pat, n, phase, stream, s[[2]]]] /@ ss, Spacings -> 0.3, Alignment -> Left]]]
+        renderVisual[ss[[1, 1]], pat, n, stream, ss[[1, 2]]],
+        Column[Function[s, renderVisual[s[[1]], pat, n, stream, s[[2]]]] /@ ss, Spacings -> 0.3, Alignment -> Left]]]
 
 (* safe playhead read: a not-yet-ready / replaced stream can return a non-Quantity, which
    used to throw inside the refresh and break the whole visualization -- guard it. *)
@@ -691,11 +700,10 @@ streamPhase[stream_] := With[{pos = Quiet @ stream["Position"]},
    player for combinator-derived patterns (Fast/Reverse/...) shown as StandardForm. *)
 livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
     {aud = renderAudio[patOrTrack, n], viss = visualsOf[patOrTrack], buttons = buttonsQ[patOrTrack], solo = soloFlagQ[patOrTrack]},
-    DynamicModule[{id = Unique[], stream = AudioStream[aud, Looping -> True], phase = 0., lastClick = 0.},
-        With[{visual = Dynamic @ Refresh[
-                If[$Playing && enabledQ[id], phase = clockPhase[n]];
-                frameIfDisabled[id, renderVisuals[viss, patOrTrack, n, phase, stream]],
-                TrackedSymbols :> {$Streams}, UpdateInterval -> 0.03]},
+    DynamicModule[{id = Unique[], stream = AudioStream[aud, Looping -> True], lastClick = 0.},
+        (* visual built ONCE (self-updating inner Dynamics drive the playhead/wave); this outer
+           Dynamic only re-wraps in the red frame when $Streams (enable/disable) changes. *)
+        With[{visual = Dynamic[frameIfDisabled[id, renderVisuals[viss, patOrTrack, n, stream]], TrackedSymbols :> {$Streams}]},
             If[buttons,
                 (* buttons: play/pause = global; disable = this track on/off; solo = only this *)
                 Column[{

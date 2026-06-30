@@ -106,7 +106,7 @@ highlightedString[str_, active_] := Row[Table[
    `curPat` tracks the live-parsed pattern so an edit also updates the piano-roll visual. *)
 miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat], solo = soloFlagQ[pat]},
     DynamicModule[{id = Unique[], src = source, curPat = pat, stream = AudioStream[Audio[pat, n], Looping -> True],
-                   phase = 0., editing = False, lastClick = 0., sched = scheduleOf[pat, n]},
+                   editing = False, lastClick = 0., sched = scheduleOf[pat, n]},
         (* The apply (re-parse) action is INLINED into the apply Button + Enter handler below.
            A DynamicModule-local f[]:= and Method->"Queued" both write to the wrong (un-localized)
            symbols, so the new pattern never reached the display.  Inline + default (preemptive)
@@ -136,20 +136,19 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]
                         Dynamic[Style["\:2192 " <> src, 11, GrayLevel[0.5], FontFamily -> "Source Code Pro"]]
                     }, Alignment -> Left, Spacings -> 0.3],
                     Button[
-                        Tooltip[Dynamic @ Refresh[highlightedString[src, activeSpans[sched, phase, n]],
+                        Tooltip[Dynamic @ Refresh[highlightedString[src, activeSpans[sched, clockPhase[n], n]],
                             TrackedSymbols :> {}, UpdateInterval -> 0.04], "click to edit"],
                         editing = True, Appearance -> None]
                 ],
                 TrackedSymbols :> {editing}
             ],
-            (* VISUAL: transport-clock playhead -- advances phase from the shared clock, never reads
-               the stream, so swapping the stream on edit cannot freeze it.  Click = global play/
-               pause, right-click = disable/enable this track, double-click = solo (only this). *)
+            (* VISUAL: built ONCE; the self-updating inner Dynamics drive the playhead/wave each
+               frame off the transport clock.  Rebuilt only on edit (curPat/stream change) or on
+               enable/disable ($Streams).  Click = global play/pause, right-click = disable/enable
+               this track, double-click = solo (only this). *)
             EventHandler[
-                Dynamic @ Refresh[
-                    If[$Playing && enabledQ[id], phase = clockPhase[n]];
-                    frameIfDisabled[id, renderVisuals[viss, curPat, n, phase, stream]],
-                    TrackedSymbols :> {$Streams}, UpdateInterval -> 0.03],
+                Dynamic[frameIfDisabled[id, renderVisuals[viss, curPat, n, stream]],
+                    TrackedSymbols :> {curPat, stream, $Streams}],
                 {{"MouseDown", 1} :> (If[AbsoluteTime[] - lastClick < 0.3, soloStream[id, stream, n], If[$Playing, TrackPause[], TrackPlay[]]]; lastClick = AbsoluteTime[]),
                  {"MouseDown", 2} :> If[enabledQ[id], (Quiet @ AudioStop[stream]; unregisterStream[id]), registerStream[id, stream, n]]}]
         }, Spacings -> 0.5, Alignment -> Left], Background -> GrayLevel[0.1], FrameMargins -> 10],
