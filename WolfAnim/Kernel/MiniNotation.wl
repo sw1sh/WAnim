@@ -140,7 +140,7 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]
                         Dynamic[Style["\:2192 " <> src, 11, GrayLevel[0.5], FontFamily -> "Source Code Pro"]]
                     }, Alignment -> Left, Spacings -> 0.3],
                     Button[
-                        Tooltip[Dynamic @ Refresh[highlightedString[src, activeSpans[sched, clockPhase[n], n]],
+                        Tooltip[Dynamic @ Refresh[highlightedString[src, activeSpans[sched, visPhase[n], n]],
                             TrackedSymbols :> {}, UpdateInterval -> 0.04], "click to edit"],
                         editing = True, Appearance -> None]
                 ],

@@ -6,7 +6,7 @@
 PackageExported[{Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Punchcard, Beat, Struct, Bars, Solo, TrackPlay, TrackPause, TrackReset, TrackSeek, Fastcat, LiveCode, $LiveAtomHeads}]
 
 (* shared with MiniNotation.wl so the TraditionalForm can render the same live Visual *)
-PackageScoped[{renderVisual, renderVisuals, visualsOf, visualOf, cyclesOf, buttonsQ, clockPhase, seekStream, registerStream, unregisterStream, enabledQ, soloStream, soloFlagQ, frameIfDisabled, insetClicks, $Playing, $Streams}]
+PackageScoped[{renderVisual, renderVisuals, visualsOf, visualOf, cyclesOf, buttonsQ, clockPhase, visPhase, seekStream, registerStream, unregisterStream, enabledQ, soloStream, soloFlagQ, frameIfDisabled, insetClicks, $Playing, $Streams}]
 
 
 
@@ -55,8 +55,12 @@ clockPhase[n_] := Mod[clockSeconds[] $CyclesPerSecond, n]
 (* continuous, unwrapped clock for scrolling visuals; shift back by $AudioLatency so a bar meets
    the line when you HEAR it (output buffering delays the sound behind the transport). *)
 clockPhaseRaw[] := (clockSeconds[] - $AudioLatency) $CyclesPerSecond
+visPhase[n_] := Mod[clockPhaseRaw[], n]   (* wrapped + latency-compensated: what every visual shows, so the playhead matches the HEARD sound (seekStream still uses the raw clockPhase for the stream position) *)
 seekStream[{stream_, n_}] := Quiet[stream["Position"] = Quantity[Mod[clockPhase[n], n] / $CyclesPerSecond, "Seconds"]]
-registerStream[id_, stream_, n_] := ($Streams[id] = {stream, n}; If[$Playing, seekStream[{stream, n}]; Quiet @ AudioPlay[stream]])
+(* a just-created AudioStream may ignore a Position set before it is ready and then play from 0 --
+   desynced from the transport, e.g. when a StandardForm<->TraditionalForm switch spawns a fresh
+   stream.  Seek, play, then RE-seek once it is running so it always lands on the transport. *)
+registerStream[id_, stream_, n_] := ($Streams[id] = {stream, n}; If[$Playing, seekStream[{stream, n}]; Quiet @ AudioPlay[stream]; seekStream[{stream, n}]])
 unregisterStream[id_] := ($Streams = KeyDrop[$Streams, id]; If[$SoloMaster === id, soloRestore[]];)
 (* user-facing global transport (exported): act on every registered stream at once.
    TrackPlay[]/TrackPause[] run/halt the shared clock; TrackSeek[cyclePos] jumps the whole
@@ -784,10 +788,10 @@ visualBar[phase_, n_] := With[{x = Mod[phase, n]},
    itself on its own UpdateInterval, so the host player builds the visual ONCE (no per-frame
    rebuild of the whole graphic) and only the playhead / wave-Line re-rasterizes.  renderVisuals
    stacks a list of specs into a Column.  Shared (PackageScoped) so TraditionalForm matches. *)
-renderVisual["PianoRoll", pat_, n_, stream_, opts_] := Dynamic[pianoRoll[pat, n, clockPhase[n], Sequence @@ FilterRules[opts, Options[pianoRoll]]], TrackedSymbols :> {}, UpdateInterval -> 0.03]
+renderVisual["PianoRoll", pat_, n_, stream_, opts_] := Dynamic[pianoRoll[pat, n, visPhase[n], Sequence @@ FilterRules[opts, Options[pianoRoll]]], TrackedSymbols :> {}, UpdateInterval -> 0.03]
 renderVisual["Punchcard", pat_, n_, stream_, opts_] := Dynamic[punchcard[pat, n, clockPhaseRaw[], Sequence @@ FilterRules[opts, Options[punchcard]]], TrackedSymbols :> {}, UpdateInterval -> 0.03]
 renderVisual["Oscilloscope", pat_, n_, stream_, opts_] := scopeWidget[stream, Sequence @@ FilterRules[opts, Options[scopeFrame]]]
-renderVisual[_, pat_, n_, stream_, opts_] := Dynamic[visualBar[clockPhase[n], n], TrackedSymbols :> {}, UpdateInterval -> 0.03]
+renderVisual[_, pat_, n_, stream_, opts_] := Dynamic[visualBar[visPhase[n], n], TrackedSymbols :> {}, UpdateInterval -> 0.03]
 renderVisuals[specs_, pat_, n_, stream_] := With[{ss = If[specs === {}, {{$DefaultVisual, {}}}, specs]},
     If[Length[ss] == 1,
         renderVisual[ss[[1, 1]], pat, n, stream, ss[[1, 2]]],
