@@ -51,6 +51,7 @@ $SoloMaster = None   (* id of the track currently soloing (via double-click / So
 $SoloSaved = <||>    (* the registry entries THIS solo froze, restored verbatim on un-solo *)
 clockSeconds[] := If[$ClockStart === None, $ClockAccum, $ClockAccum + (AbsoluteTime[] - $ClockStart)]
 clockPhase[n_] := Mod[clockSeconds[] $CyclesPerSecond, n]
+clockPhaseRaw[] := clockSeconds[] $CyclesPerSecond   (* continuous, unwrapped -- for scrolling visuals *)
 seekStream[{stream_, n_}] := Quiet[stream["Position"] = Quantity[Mod[clockPhase[n], n] / $CyclesPerSecond, "Seconds"]]
 registerStream[id_, stream_, n_] := ($Streams[id] = {stream, n}; If[$Playing, seekStream[{stream, n}]; Quiet @ AudioPlay[stream]])
 unregisterStream[id_] := ($Streams = KeyDrop[$Streams, id]; If[$SoloMaster === id, soloRestore[]];)
@@ -97,7 +98,7 @@ frameIfDisabled[id_, viz_] := If[enabledQ[id], viz,
 visInset = 0.05;
 visAspect["Oscilloscope"] = 1/3;
 visAspect["PianoRoll"] = 1/3;
-visAspect["Punchcard"] = 1/3;
+visAspect["Punchcard"] = 1/4;
 visAspect[_] = 1/24;
 visBox[viss_] := Module[{ss = If[viss === {}, {{$DefaultVisual, {}}}, viss], ws},
     ws = Lookup[Association @ #[[2]], ImageSize, 480] & /@ ss;
@@ -590,33 +591,45 @@ pianoRoll[patsOrTrack_, nCycles_ : 1, highlight_ : None, opts : OptionsPattern[]
 Track[q : (_Function | _Symbol), ___]["PianoRoll", nCycles_ : 1, opts : OptionsPattern[pianoRoll]] := pianoRoll[Track[q], nCycles, None, opts]
 Track[voices_List, ___]["PianoRoll", nCycles_ : 1, opts : OptionsPattern[pianoRoll]] := pianoRoll[Track[voices], nCycles, None, opts]
 
-(* Punchcard (Strudel's .punchcard): each onset is a DOT on the time x pitch grid, its size +
-   opacity riding the voice's gain -- so // Gain[g] visibly dims/shrinks the dots. *)
-Options[punchcard] = {Background -> Automatic, "DotColor" -> Automatic, "PlayheadColor" -> Automatic,
-    "GridColor" -> Automatic, FrameStyle -> Automatic, AspectRatio -> 1/3, ImageSize -> 480};
-punchcard[patsOrTrack_, nCycles_ : 1, highlight_ : None, opts : OptionsPattern[]] := Module[
-    {lanes, hues, data, mids, lo, hi, bg, dotCol, playCol, gridCol, frameCol, dot},
+(* Punchcard: a SCROLLING view (unlike the piano roll's moving playhead over fixed blocks).  Each
+   event is a full-band-height rectangle; the strip scrolls RIGHT -> LEFT past a FIXED "now" line,
+   so a bar sounds as its left edge crosses the line.  One horizontal band per voice; bar colour is
+   per-token, opacity rides the voice's gain (// Gain[g] dims the bars).  `phase` is the CONTINUOUS
+   (unwrapped) clock position so the scroll never jumps at the cycle boundary. *)
+valueHue[v_] := Mod[Hash[v], 997]/997.   (* integer mod FIRST -- Hash is ~10^18, so scaling it as a float loses all fractional precision *)
+punchColor[Automatic, v_] := LightDarkSwitched[Hue[valueHue[v], 0.55, 0.78], Hue[valueHue[v], 0.5, 0.95]]
+punchColor[c_, _] := c
+Options[punchcard] = {FontSize -> 9, Background -> Automatic, "BlockColor" -> Automatic, "LabelColor" -> Automatic,
+    "PlayheadColor" -> Automatic, "GridColor" -> Automatic, FrameStyle -> Automatic, AspectRatio -> 1/4,
+    ImageSize -> 480, "Window" -> Automatic};
+punchcard[patsOrTrack_, nCycles_ : 1, phase_ : None, opts : OptionsPattern[]] := Module[
+    {ph, w, x0, lanes, nl, bg, blk, labCol, lineCol, gridCol, frameCol, fs, bar},
+    ph = If[phase === None, 0., N @ phase];
+    w = OptionValue["Window"] /. Automatic -> nCycles;
+    x0 = 0.16 w;   (* the fixed now-line, ~1/6 in from the left (a little past on its left) *)
     lanes = Which[MatchQ[patsOrTrack, Track[_List, ___]], patsOrTrack["Voices"], MatchQ[patsOrTrack, _List], patsOrTrack, True, {patsOrTrack}];
-    hues = If[Length[lanes] == 1, {0.58}, Range[0, Length[lanes] - 1]/Length[lanes]];
-    data = MapThread[Function[{lane, hue}, {hue, gainMeta[lane], #} & /@ rollData[lane, nCycles]], {lanes, hues}];
-    mids = Cases[Flatten[data, 1][[All, 3, 2]], _Integer];
-    If[mids === {}, Return[Graphics[{}, ImageSize -> OptionValue[ImageSize]]]];
-    lo = Min[mids] - 2; hi = Max[mids] + 2;
-    bg       = OptionValue[Background]      /. Automatic -> LightDarkSwitched[GrayLevel[0.96], GrayLevel[0.11]];
-    dotCol   = OptionValue["DotColor"];
-    playCol  = OptionValue["PlayheadColor"] /. Automatic -> LightDarkSwitched[RGBColor[0.15, 0.15, 0.2, 0.85], GrayLevel[1, 0.85]];
-    gridCol  = OptionValue["GridColor"]     /. Automatic -> LightDarkSwitched[GrayLevel[0.8], GrayLevel[0.28]];
+    nl = Length[lanes];
+    fs = OptionValue[FontSize];  blk = OptionValue["BlockColor"];
+    bg       = OptionValue[Background]      /. Automatic -> LightDarkSwitched[GrayLevel[0.96], GrayLevel[0.12]];
+    labCol   = OptionValue["LabelColor"]    /. Automatic -> LightDarkSwitched[GrayLevel[0.1], GrayLevel[0.97]];
+    lineCol  = OptionValue["PlayheadColor"] /. Automatic -> LightDarkSwitched[RGBColor[0.85, 0.2, 0.2], RGBColor[1, 0.9, 0.35]];
+    gridCol  = OptionValue["GridColor"]     /. Automatic -> LightDarkSwitched[GrayLevel[0.82], GrayLevel[0.25]];
     frameCol = OptionValue[FrameStyle]      /. Automatic -> LightDarkSwitched[GrayLevel[0.6], GrayLevel[0.4]];
-    dot[hue_, gn_, wrt_] := {blockColor[dotCol, hue], Opacity[Clip[0.35 + 0.65 gn, {0.15, 1}]],
-        PointSize[Clip[0.014 + 0.03 gn, {0.008, 0.06}]], Point[{wrt[[1, 1]], wrt[[2]]}]};
+    (* screen x = absoluteTime - now + x0, so onsets at `now` land on the line and scroll left *)
+    bar[gn_, band_][ev_] := With[{x1 = ev["Whole"][[1]] - ph + x0, x2 = ev["Whole"][[2]] - ph + x0, val = ev["Value"]},
+        {Opacity[Clip[0.3 + 0.7 gn, {0.12, 1}]], punchColor[blk, val],
+         Rectangle[{x1, band[[1]] + 0.05}, {x2, band[[2]] - 0.05}],
+         Text[Style[labelOf[val], fs, FontFamily -> "Source Code Pro", FontWeight -> Bold, FontColor -> labCol], {Mean[{x1, x2}], Mean[band]}]}];
     Graphics[{
-        dot @@@ # & /@ data,
-        If[highlight === None, {}, {playCol, Thickness[0.006], Line[{{Mod[highlight, nCycles], lo}, {Mod[highlight, nCycles], hi}}]}]
+        EdgeForm[LightDarkSwitched[GrayLevel[0.7, 0.5], GrayLevel[0.05, 0.5]]],
+        MapIndexed[Function[{lane, i}, bar[gainMeta[lane], {nl - First[i], nl - First[i] + 1}] /@
+            Select[patternOf[lane]["Query", ph - x0 - 1, ph + w - x0], hasOnset[#] && ! restQ[#["Value"]] && #["Whole"][[2]] > ph - x0 &]], lanes],
+        {lineCol, Thickness[0.011], Line[{{x0, 0}, {x0, Max[nl, 1]}}]}
     },
-        PlotRange -> {{0, nCycles}, {lo, hi}}, PlotRangePadding -> {Scaled[0.02], None},
+        PlotRange -> {{0, w}, {0, Max[nl, 1]}}, PlotRangeClipping -> True,
         AspectRatio -> OptionValue[AspectRatio], Background -> bg,
-        GridLines -> {Range[0, nCycles], None}, GridLinesStyle -> gridCol,
-        Frame -> True, FrameStyle -> frameCol, FrameTicks -> {{None, None}, {Range[0, nCycles], None}},
+        GridLines -> {None, Range[0, nl]}, GridLinesStyle -> gridCol,
+        Frame -> True, FrameStyle -> frameCol, FrameTicks -> None,
         ImageSize -> OptionValue[ImageSize], FilterRules[{opts}, Options[Graphics]]
     ]
 ]
@@ -769,7 +782,7 @@ visualBar[phase_, n_] := With[{x = Mod[phase, n]},
    rebuild of the whole graphic) and only the playhead / wave-Line re-rasterizes.  renderVisuals
    stacks a list of specs into a Column.  Shared (PackageScoped) so TraditionalForm matches. *)
 renderVisual["PianoRoll", pat_, n_, stream_, opts_] := Dynamic[pianoRoll[pat, n, clockPhase[n], Sequence @@ FilterRules[opts, Options[pianoRoll]]], TrackedSymbols :> {}, UpdateInterval -> 0.03]
-renderVisual["Punchcard", pat_, n_, stream_, opts_] := Dynamic[punchcard[pat, n, clockPhase[n], Sequence @@ FilterRules[opts, Options[punchcard]]], TrackedSymbols :> {}, UpdateInterval -> 0.03]
+renderVisual["Punchcard", pat_, n_, stream_, opts_] := Dynamic[punchcard[pat, n, clockPhaseRaw[], Sequence @@ FilterRules[opts, Options[punchcard]]], TrackedSymbols :> {}, UpdateInterval -> 0.03]
 renderVisual["Oscilloscope", pat_, n_, stream_, opts_] := scopeWidget[stream, Sequence @@ FilterRules[opts, Options[scopeFrame]]]
 renderVisual[_, pat_, n_, stream_, opts_] := Dynamic[visualBar[clockPhase[n], n], TrackedSymbols :> {}, UpdateInterval -> 0.03]
 renderVisuals[specs_, pat_, n_, stream_] := With[{ss = If[specs === {}, {{$DefaultVisual, {}}}, specs]},
