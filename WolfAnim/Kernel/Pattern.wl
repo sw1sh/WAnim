@@ -23,10 +23,11 @@ PackageScoped[{renderVisual, renderVisuals, visualsOf, visualOf, cyclesOf, butto
 (* cycles per second; 0.5625 cps = 135 BPM at 4 beats/cycle = TidalCycles' classic feel *)
 $CyclesPerSecond = 0.5625
 
-(* seconds to shift the visual playhead/highlight back from the audio stream's reported
-   position, to compensate output latency (what you hear lags what the stream reports).
-   Default 0 = no shift; raise it (~0.05-0.2) if the highlight flashes ahead of the sound. *)
-$AudioLatency = 0.
+(* seconds to shift the scrolling-visual "now" line back from the transport position, to
+   compensate audio-output latency (what you HEAR lags the transport by the output buffer).
+   ~0.1 is a typical AudioStream buffer; RAISE it if the line still runs ahead of the sound,
+   LOWER it (toward 0) if the line lags behind. *)
+$AudioLatency = 0.1
 
 (* default oscillator timbre for pitched notes (Sine/Triangle/Sawtooth/Square/Supersaw). *)
 $DefaultWave = "Sawtooth"
@@ -51,7 +52,9 @@ $SoloMaster = None   (* id of the track currently soloing (via double-click / So
 $SoloSaved = <||>    (* the registry entries THIS solo froze, restored verbatim on un-solo *)
 clockSeconds[] := If[$ClockStart === None, $ClockAccum, $ClockAccum + (AbsoluteTime[] - $ClockStart)]
 clockPhase[n_] := Mod[clockSeconds[] $CyclesPerSecond, n]
-clockPhaseRaw[] := clockSeconds[] $CyclesPerSecond   (* continuous, unwrapped -- for scrolling visuals *)
+(* continuous, unwrapped clock for scrolling visuals; shift back by $AudioLatency so a bar meets
+   the line when you HEAR it (output buffering delays the sound behind the transport). *)
+clockPhaseRaw[] := (clockSeconds[] - $AudioLatency) $CyclesPerSecond
 seekStream[{stream_, n_}] := Quiet[stream["Position"] = Quantity[Mod[clockPhase[n], n] / $CyclesPerSecond, "Seconds"]]
 registerStream[id_, stream_, n_] := ($Streams[id] = {stream, n}; If[$Playing, seekStream[{stream, n}]; Quiet @ AudioPlay[stream]])
 unregisterStream[id_] := ($Streams = KeyDrop[$Streams, id]; If[$SoloMaster === id, soloRestore[]];)
@@ -606,7 +609,7 @@ punchcard[patsOrTrack_, nCycles_ : 1, phase_ : None, opts : OptionsPattern[]] :=
     {ph, w, x0, lanes, nl, bg, blk, labCol, lineCol, gridCol, frameCol, fs, bar},
     ph = If[phase === None, 0., N @ phase];
     w = OptionValue["Window"] /. Automatic -> nCycles;
-    x0 = 0.16 w;   (* the fixed now-line, ~1/6 in from the left (a little past on its left) *)
+    x0 = 0.5 w;   (* the fixed now-line down the MIDDLE: past scrolls off left, future enters right *)
     lanes = Which[MatchQ[patsOrTrack, Track[_List, ___]], patsOrTrack["Voices"], MatchQ[patsOrTrack, _List], patsOrTrack, True, {patsOrTrack}];
     nl = Length[lanes];
     fs = OptionValue[FontSize];  blk = OptionValue["BlockColor"];
