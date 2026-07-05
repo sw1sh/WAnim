@@ -31,6 +31,9 @@ superimpose::usage = "superimpose = Superimpose.";
 late::usage       = "late = Late.";
 early::usage      = "early = Early.";
 gain::usage       = "gain = Gain.";
+beat::usage       = "beat = Beat (value on given step positions).";
+struct::usage     = "struct = Struct (value on each '1'/'t' step of a boolean mask).";
+punchcard::usage  = "punchcard = Punchcard (dot-grid visual, dot size/opacity = gain).";
 silence::usage    = "silence = Silence.";
 
 (* atom constructors: down-values so the heads stay introspectable for LiveCode highlighting *)
@@ -54,6 +57,9 @@ superimpose = Superimpose
 late        = Late
 early       = Early
 gain        = Gain
+beat        = Beat
+struct      = Struct
+punchcard   = Punchcard
 silence     = Silence
 
 (* let LiveCode treat these atom heads as highlightable single-token leaves *)

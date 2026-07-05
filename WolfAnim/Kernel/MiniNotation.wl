@@ -29,6 +29,7 @@ $grammar := $grammar = Module[
     element = ParseChoice[sub, alt, atom];
     modifier = ParseChoice[
         ParseAction[ParseLiteral["*"] ~~ number, Function[{st, num}, {"Fast", FromDigits[num]}]],
+        ParseAction[ParseLiteral["!"] ~~ number, Function[{st, num}, {"Repl", FromDigits[num]}]],
         ParseAction[ParseLiteral["("] ~~ number ~~ ParseLiteral[","] ~~ number ~~ ParseLiteral[")"], Function[{lp, k, cm, n, rp}, {"Euclid", FromDigits[k], FromDigits[n]}]]];
     step = ParseAction[element ~~ ParseMany[modifier],
         Function[{el, mods}, Fold[Function[{e, m}, GroupNode[m[[1]], {e}, <|"Args" -> Rest[m]|>]], el, mods]]];
@@ -50,6 +51,8 @@ ap[GroupNode["Seq", st_, _]]   := Fastcat @@ (ap /@ st)
 ap[GroupNode["Sub", {x_}, _]]  := ap[x]
 ap[GroupNode["Stack", ss_, _]] := Layer @@ (ap /@ ss)
 ap[GroupNode["Alt", st_, _]]   := Alternate @@ (ap /@ st)
+(* replicate: hh!8 = eight hh as eight separate steps in the cycle (unlike hh*8 = speed up) *)
+ap[GroupNode["Repl", {x_}, m_]]   := Fastcat @@ ConstantArray[ap[x], m["Args"][[1]]]
 ap[GroupNode["Fast", {x_}, m_]]   := Fast[m["Args"][[1]]] @ ap[x]
 ap[GroupNode["Euclid", {x_}, m_]] := Euclidean[m["Args"][[1]], m["Args"][[2]]] @ ap[x]
 ap[_] := Silence
@@ -80,6 +83,7 @@ applyChainStep[pat_, stepStr_] := With[{toks = StringSplit[stepStr]},
         "every", Every[FromDigits[toks[[2]]], chainFnOf[toks[[3]]]][pat],
         "late", Late[parseChainNum[toks[[2]]]][pat],
         "early", Early[parseChainNum[toks[[2]]]][pat],
+        "gain", Gain[parseChainNum[toks[[2]]]][pat],
         _, pat]]
 
 

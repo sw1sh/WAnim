@@ -3,7 +3,7 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Bars, Solo, TrackPlay, TrackPause, TrackReset, TrackSeek, Fastcat, LiveCode, $LiveAtomHeads}]
+PackageExported[{Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Punchcard, Beat, Struct, Bars, Solo, TrackPlay, TrackPause, TrackReset, TrackSeek, Fastcat, LiveCode, $LiveAtomHeads}]
 
 (* shared with MiniNotation.wl so the TraditionalForm can render the same live Visual *)
 PackageScoped[{renderVisual, renderVisuals, visualsOf, visualOf, cyclesOf, buttonsQ, clockPhase, seekStream, registerStream, unregisterStream, enabledQ, soloStream, soloFlagQ, frameIfDisabled, insetClicks, $Playing, $Streams}]
@@ -97,6 +97,7 @@ frameIfDisabled[id_, viz_] := If[enabledQ[id], viz,
 visInset = 0.05;
 visAspect["Oscilloscope"] = 1/3;
 visAspect["PianoRoll"] = 1/3;
+visAspect["Punchcard"] = 1/3;
 visAspect[_] = 1/24;
 visBox[viss_] := Module[{ss = If[viss === {}, {{$DefaultVisual, {}}}, viss], ws},
     ws = Lookup[Association @ #[[2]], ImageSize, 480] & /@ ss;
@@ -403,7 +404,31 @@ patternScore[Track[voices_List, ___], nCycles_] := patternScore[voices, nCycles]
 
 (* a voice carrying a wave gets oscillator synthesis; Gain scales its level *)
 Synth[wave_String][p_] := SynthVoice[wave, p]
+(* Gain on a Track stays a Track (so it still displays + chains visuals) and carries its gain as
+   metadata; on any other voice it wraps in GainVoice.  Bijection: appends " // gain g" to source. *)
+Gain[g_][p : Track[q : (_Function | _Symbol), ___]] := With[{gained = setMeta[p, "Gain", g gainMeta[p]], s = patSource[p]},
+    If[s === None, gained, setMeta[gained, "Source", s <> " // gain " <> chainNum[g]]]]
 Gain[g_][v_] := GainVoice[g, v]
+
+(* Beat[positions, steps] (Strudel .beat): place a value pattern's value at specific step positions
+   each cycle -- positions a comma-list string "0,7.3,10.2" or a list, steps = steps per cycle.
+   Struct["1 0 1 1"] (Strudel .struct) is the boolean-mask form: value on each "1"/"t" step. *)
+beatPositions[s_String] := ToExpression /@ StringSplit[s, ","]
+beatPositions[l_List] := l
+sampleValue[p_, t_] := With[{evs = Select[patternOf[p]["Query", Floor[t], Floor[t] + 1],
+    #["Whole"] =!= None && #["Whole"][[1]] <= t < #["Whole"][[2]] &]},
+    If[evs === {}, Missing[], First[evs]["Value"]]]
+beatCycle[ps_, steps_, p_, {b_, e_}] := With[{c = Floor[b]},
+    With[{ons = (c + #/steps) & /@ ps},
+        With[{nxt = Append[Rest[ons], c + 1]},
+            DeleteCases[MapThread[Function[{on, nx}, With[{val = sampleValue[p, on]},
+                If[on < e && nx > b && val =!= Missing[],
+                    <|"Value" -> val, "Whole" -> {on, nx}, "Part" -> {Max[on, b], Min[nx, e]}|>, Nothing]]],
+                {ons, nxt}], Nothing]]]]
+Beat[pos_, steps_][p_] := With[{ps = Sort[N @ beatPositions[pos]]},
+    Track[Function[span, Join @@ (beatCycle[ps, steps, p, #] & /@ spanCycles[span])]]]
+Struct[structStr_String][p_] := With[{toks = StringSplit[structStr]},
+    Beat[Flatten[Position[toks, "1" | "t" | "true"]] - 1, Length[toks]][p]]
 
 cycleSeconds[] := 1 / $CyclesPerSecond
 midiToFreq[m_] := 440. * 2 ^ ((m - 69) / 12.)
@@ -450,7 +475,7 @@ oscLayer[events_, wave_] := mix[Flatten[Function[ev,
     Function[m, AudioPad[oscNote[wave, midiToFreq[m], eventDuration[ev] cycleSeconds[]], {at[ev["Whole"][[1]]], 0}]] /@ valuePitches[ev["Value"]]
 ] /@ Select[events, valuePitches[#["Value"]] =!= {} && ! sampleQ[#["Value"]] &]]]
 
-voiceAudio[GainVoice[g_, v_], nCycles_] := AudioAmplify[voiceAudio[v, nCycles], g]
+voiceAudio[GainVoice[g_, v_], nCycles_] := voiceAudio[v, nCycles]  (* gain applied post-normalize via gainMeta *)
 voiceAudio[SynthVoice[wave_, p_], nCycles_] := fitTo[oscLayer[Select[p["Query", 0, nCycles], hasOnset], wave], nCycles]
 (* default pitched rendering uses self-contained OSCILLATORS, not MusicScore/FluidSynth: the
    external soundfont backend is slow to re-render on every live edit and was the likely source
@@ -469,8 +494,14 @@ voiceAudio[p_Track, nCycles_] := With[{ev = Select[p["Query", 0, nCycles], hasOn
    A silent voice passes through untouched (no divide-by-zero boost). *)
 normAudio[a_] := With[{pk = Quiet @ Check[QuantityMagnitude @ AudioMeasurements[a, "Max"], 0.]},
     If[NumericQ[pk] && pk > 0.0001, AudioNormalize[a], a]]
-renderAudio[Track[voices_List, ___], nCycles_] := fitDuration[mix[(normAudio @ voiceAudio[#, nCycles]) & /@ voices], nCycles cycleSeconds[]]
-renderAudio[v_, nCycles_] := normAudio @ fitTo[voiceAudio[v, nCycles], nCycles]
+(* a voice's Gain (from // Gain[g]) is applied AFTER the peak-normalize -- a gain inside voiceAudio
+   would just be undone by normAudio, which is why Gain used to be inaudible. *)
+gainMeta[Track[_, m_Association]] := Lookup[m, "Gain", 1]
+gainMeta[GainVoice[g_, v_]] := g gainMeta[v]
+gainMeta[_] := 1
+voiceRendered[v_, nCycles_] := AudioAmplify[normAudio @ voiceAudio[v, nCycles], gainMeta[v]]
+renderAudio[t : Track[voices_List, ___], nCycles_] := AudioAmplify[fitDuration[mix[voiceRendered[#, nCycles] & /@ voices], nCycles cycleSeconds[]], gainMeta[t]]
+renderAudio[v_, nCycles_] := fitTo[voiceRendered[v, nCycles], nCycles]
 
 Track /: Audio[p_Track, nCycles_ : 1] := renderAudio[p, nCycles]
 Track /: MusicPlot[p_Track, nCycles_ : 1, opts___] := MusicPlot[patternScore[p, nCycles], opts]
@@ -558,6 +589,40 @@ pianoRoll[patsOrTrack_, nCycles_ : 1, highlight_ : None, opts : OptionsPattern[]
 
 Track[q : (_Function | _Symbol), ___]["PianoRoll", nCycles_ : 1, opts : OptionsPattern[pianoRoll]] := pianoRoll[Track[q], nCycles, None, opts]
 Track[voices_List, ___]["PianoRoll", nCycles_ : 1, opts : OptionsPattern[pianoRoll]] := pianoRoll[Track[voices], nCycles, None, opts]
+
+(* Punchcard (Strudel's .punchcard): each onset is a DOT on the time x pitch grid, its size +
+   opacity riding the voice's gain -- so // Gain[g] visibly dims/shrinks the dots. *)
+Options[punchcard] = {Background -> Automatic, "DotColor" -> Automatic, "PlayheadColor" -> Automatic,
+    "GridColor" -> Automatic, FrameStyle -> Automatic, AspectRatio -> 1/3, ImageSize -> 480};
+punchcard[patsOrTrack_, nCycles_ : 1, highlight_ : None, opts : OptionsPattern[]] := Module[
+    {lanes, hues, data, mids, lo, hi, bg, dotCol, playCol, gridCol, frameCol, dot},
+    lanes = Which[MatchQ[patsOrTrack, Track[_List, ___]], patsOrTrack["Voices"], MatchQ[patsOrTrack, _List], patsOrTrack, True, {patsOrTrack}];
+    hues = If[Length[lanes] == 1, {0.58}, Range[0, Length[lanes] - 1]/Length[lanes]];
+    data = MapThread[Function[{lane, hue}, {hue, gainMeta[lane], #} & /@ rollData[lane, nCycles]], {lanes, hues}];
+    mids = Cases[Flatten[data, 1][[All, 3, 2]], _Integer];
+    If[mids === {}, Return[Graphics[{}, ImageSize -> OptionValue[ImageSize]]]];
+    lo = Min[mids] - 2; hi = Max[mids] + 2;
+    bg       = OptionValue[Background]      /. Automatic -> LightDarkSwitched[GrayLevel[0.96], GrayLevel[0.11]];
+    dotCol   = OptionValue["DotColor"];
+    playCol  = OptionValue["PlayheadColor"] /. Automatic -> LightDarkSwitched[RGBColor[0.15, 0.15, 0.2, 0.85], GrayLevel[1, 0.85]];
+    gridCol  = OptionValue["GridColor"]     /. Automatic -> LightDarkSwitched[GrayLevel[0.8], GrayLevel[0.28]];
+    frameCol = OptionValue[FrameStyle]      /. Automatic -> LightDarkSwitched[GrayLevel[0.6], GrayLevel[0.4]];
+    dot[hue_, gn_, wrt_] := {blockColor[dotCol, hue], Opacity[Clip[0.35 + 0.65 gn, {0.15, 1}]],
+        PointSize[Clip[0.014 + 0.03 gn, {0.008, 0.06}]], Point[{wrt[[1, 1]], wrt[[2]]}]};
+    Graphics[{
+        dot @@@ # & /@ data,
+        If[highlight === None, {}, {playCol, Thickness[0.006], Line[{{Mod[highlight, nCycles], lo}, {Mod[highlight, nCycles], hi}}]}]
+    },
+        PlotRange -> {{0, nCycles}, {lo, hi}}, PlotRangePadding -> {Scaled[0.02], None},
+        AspectRatio -> OptionValue[AspectRatio], Background -> bg,
+        GridLines -> {Range[0, nCycles], None}, GridLinesStyle -> gridCol,
+        Frame -> True, FrameStyle -> frameCol, FrameTicks -> {{None, None}, {Range[0, nCycles], None}},
+        ImageSize -> OptionValue[ImageSize], FilterRules[{opts}, Options[Graphics]]
+    ]
+]
+(* pass the WHOLE track (keep its Gain metadata) so dot size/opacity reflects // Gain[g] *)
+(t : Track[_Function | _Symbol, ___])["Punchcard", nCycles_ : 1, opts : OptionsPattern[punchcard]] := punchcard[t, nCycles, None, opts]
+(t : Track[_List, ___])["Punchcard", nCycles_ : 1, opts : OptionsPattern[punchcard]] := punchcard[t, nCycles, None, opts]
 
 (* live: loop the rendered bar through an AudioStream and scrub the playhead across the
    piano roll from the stream's true position (the master clock).  Returns a Dynamic. *)
@@ -663,6 +728,8 @@ PianoRoll[p_Track, opts___] := setVisual[p, "PianoRoll", {opts}]
 Oscilloscope[p_Track, opts___] := setVisual[p, "Oscilloscope", {opts}]
 PianoRoll[opts : OptionsPattern[]][p_Track] := setVisual[p, "PianoRoll", {opts}]
 Oscilloscope[opts : OptionsPattern[]][p_Track] := setVisual[p, "Oscilloscope", {opts}]
+Punchcard[p_Track, opts___] := setVisual[p, "Punchcard", {opts}]
+Punchcard[opts : OptionsPattern[]][p_Track] := setVisual[p, "Punchcard", {opts}]
 Track[_, m_Association]["Visual"] := Lookup[m, "Visuals", {{"Bar"}}][[1, 1]]
 Track[_]["Visual"] := "Bar"
 
@@ -702,6 +769,7 @@ visualBar[phase_, n_] := With[{x = Mod[phase, n]},
    rebuild of the whole graphic) and only the playhead / wave-Line re-rasterizes.  renderVisuals
    stacks a list of specs into a Column.  Shared (PackageScoped) so TraditionalForm matches. *)
 renderVisual["PianoRoll", pat_, n_, stream_, opts_] := Dynamic[pianoRoll[pat, n, clockPhase[n], Sequence @@ FilterRules[opts, Options[pianoRoll]]], TrackedSymbols :> {}, UpdateInterval -> 0.03]
+renderVisual["Punchcard", pat_, n_, stream_, opts_] := Dynamic[punchcard[pat, n, clockPhase[n], Sequence @@ FilterRules[opts, Options[punchcard]]], TrackedSymbols :> {}, UpdateInterval -> 0.03]
 renderVisual["Oscilloscope", pat_, n_, stream_, opts_] := scopeWidget[stream, Sequence @@ FilterRules[opts, Options[scopeFrame]]]
 renderVisual[_, pat_, n_, stream_, opts_] := Dynamic[visualBar[clockPhase[n], n], TrackedSymbols :> {}, UpdateInterval -> 0.03]
 renderVisuals[specs_, pat_, n_, stream_] := With[{ss = If[specs === {}, {{$DefaultVisual, {}}}, specs]},
