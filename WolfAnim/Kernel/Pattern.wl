@@ -56,15 +56,37 @@ clockPhase[n_] := Mod[clockSeconds[] $CyclesPerSecond, n]
 clockPhaseRaw[] := (clockSeconds[] - $AudioLatency) $CyclesPerSecond
 visPhase[n_] := Mod[clockPhaseRaw[], n]   (* wrapped + latency-compensated: what every visual shows, so the playhead matches the HEARD sound (seekStream still uses the raw clockPhase for the stream position) *)
 seekStream[{stream_, n_}] := Quiet[stream["Position"] = Quantity[Mod[clockPhase[n], n] / $CyclesPerSecond, "Seconds"]]
+
+(* DRIFT KILLER -- the AUDIO is the master clock.  Two measured facts (see git log): (a) AudioPlay
+   starts the device asynchronously, so every pause/resume leaks a ~0.1-0.2s startup gap; (b) even
+   while playing steadily, the stream's position falls behind the AbsoluteTime-based transport.
+   Net: all visuals + the highlight creep AHEAD of the sound, worse with each pause.  So a
+   watchdog SLEWS THE TRANSPORT to the first stream's actual position (visuals follow instantly;
+   the sound is never yanked, so no audible skip) and hard-seeks any OTHER stream that strays.
+   All kernel-side scheduled tasks -- never polled from the FE Dynamic (that used to freeze the FE). *)
+$ResyncTask = None
+(* transport-minus-stream, in seconds, wrapped circularly into (-total/2, total/2]; 0. if unreadable *)
+signedDrift[{stream_, n_}] := With[{pos = Quiet @ stream["Position"], total = n / $CyclesPerSecond},
+    If[! QuantityQ[pos], 0.,
+        With[{raw = Mod[clockPhase[n], n] / $CyclesPerSecond - QuantityMagnitude[pos]},
+            raw - total Round[raw / total]]]]
+streamDrift[sn_] := Abs[signedDrift[sn]]
+resyncCheck[] := If[$Playing && Length[$Streams] > 0,
+    With[{d = signedDrift[First @ Values @ $Streams]},
+        If[Abs[d] > 0.04, $ClockAccum -= d]];                          (* clock follows the audio *)
+    Scan[Function[sn, If[streamDrift[sn] > 0.06, seekStream[sn]]], Rest @ Values @ $Streams]]
+resyncSoon[] := Quiet @ SessionSubmit[ScheduledTask[resyncCheck[], {0.4}]]
+ensureResyncTask[] := If[$ResyncTask === None, $ResyncTask = Quiet @ SessionSubmit[ScheduledTask[resyncCheck[], 1.]]]
+
 (* a just-created AudioStream may ignore a Position set before it is ready and then play from 0 --
    desynced from the transport, e.g. when a StandardForm<->TraditionalForm switch spawns a fresh
-   stream.  Seek, play, then RE-seek once it is running so it always lands on the transport. *)
-registerStream[id_, stream_, n_] := ($Streams[id] = {stream, n}; If[$Playing, seekStream[{stream, n}]; Quiet @ AudioPlay[stream]; seekStream[{stream, n}]])
+   stream.  Play FIRST, then seek, then re-seek once it is really rolling (resyncSoon). *)
+registerStream[id_, stream_, n_] := ($Streams[id] = {stream, n}; If[$Playing, Quiet @ AudioPlay[stream]; seekStream[{stream, n}]; resyncSoon[]])
 unregisterStream[id_] := ($Streams = KeyDrop[$Streams, id]; If[$SoloMaster === id, soloRestore[]];)
 (* user-facing global transport (exported): act on every registered stream at once.
    TrackPlay[]/TrackPause[] run/halt the shared clock; TrackSeek[cyclePos] jumps the whole
    transport to a cycle position (seeking every stream there); TrackReset[] == TrackSeek[0]. *)
-TrackPlay[]  := (If[$ClockStart === None, $ClockStart = AbsoluteTime[]]; $Playing = True; Scan[Function[sn, seekStream[sn]; Quiet @ AudioPlay[First @ sn]], Values @ $Streams])
+TrackPlay[]  := (If[$ClockStart === None, $ClockStart = AbsoluteTime[]]; $Playing = True; Scan[Function[sn, Quiet @ AudioPlay[First @ sn]; seekStream[sn]], Values @ $Streams]; resyncSoon[]; ensureResyncTask[])
 TrackPause[] := (If[$ClockStart =!= None, $ClockAccum += AbsoluteTime[] - $ClockStart; $ClockStart = None]; $Playing = False; Scan[Function[sn, Quiet @ AudioPause[First @ sn]], Values @ $Streams])
 TrackSeek[pos_] := ($ClockAccum = pos / $CyclesPerSecond; $ClockStart = If[$Playing, AbsoluteTime[], None]; Scan[Function[sn, seekStream[sn]; If[$Playing, Quiet @ AudioPlay[First @ sn]]], Values @ $Streams])
 TrackReset[] := TrackSeek[0]
@@ -78,8 +100,8 @@ TrackReset[] := TrackSeek[0]
 enabledQ[id_] := KeyExistsQ[$Streams, id]
 soloRestore[] := (
     Scan[Function[k, $Streams[k] = $SoloSaved[k];
-        If[$Playing, seekStream[$SoloSaved[k]]; Quiet @ AudioPlay[First @ $SoloSaved[k]]]], Keys @ $SoloSaved];
-    $SoloSaved = <||>; $SoloMaster = None)
+        If[$Playing, Quiet @ AudioPlay[First @ $SoloSaved[k]]; seekStream[$SoloSaved[k]]]], Keys @ $SoloSaved];
+    $SoloSaved = <||>; $SoloMaster = None; resyncSoon[])
 soloStream[id_, stream_, n_] := If[$SoloMaster === id,
     soloRestore[],   (* 2nd double-click on the soloing track -> un-solo, thaw only its victims *)
     (If[$SoloMaster =!= None, soloRestore[]];     (* switching solo -> undo the previous one first *)
@@ -89,7 +111,7 @@ soloStream[id_, stream_, n_] := If[$SoloMaster === id,
         Scan[Function[k, Quiet @ AudioStop[First @ $Streams[k]]], victims]];
      $Streams = <|id -> {stream, n}|>; $SoloMaster = id;
      If[$ClockStart === None, $ClockStart = AbsoluteTime[]]; $Playing = True;
-     seekStream[{stream, n}]; Quiet @ AudioPlay[stream])]
+     Quiet @ AudioPlay[stream]; seekStream[{stream, n}]; resyncSoon[])]
 (* disabled tracks are wrapped in a thick red frame so they read as muted at a glance *)
 frameIfDisabled[id_, viz_] := If[enabledQ[id], viz,
     Framed[viz, FrameStyle -> Directive[RGBColor[1, 0.25, 0.25], AbsoluteThickness[3]], FrameMargins -> 5, RoundingRadius -> 7, Background -> None]]
