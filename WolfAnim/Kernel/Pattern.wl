@@ -71,11 +71,16 @@ signedDrift[{stream_, n_}] := With[{pos = Quiet @ stream["Position"], total = n 
         With[{raw = Mod[clockPhase[n], n] / $CyclesPerSecond - QuantityMagnitude[pos]},
             raw - total Round[raw / total]]]]
 streamDrift[sn_] := Abs[signedDrift[sn]]
-resyncCheck[] := If[$Playing && Length[$Streams] > 0,
+(* snap=True (right after a resume, where a jump is expected) corrects the full drift at once;
+   the steady-state watchdog instead SLEWS in <=35ms steps -- Position readback is noisy, and
+   full-drift corrections every second made all the visuals visibly jump. *)
+resyncCheck[snap_ : False] := If[$Playing && Length[$Streams] > 0,
     With[{d = signedDrift[First @ Values @ $Streams]},
-        If[Abs[d] > 0.04, $ClockAccum -= d]];                          (* clock follows the audio *)
+        Which[
+            snap && Abs[d] > 0.02, $ClockAccum -= d,                   (* clock follows the audio *)
+            Abs[d] > 0.045, $ClockAccum -= Clip[d, {-0.035, 0.035}]]];
     Scan[Function[sn, If[streamDrift[sn] > 0.06, seekStream[sn]]], Rest @ Values @ $Streams]]
-resyncSoon[] := Quiet @ SessionSubmit[ScheduledTask[resyncCheck[], {0.4}]]
+resyncSoon[] := Quiet @ SessionSubmit[ScheduledTask[resyncCheck[True], {0.4}]]
 ensureResyncTask[] := If[$ResyncTask === None, $ResyncTask = Quiet @ SessionSubmit[ScheduledTask[resyncCheck[], 1.]]]
 
 (* a just-created AudioStream may ignore a Position set before it is ready and then play from 0 --
@@ -554,10 +559,12 @@ rollData[v_, nCycles_] := With[{evs = Select[patternOf[v]["Query", 0, nCycles], 
    every default is overridable via the options below (FontSize, Background, BlockColor,
    LabelColor, PlayheadColor, GridColor, FrameStyle, AspectRatio, ImageSize), and any extra
    Graphics options pass through. *)
+(* "LiveCycles" -> n makes the playhead an inner Dynamic line over the ONCE-built blocks, so the
+   FE re-rasterizes only the line each frame instead of re-typesetting the whole roll (fps). *)
 Options[pianoRoll] = {
     FontSize -> 9, Background -> Automatic, "BlockColor" -> Automatic, "LabelColor" -> Automatic,
     "PlayheadColor" -> Automatic, "GridColor" -> Automatic, FrameStyle -> Automatic,
-    AspectRatio -> 1/3, ImageSize -> 480
+    AspectRatio -> 1/3, ImageSize -> 480, "LiveCycles" -> None
 };
 blockColor[Automatic, hue_] := LightDarkSwitched[Hue[hue, 0.7, 0.7], Hue[hue, 0.55, 0.95]]
 blockColor[c_, _] := c
@@ -585,7 +592,13 @@ pianoRoll[patsOrTrack_, nCycles_ : 1, highlight_ : None, opts : OptionsPattern[]
                 lab[wrt[[3]], {Mean[wrt[[1]]], wrt[[2]]}]
             }] @@@ laneData
         ], {data, If[Length[lanes] == 1, {0.58}, Range[0, Length[lanes] - 1]/Length[lanes]]}],
-        If[highlight === None, {}, {playCol, Thickness[0.006], Line[{{Mod[highlight, nCycles], lo}, {Mod[highlight, nCycles], hi}}]}]
+        Which[
+            OptionValue["LiveCycles"] =!= None,
+            With[{nn = OptionValue["LiveCycles"], pc = playCol, l = lo, h = hi},
+                Dynamic[{pc, Thickness[0.006], Line[{{visPhase[nn], l}, {visPhase[nn], h}}]},
+                    TrackedSymbols :> {}, UpdateInterval -> 0.03]],
+            highlight === None, {},
+            True, {playCol, Thickness[0.006], Line[{{Mod[highlight, nCycles], lo}, {Mod[highlight, nCycles], hi}}]}]
     },
         PlotRange -> {{0, nCycles}, {lo, hi}}, AspectRatio -> OptionValue[AspectRatio], Background -> bg,
         GridLines -> {Range[0, nCycles], None}, GridLinesStyle -> gridCol,
@@ -605,11 +618,16 @@ Track[voices_List, ___]["PianoRoll", nCycles_ : 1, opts : OptionsPattern[pianoRo
 valueHue[v_] := Mod[Hash[v], 997]/997.   (* integer mod FIRST -- Hash is ~10^18, so scaling it as a float loses all fractional precision *)
 punchColor[Automatic, v_] := LightDarkSwitched[Hue[valueHue[v], 0.55, 0.78], Hue[valueHue[v], 0.5, 0.95]]
 punchColor[c_, _] := c
+(* "LiveCycles" -> n: bars are built ONCE (in absolute-time coords, one pattern period padded on
+   both sides) and an inner Dynamic merely TRANSLATES them each frame -- the FE re-rasterizes one
+   transformed layer instead of re-querying + re-typesetting the whole card (fps).  Since the
+   pattern repeats every n cycles, translating by the WRAPPED phase is seamless at the loop. *)
 Options[punchcard] = {FontSize -> 9, Background -> Automatic, "BlockColor" -> Automatic, "LabelColor" -> Automatic,
     "PlayheadColor" -> Automatic, "GridColor" -> Automatic, FrameStyle -> Automatic, AspectRatio -> 1/4,
-    ImageSize -> 480, "Window" -> Automatic};
+    ImageSize -> 480, "Window" -> Automatic, "LiveCycles" -> None};
 punchcard[patsOrTrack_, nCycles_ : 1, phase_ : None, opts : OptionsPattern[]] := Module[
-    {ph, w, x0, lanes, nl, bg, blk, labCol, lineCol, gridCol, frameCol, fs, bar},
+    {live, ph, w, x0, lanes, nl, bg, blk, labCol, lineCol, gridCol, frameCol, fs, bar, span, prims, moving},
+    live = OptionValue["LiveCycles"] =!= None;
     ph = If[phase === None, 0., N @ phase];
     w = OptionValue["Window"] /. Automatic -> nCycles;
     x0 = 0.5 w;   (* the fixed now-line down the MIDDLE: past scrolls off left, future enters right *)
@@ -621,15 +639,22 @@ punchcard[patsOrTrack_, nCycles_ : 1, phase_ : None, opts : OptionsPattern[]] :=
     lineCol  = OptionValue["PlayheadColor"] /. Automatic -> LightDarkSwitched[RGBColor[0.85, 0.2, 0.2], RGBColor[1, 0.9, 0.35]];
     gridCol  = OptionValue["GridColor"]     /. Automatic -> LightDarkSwitched[GrayLevel[0.82], GrayLevel[0.25]];
     frameCol = OptionValue[FrameStyle]      /. Automatic -> LightDarkSwitched[GrayLevel[0.6], GrayLevel[0.4]];
-    (* screen x = absoluteTime - now + x0, so onsets at `now` land on the line and scroll left *)
-    bar[gn_, band_][ev_] := With[{x1 = ev["Whole"][[1]] - ph + x0, x2 = ev["Whole"][[2]] - ph + x0, val = ev["Value"]},
+    (* bars in ABSOLUTE time coords; a translation puts `now` on the line (screen x = t - now + x0) *)
+    bar[gn_, band_][ev_] := With[{x1 = ev["Whole"][[1]], x2 = ev["Whole"][[2]], val = ev["Value"]},
         {Opacity[Clip[0.3 + 0.7 gn, {0.12, 1}]], punchColor[blk, val],
          Rectangle[{x1, band[[1]] + 0.05}, {x2, band[[2]] - 0.05}],
          Text[Style[labelOf[val], fs, FontFamily -> "Source Code Pro", FontWeight -> Bold, FontColor -> labCol], {Mean[{x1, x2}], Mean[band]}]}];
+    span = If[live, {-(nCycles + 1), w + nCycles + 1}, {ph - x0 - 1, ph + w - x0}];
+    prims = MapIndexed[Function[{lane, i}, bar[gainMeta[lane], {nl - First[i], nl - First[i] + 1}] /@
+        Select[patternOf[lane]["Query", span[[1]], span[[2]]], hasOnset[#] && ! restQ[#["Value"]] &]], lanes];
+    moving = If[live,
+        With[{nn = OptionValue["LiveCycles"], xx0 = x0, pr = prims},
+            Dynamic[GeometricTransformation[pr, TranslationTransform[{xx0 - visPhase[nn], 0}]],
+                TrackedSymbols :> {}, UpdateInterval -> 0.03]],
+        GeometricTransformation[prims, TranslationTransform[{x0 - ph, 0}]]];
     Graphics[{
         EdgeForm[LightDarkSwitched[GrayLevel[0.7, 0.5], GrayLevel[0.05, 0.5]]],
-        MapIndexed[Function[{lane, i}, bar[gainMeta[lane], {nl - First[i], nl - First[i] + 1}] /@
-            Select[patternOf[lane]["Query", ph - x0 - 1, ph + w - x0], hasOnset[#] && ! restQ[#["Value"]] && #["Whole"][[2]] > ph - x0 &]], lanes],
+        moving,
         {lineCol, Thickness[0.011], Line[{{x0, 0}, {x0, Max[nl, 1]}}]}
     },
         PlotRange -> {{0, w}, {0, Max[nl, 1]}}, PlotRangeClipping -> True,
@@ -774,23 +799,26 @@ Solo[p_Track] := setMeta[p, "Solo", True]
 soloFlagQ[Track[_, m_Association]] := TrueQ @ Lookup[m, "Solo", False]
 soloFlagQ[_] := False
 
-(* the default Visual: a simple clickable progress bar with a playhead *)
-visualBar[phase_, n_] := With[{x = Mod[phase, n]},
-    Graphics[{
-        GrayLevel[0.25], Rectangle[{0, 0}, {n, 1}],
-        Hue[0.57, 0.45, 0.6], Rectangle[{0, 0}, {x, 1}],
-        Hue[0.54, 0.85, 1], Rectangle[{x - 0.007 n, 0}, {x + 0.007 n, 1}]
+(* the default Visual: a simple clickable progress bar with a playhead.  Static shell; only the
+   progress + playhead rectangles ride an inner Dynamic (fps). *)
+visualBar[phase_, n_] := visualBarShell[barCursor[Mod[phase, n], n], n]
+visualBarShell[cursor_, n_] := Graphics[{
+        GrayLevel[0.25], Rectangle[{0, 0}, {n, 1}], cursor
     }, PlotRange -> {{0, n}, {0, 1}}, AspectRatio -> 1/24, ImageSize -> 480, Background -> GrayLevel[0.13],
-        ImagePadding -> 1, Frame -> True, FrameTicks -> None, FrameStyle -> GrayLevel[0.3]]]
+        ImagePadding -> 1, Frame -> True, FrameTicks -> None, FrameStyle -> GrayLevel[0.3]]
+barCursor[x_, n_] := {Hue[0.57, 0.45, 0.6], Rectangle[{0, 0}, {x, 1}],
+    Hue[0.54, 0.85, 1], Rectangle[{x - 0.007 n, 0}, {x + 0.007 n, 1}]}
+visualBarLive[n_] := visualBarShell[Dynamic[barCursor[visPhase[n], n], TrackedSymbols :> {}, UpdateInterval -> 0.03], n]
 
-(* render one visual (name + its options) as a SELF-UPDATING widget: each reads the clock / stream
-   itself on its own UpdateInterval, so the host player builds the visual ONCE (no per-frame
-   rebuild of the whole graphic) and only the playhead / wave-Line re-rasterizes.  renderVisuals
-   stacks a list of specs into a Column.  Shared (PackageScoped) so TraditionalForm matches. *)
-renderVisual["PianoRoll", pat_, n_, stream_, opts_] := Dynamic[pianoRoll[pat, n, visPhase[n], Sequence @@ FilterRules[opts, Options[pianoRoll]]], TrackedSymbols :> {}, UpdateInterval -> 0.03]
-renderVisual["Punchcard", pat_, n_, stream_, opts_] := Dynamic[punchcard[pat, n, clockPhaseRaw[], Sequence @@ FilterRules[opts, Options[punchcard]]], TrackedSymbols :> {}, UpdateInterval -> 0.03]
+(* render one visual (name + its options) as a shell built ONCE with only its MOVING part on an
+   inner Dynamic -- the playhead line (roll), the translated bar strip (punchcard), the wave Line
+   (scope), the progress cursor (bar).  The FE re-rasterizes just that primitive each frame instead
+   of re-typesetting the whole graphic: this is the fps.  renderVisuals stacks a list of specs into
+   a Column.  Shared (PackageScoped) so TraditionalForm matches. *)
+renderVisual["PianoRoll", pat_, n_, stream_, opts_] := pianoRoll[pat, n, None, "LiveCycles" -> n, Sequence @@ FilterRules[opts, Options[pianoRoll]]]
+renderVisual["Punchcard", pat_, n_, stream_, opts_] := punchcard[pat, n, None, "LiveCycles" -> n, Sequence @@ FilterRules[opts, Options[punchcard]]]
 renderVisual["Oscilloscope", pat_, n_, stream_, opts_] := scopeWidget[stream, Sequence @@ FilterRules[opts, Options[scopeFrame]]]
-renderVisual[_, pat_, n_, stream_, opts_] := Dynamic[visualBar[visPhase[n], n], TrackedSymbols :> {}, UpdateInterval -> 0.03]
+renderVisual[_, pat_, n_, stream_, opts_] := visualBarLive[n]
 renderVisuals[specs_, pat_, n_, stream_] := With[{ss = If[specs === {}, {{$DefaultVisual, {}}}, specs]},
     If[Length[ss] == 1,
         renderVisual[ss[[1, 1]], pat, n, stream, ss[[1, 2]]],
