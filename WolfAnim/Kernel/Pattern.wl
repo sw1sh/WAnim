@@ -3,10 +3,10 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Punchcard, Beat, Struct, Bars, Solo, TrackPlay, TrackPause, TrackReset, TrackSeek, Fastcat, LiveCode, $LiveAtomHeads}]
+PackageExported[{Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Punchcard, Beat, Struct, Pan, Delay, Room, Dec, Duck, InScale, $Scales, Bars, Solo, TrackPlay, TrackPause, TrackReset, TrackSeek, Fastcat, LiveCode, $LiveAtomHeads}]
 
 (* shared with MiniNotation.wl so the TraditionalForm can render the same live Visual *)
-PackageScoped[{renderVisual, renderVisuals, visualsOf, visualOf, cyclesOf, buttonsQ, clockPhase, visPhase, seekStream, registerStream, unregisterStream, enabledQ, soloStream, soloFlagQ, frameIfDisabled, $Playing, $Streams}]
+PackageScoped[{renderVisual, renderVisuals, visualsOf, visualOf, cyclesOf, buttonsQ, clockPhase, visPhase, seekStream, registerStream, unregisterStream, enabledQ, soloStream, soloFlagQ, frameIfDisabled, timecat, $Playing, $Streams}]
 
 
 
@@ -230,7 +230,21 @@ alternateCycle[pats_, n_, {b_, e_}] := With[{c = sam[b]},
 
 (* within-cycle sequence (mini-notation spaces): fast[n] of slowcat *)
 fastcatList[{p_}] := p
-fastcatList[ps_List] := Fast[Length[ps]][Alternate @@ ps]
+fastcatList[ps_List] := timecat[{1, #} & /@ ps]
+
+(* timecat (Tidal): concatenate patterns within ONE cycle, each taking a slot proportional to its
+   weight.  In every output cycle c, child i's cycle-c content is affinely squeezed into its slot
+   [c + b_i, c + e_i] -- so a nested <a b> still alternates per OUTPUT cycle.  All-rational when
+   the query and weights are (weights are parser integers), preserving exact event times. *)
+timecat[{{_, p_}}] := p
+timecat[items_List] := With[{ws = items[[All, 1]], ps = items[[All, 2]]},
+    With[{bounds = Accumulate[Prepend[ws, 0]] / Total[ws]},
+        Track[Function[span, Join @@ MapThread[catSlice[#1, #2, #3, span] &, {ps, Most[bounds], Rest[bounds]}]]]]]
+catSlice[p_, b_, e_, span_] := Join @@ (Function[piece, With[{c = sam[piece[[1]]]},
+    With[{sb = Max[piece[[1]], c + b], se = Min[piece[[2]], c + e]},
+        If[sb >= se, {},
+            With[{toC = Function[t, c + (t - c - b)/(e - b)], fromC = Function[t, c + b + (t - c) (e - b)]},
+                mapEventTime[fromC] /@ p["Query", toC[sb], toC[se]]]]]]] /@ spanCycles[span])
 
 (* Every[n, f] applies transform f only on cycles where Mod[cycle, n] == 0 *)
 Every[n_, f_][p : Track[q : (_Function | _Symbol), ___]] := chain[p, "every " <> ToString[n] <> " " <> chainFnName[f],
@@ -422,6 +436,48 @@ Gain[g_][p : Track[q : (_Function | _Symbol), ___]] := With[{gained = setMeta[p,
     If[s === None, gained, setMeta[gained, "Source", s <> " // gain " <> chainNum[g]]]]
 Gain[g_][v_] := GainVoice[g, v]
 
+(* per-track FX chain (Strudel-style): stored in metadata, applied post-render by voiceRendered.
+   All chain postfix and keep the source bijection:  Track["bd:3!4"] // Dec[.3] // Pan[-.5].
+   Pan[-1..1]; Delay[t, feedback]; Room[wet mix]; Dec[seconds] (note decay, synthesis-level);
+   Duck[trigger, depth, attack] sidechains this track to another pattern's onsets (no source
+   frag -- the trigger has no string form). *)
+metaChain[p_, frag_, pNew_] := With[{s = patSource[p]}, If[s === None, pNew, setMeta[pNew, "Source", s <> " // " <> frag]]]
+fxOf[Track[_, m_Association]] := Lookup[m, "FX", {}]
+fxOf[GainVoice[_, v_]] := fxOf[v]
+fxOf[_] := {}
+decayOf[Track[_, m_Association]] := Lookup[m, "Decay", None]
+decayOf[GainVoice[_, v_]] := decayOf[v]
+decayOf[_] := None
+duckOf[Track[_, m_Association]] := Lookup[m, "Duck", None]
+duckOf[GainVoice[_, v_]] := duckOf[v]
+duckOf[_] := None
+Pan[x_][p_Track] := metaChain[p, "pan " <> chainNum[x], setMeta[p, "FX", Append[fxOf[p], {"Pan", N @ x}]]]
+Delay[t_][p_Track] := Delay[t, 0.5][p]
+Delay[t_, fb_][p_Track] := metaChain[p, "delay " <> chainNum[t] <> " " <> chainNum[fb], setMeta[p, "FX", Append[fxOf[p], {"Delay", N @ t, N @ fb}]]]
+Room[m_][p_Track] := metaChain[p, "room " <> chainNum[m], setMeta[p, "FX", Append[fxOf[p], {"Room", N @ m}]]]
+Dec[d_][p_Track] := metaChain[p, "dec " <> chainNum[d], setMeta[p, "Decay", N @ d]]
+Duck[trig_Track, depth_ : 0.7, att_ : 0.25][p_Track] := setMeta[p, "Duck", {trig, N @ depth, N @ att}]
+
+(* InScale["c:minor"] (Strudel .scale/.sc): integer values become scale DEGREES -- 0 = the root,
+   negative = below, octaves wrap.  (Named InScale: System`Scale is taken.) *)
+$Scales = <|"major" -> {0, 2, 4, 5, 7, 9, 11}, "ionian" -> {0, 2, 4, 5, 7, 9, 11},
+    "minor" -> {0, 2, 3, 5, 7, 8, 10}, "aeolian" -> {0, 2, 3, 5, 7, 8, 10},
+    "dorian" -> {0, 2, 3, 5, 7, 9, 10}, "phrygian" -> {0, 1, 3, 5, 7, 8, 10},
+    "lydian" -> {0, 2, 4, 6, 7, 9, 11}, "mixolydian" -> {0, 2, 4, 5, 7, 9, 10},
+    "locrian" -> {0, 1, 3, 5, 6, 8, 10}, "majpent" -> {0, 2, 4, 7, 9}, "minpent" -> {0, 3, 5, 7, 10}|>
+parseScaleSpec[spec_String] := With[{parts = StringSplit[ToLowerCase @ spec, ":"]},
+    With[{root = If[StringContainsQ[parts[[1]], DigitCharacter], parts[[1]], parts[[1]] <> "4"]},
+        {Quiet @ Check[MusicPitch[root]["MIDINumber"], 60],
+         Lookup[$Scales, If[Length[parts] > 1, parts[[2]], "major"], $Scales["major"]]}]]
+degreeMidi[root_, ints_][d_Integer] := root + 12 Quotient[d, Length[ints]] + ints[[Mod[d, Length[ints]] + 1]]
+scaleValue[root_, ints_][v_Integer] := degreeMidi[root, ints][v]
+scaleValue[root_, ints_][v_String] := With[{d = Quiet @ Check[ToExpression[v], $Failed]},
+    If[IntegerQ[d], degreeMidi[root, ints][d], v]]
+scaleValue[_, _][v_] := v
+mapValues[f_][Track[q : (_Function | _Symbol), ___]] := Track[Function[span, (<|#, "Value" -> f[#["Value"]]|>) & /@ q[span]]]
+InScale[spec_String][p : Track[(_Function | _Symbol), ___]] := With[{ri = parseScaleSpec[spec]},
+    chain[p, "sc " <> spec, mapValues[scaleValue[ri[[1]], ri[[2]]]][p]]]
+
 (* Beat[positions, steps] (Strudel .beat): place a value pattern's value at specific step positions
    each cycle -- positions a comma-list string "0,7.3,10.2" or a list, steps = steps per cycle.
    Struct["1 0 1 1"] (Strudel .struct) is the boolean-mask form: value on each "1"/"t" step. *)
@@ -475,27 +531,37 @@ synthDrum[v_] := synthDrum[v] = AudioNormalize @ Switch[ToLowerCase[v],
     "rim" | "rs" | "cl", perc[AudioGenerator[{"Sine", 330}, 0.04], 0.035],
     "tom" | "lt" | "mt" | "ht" | "t", perc[AudioGenerator[{"Sine", 120}, 0.18], 0.16],
     _, perc[AudioGenerator["White", 0.05], 0.045]]
-drumSound[v_] := If[sampleQ[v], $SampleBank[v], synthDrum[v]]
+(* "bd:3" (Strudel sample-index): use the exact key when loaded, else the base sample, else the
+   base synth drum -- so indexed tokens always sound even with no variant bank. *)
+sampleBase[v_String] := First @ StringSplit[v, ":"]
+sampleBase[v_] := v
+drumSound[v_] := Which[sampleQ[v], $SampleBank[v],
+    StringQ[v] && sampleQ[sampleBase[v]], $SampleBank[sampleBase[v]],
+    True, synthDrum[ToString @ sampleBase[v]]]
+(* dec: shorten a sound to d seconds with a fade -- the Strudel .dec envelope *)
+shorten[a_, None] := a
+shorten[a_, d_] := If[QuantityMagnitude @ Duration[a] <= d, a,
+    AudioFade[AudioTrim[a, Quantity[d + 0.02, "Seconds"]], {0, Min[0.05, 0.5 d]}]]
 (* drum/percussion events (a loaded sample, or any non-pitch token) placed at their onsets *)
-sampleLayer[events_] := mix[AudioPad[drumSound[#["Value"]], {at[#["Whole"][[1]]], 0}] & /@
+sampleLayer[events_, dec_ : None] := mix[AudioPad[shorten[drumSound[#["Value"]], dec], {at[#["Whole"][[1]]], 0}] & /@
     Select[events, ! restQ[#["Value"]] && (sampleQ[#["Value"]] || valuePitches[#["Value"]] === {}) &]]
 (* pitched events -> MusicScore -> Audio (acoustic-ish) *)
 musicLayer[events_, nCycles_] := With[{pe = Select[events, ! sampleQ[#["Value"]] && NumericQ[valueMidi[#["Value"]]] &]},
     If[pe === {}, Nothing, Audio[MusicScore[{eventsToVoice[pe, nCycles]}, MusicTimeSignature[4, 4], MusicTempo -> patternTempo[]]]]]
 (* pitched events -> oscillator synth -> Audio *)
-oscLayer[events_, wave_] := mix[Flatten[Function[ev,
-    Function[m, AudioPad[oscNote[wave, midiToFreq[m], eventDuration[ev] cycleSeconds[]], {at[ev["Whole"][[1]]], 0}]] /@ valuePitches[ev["Value"]]
+oscLayer[events_, wave_, dec_ : None] := mix[Flatten[Function[ev,
+    Function[m, AudioPad[oscNote[wave, midiToFreq[m], If[dec === None, #, Min[#, dec]] &[eventDuration[ev] cycleSeconds[]]], {at[ev["Whole"][[1]]], 0}]] /@ valuePitches[ev["Value"]]
 ] /@ Select[events, valuePitches[#["Value"]] =!= {} && ! sampleQ[#["Value"]] &]]]
 
 voiceAudio[GainVoice[g_, v_], nCycles_] := voiceAudio[v, nCycles]  (* gain applied post-normalize via gainMeta *)
-voiceAudio[SynthVoice[wave_, p_], nCycles_] := fitTo[oscLayer[Select[p["Query", 0, nCycles], hasOnset], wave], nCycles]
+voiceAudio[SynthVoice[wave_, p_], nCycles_] := fitTo[oscLayer[Select[p["Query", 0, nCycles], hasOnset], wave, decayOf[p]], nCycles]
 (* default pitched rendering uses self-contained OSCILLATORS, not MusicScore/FluidSynth: the
    external soundfont backend is slow to re-render on every live edit and was the likely source
    of the kernel-reconnect ("MathLink") dialog + instability.  Set $DefaultWave to retimbre, or
    wrap a voice in Synth["..."] for an explicit oscillator.  (MusicScore is still used by
    ["Score"]/MusicPlot/Sound.) *)
-voiceAudio[p_Track, nCycles_] := With[{ev = Select[p["Query", 0, nCycles], hasOnset]},
-    fitTo[mix[{sampleLayer[ev], oscLayer[ev, $DefaultWave]}], nCycles]]
+voiceAudio[p_Track, nCycles_] := With[{ev = Select[p["Query", 0, nCycles], hasOnset], dec = decayOf[p]},
+    fitTo[mix[{sampleLayer[ev, dec], oscLayer[ev, $DefaultWave, dec]}], nCycles]]
 
 (* sum the voices at their natural per-voice level -- NO peak-normalize, so a Track[a,b,c]
    sounds exactly like playing a, b, c in separate players (which the speakers also just sum).
@@ -511,9 +577,33 @@ normAudio[a_] := With[{pk = Quiet @ Check[QuantityMagnitude @ AudioMeasurements[
 gainMeta[Track[_, m_Association]] := Lookup[m, "Gain", 1]
 gainMeta[GainVoice[g_, v_]] := g gainMeta[v]
 gainMeta[_] := 1
-voiceRendered[v_, nCycles_] := AudioAmplify[normAudio @ voiceAudio[v, nCycles], gainMeta[v]]
-renderAudio[t : Track[voices_List, ___], nCycles_] := AudioAmplify[fitDuration[mix[voiceRendered[#, nCycles] & /@ voices], nCycles cycleSeconds[]], gainMeta[t]]
-renderAudio[v_, nCycles_] := fitTo[voiceRendered[v, nCycles], nCycles]
+(* post-render FX chain (// Pan / Delay / Room), applied after the per-voice normalize *)
+applyFx[a_, {"Pan", x_}] := AudioPan[a, x]
+applyFx[a_, {"Delay", t_, fb_}] := Quiet @ Check[AudioDelay[a, t, fb], a]
+applyFx[a_, {"Room", m_}] := Quiet @ Check[AudioOverlay[{a, AudioAmplify[AudioReverb[a], m]}], a]
+applyFx[a_, _] := a
+(* sidechain duck: dip the gain to (1-depth) at every onset of the trigger pattern, recovering
+   linearly over `att` seconds -- the Strudel .duck pump *)
+applyDuck[a_, None, _] := a
+applyDuck[a_, {trig_, depth_, att_}, nCycles_] := Module[{sr, data, len, env, i0, i1},
+    sr = QuantityMagnitude @ AudioSampleRate[a];
+    data = AudioData[a]; len = Length @ First @ data;
+    env = ConstantArray[1., len];
+    Scan[Function[t0,
+        i0 = Min[len, Floor[t0 sr] + 1]; i1 = Min[len, i0 + Max[1, Floor[att sr]]];
+        env[[i0 ;; i1]] = (1. - depth) + depth Subdivide[0., 1., i1 - i0]],
+        at /@ (#["Whole"][[1]] & /@ Select[trig["Query", 0, nCycles], hasOnset])];
+    Audio[(# env) & /@ data, SampleRate -> sr]]
+(* delay/reverb tails extend past the loop -- fold them back onto the start so looping is seamless *)
+wrapLoop[a_, sec_] := With[{d = QuantityMagnitude @ Duration[a]},
+    If[d <= sec + 0.001, fitDuration[a, sec],
+        fitDuration[AudioOverlay[{AudioTrim[a, Quantity[sec, "Seconds"]],
+            AudioTrim[a, Quantity[{sec, Min[d, 2 sec]}, "Seconds"]]}], sec]]]
+voiceRendered[v_, nCycles_] := applyDuck[
+    Fold[applyFx, AudioAmplify[normAudio @ voiceAudio[v, nCycles], gainMeta[v]], fxOf[v]],
+    duckOf[v], nCycles]
+renderAudio[t : Track[voices_List, ___], nCycles_] := AudioAmplify[mix[wrapLoop[voiceRendered[#, nCycles], nCycles cycleSeconds[]] & /@ voices], gainMeta[t]]
+renderAudio[v_, nCycles_] := wrapLoop[voiceRendered[v, nCycles], nCycles cycleSeconds[]]
 
 Track /: Audio[p_Track, nCycles_ : 1] := renderAudio[p, nCycles]
 Track /: MusicPlot[p_Track, nCycles_ : 1, opts___] := MusicPlot[patternScore[p, nCycles], opts]

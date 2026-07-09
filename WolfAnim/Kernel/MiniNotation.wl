@@ -19,8 +19,9 @@ $grammar := $grammar = Module[
     space    = ParseRegex[" +"];
     optSpace = ParseRegex[" *"];
     number   = ParseRegex["[0-9]+"];
-    (* SpannedToken stamps Source -> {start, end} (cursor offsets: covers chars start..end-1) *)
-    atom = SpannedToken[ParseRegex["[A-Za-z0-9#.~_-]+"], ParseSucceed[Null], Function[s, LeafNode["Atom", s, <||>]]];
+    (* SpannedToken stamps Source -> {start, end} (cursor offsets: covers chars start..end-1).
+       `:` lets a token carry a sample index (bd:3, Strudel-style). *)
+    atom = SpannedToken[ParseRegex["[A-Za-z0-9#.~_:-]+"], ParseSucceed[Null], Function[s, LeafNode["Atom", s, <||>]]];
     comma = ParseAction[optSpace ~~ ParseLiteral[","] ~~ optSpace, #1 &];
     sub = ParseAction[ParseLiteral["["] ~~ optSpace ~~ ParseSepBy[RecRef[seqCell], comma] ~~ optSpace ~~ ParseLiteral["]"],
         Function[{lb, s1, seqs, s2, rb}, If[Length[seqs] == 1, GroupNode["Sub", seqs, <||>], GroupNode["Stack", seqs, <||>]]]];
@@ -30,6 +31,7 @@ $grammar := $grammar = Module[
     modifier = ParseChoice[
         ParseAction[ParseLiteral["*"] ~~ number, Function[{st, num}, {"Fast", FromDigits[num]}]],
         ParseAction[ParseLiteral["!"] ~~ number, Function[{st, num}, {"Repl", FromDigits[num]}]],
+        ParseAction[ParseLiteral["@"] ~~ number, Function[{st, num}, {"Weight", FromDigits[num]}]],
         ParseAction[ParseLiteral["("] ~~ number ~~ ParseLiteral[","] ~~ number ~~ ParseLiteral[")"], Function[{lp, k, cm, n, rp}, {"Euclid", FromDigits[k], FromDigits[n]}]]];
     step = ParseAction[element ~~ ParseMany[modifier],
         Function[{el, mods}, Fold[Function[{e, m}, GroupNode[m[[1]], {e}, <|"Args" -> Rest[m]|>]], el, mods]]];
@@ -47,7 +49,18 @@ tagSpan[span_][cp_] := With[{q = First[cp]}, Track[Function[sp, (Append[#, "Sour
    occupies the cycle, but it carries the value "~" which the audio + roll skip (see restQ). *)
 ap[LeafNode["Atom", "~", m_]]  := tagSpan[m["Source"]][Steady["~"]]
 ap[LeafNode["Atom", v_, m_]]   := tagSpan[m["Source"]][Steady[v]]
-ap[GroupNode["Seq", st_, _]]   := Fastcat @@ (ap /@ st)
+(* a sequence is a WEIGHTED cat (Tidal timecat): x@3 takes 3 slots, `_` (hold) extends the
+   previous step by one slot, everything else weighs 1 *)
+holdQ[LeafNode["Atom", "_", _]] := True
+holdQ[_] := False
+stepWeight[GroupNode["Weight", {x_}, m_]] := {m["Args"][[1]], x}
+stepWeight[nd_] := {1, nd}
+seqItems[nodes_] := Fold[Function[{acc, nd},
+    If[holdQ[nd],
+        If[acc === {}, acc, ReplacePart[acc, {-1, 1} -> acc[[-1, 1]] + 1]],
+        Append[acc, stepWeight[nd]]]], {}, nodes]
+ap[GroupNode["Seq", st_, _]]   := timecat[{#[[1]], ap[#[[2]]]} & /@ seqItems[st]]
+ap[GroupNode["Weight", {x_}, _]] := ap[x]   (* a lone x@n outside a seq is just x *)
 ap[GroupNode["Sub", {x_}, _]]  := ap[x]
 ap[GroupNode["Stack", ss_, _]] := Layer @@ (ap /@ ss)
 ap[GroupNode["Alt", st_, _]]   := Alternate @@ (ap /@ st)
@@ -71,7 +84,7 @@ WolfAnim`Track[str0_String] := With[{str = StringTrim[str0]},
 
 parseChainNum[s_] := Which[
     StringContainsQ[s, "/"], With[{ab = ToExpression /@ StringSplit[s, "/"]}, ab[[1]]/ab[[2]]],
-    StringContainsQ[s, "."], ToExpression[s], True, FromDigits[s]]
+    True, ToExpression[s]]   (* handles ints, decimals AND negatives (FromDigits chokes on "-") *)
 chainFnOf[name_] := Switch[name, "rev", Reverse, "degrade", Degrade, _, Identity]
 applyChainStep[pat_, stepStr_] := With[{toks = StringSplit[stepStr]},
     Switch[First[toks, ""],
@@ -84,6 +97,11 @@ applyChainStep[pat_, stepStr_] := With[{toks = StringSplit[stepStr]},
         "late", Late[parseChainNum[toks[[2]]]][pat],
         "early", Early[parseChainNum[toks[[2]]]][pat],
         "gain", Gain[parseChainNum[toks[[2]]]][pat],
+        "pan", Pan[parseChainNum[toks[[2]]]][pat],
+        "delay", Delay[parseChainNum[toks[[2]]], If[Length[toks] >= 3, parseChainNum[toks[[3]]], 0.5]][pat],
+        "room", Room[parseChainNum[toks[[2]]]][pat],
+        "dec", Dec[parseChainNum[toks[[2]]]][pat],
+        "sc", InScale[toks[[2]]][pat],
         _, pat]]
 
 

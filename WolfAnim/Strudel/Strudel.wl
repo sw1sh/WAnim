@@ -33,7 +33,14 @@ early::usage      = "early = Early.";
 gain::usage       = "gain = Gain.";
 beat::usage       = "beat = Beat (value on given step positions).";
 struct::usage     = "struct = Struct (value on each '1'/'t' step of a boolean mask).";
-punchcard::usage  = "punchcard = Punchcard (dot-grid visual, dot size/opacity = gain).";
+punchcard::usage  = "punchcard = Punchcard (scrolling bar visual).";
+pan::usage        = "pan = Pan (-1..1 stereo position).";
+dly::usage        = "dly = Delay (echo: time, feedback).";
+room::usage       = "room = Room (reverb wet mix).";
+dec::usage        = "dec = Dec (note decay seconds).";
+duck::usage       = "duck = Duck (sidechain to a trigger pattern's onsets).";
+sc::usage         = "sc = InScale (integer values as scale degrees: sc[\"c:minor\"]).";
+scale::usage      = "scale = InScale.";
 silence::usage    = "silence = Silence.";
 
 (* atom constructors: down-values so the heads stay introspectable for LiveCode highlighting *)
@@ -60,6 +67,13 @@ gain        = Gain
 beat        = Beat
 struct      = Struct
 punchcard   = Punchcard
+pan         = Pan
+dly         = Delay
+room        = Room
+dec         = Dec
+duck        = Duck
+sc          = InScale
+scale       = InScale
 silence     = Silence
 
 (* let LiveCode treat these atom heads as highlightable single-token leaves *)
