@@ -28,6 +28,8 @@ AnimationEffect[data_ ? animationEffectDataQ][prop_ /; MemberQ[$AnimationEffectP
 eff_AnimationEffect[obj_AnimatedObject] := obj["Play", eff]
 
 
+(* any of the standard Easing curves (Timeline.wl) works as a rate too: "Rate" -> "OutCubic" *)
+animationRateFunction[rate_String] /; MemberQ[Easing["Names"], rate] := Easing[rate]
 animationRateFunction[rate_String] := rate /. {"Linear" -> Function[#], "Quadratic" -> Function[# ^ 2], "Exponential" -> Function[Exp[#] / E]}
 
 animationRateFunction[rate_Function] := rate
