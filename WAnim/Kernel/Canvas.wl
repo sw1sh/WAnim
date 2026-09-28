@@ -116,7 +116,7 @@ styleOpts[f_, size_] := Sequence[FontFamily -> f["Family"], FontSize -> If[TrueQ
 
 (* per face: "Desc" = line-box bottom below the baseline, "Adv" = advance of each character, both per
    1 px of size; measured once through the front end and cached per user *)
-$metricsFile := FileNameJoin[{$UserBaseDirectory, "ApplicationData", "WolfAnim", "CanvasMetrics.wl"}];
+$metricsFile := FileNameJoin[{$UserBaseDirectory, "ApplicationData", "WAnim", "CanvasMetrics.wl"}];
 $metrics := $metrics = If[FileExistsQ[$metricsFile], Get[$metricsFile], <||>];
 saveMetrics[] := (Quiet @ CreateDirectory[DirectoryName[$metricsFile], CreateIntermediateDirectories -> True]; Put[$metrics, $metricsFile]);
 faceKey[f_] := {f["Family"], weightName[f["Weight"]], f["Italic"]};
@@ -139,7 +139,9 @@ charAdv[f_, c_] := If[KeyExistsQ[$CanvasFixedAdvance, f["Family"]], $CanvasFixed
 (* width in canvas px, like ctx.measureText (no kerning); "Tracking" adds letter spacing *)
 CanvasTextWidth[s_String, f_Association, tracking_ : 0] := f["Size"] Total[charAdv[f, #] & /@ Characters[s]] + tracking Max[0, StringLength[s] - 1];
 
-textPrim[s_, {x_, y_}, f_, c_, align_, a_] := Module[{size = f["Size"] cscale[], p = cxf[{x, y}], ang = cangle[]},
+(* size follows the transform's horizontal scale, so glyph widths agree with positions even under a
+   non-uniform scale (canvas squashes glyphs; WL Text cannot, so it shrinks them evenly) *)
+textPrim[s_, {x_, y_}, f_, c_, align_, a_] := Module[{size = f["Size"] cscaleX[], p = cxf[{x, y}], ang = cangle[]},
     With[{t = Text[Style[s, styleOpts[f, size], toColor[c]], p + {0, -faceMetrics[f]["Desc"] size}, {Switch[align, Center, 0, Right, 1, _, -1], -1}]},
         {cop[a], If[Abs[ang] < 10^-6, t, Rotate[t, -ang, p]]}]];
 

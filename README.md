@@ -1,10 +1,33 @@
-# WolfAnim
+# WAnim
 
-Inspired by [Manim](https://github.com/ManimCommunity/manim).
+Live audiovisual coding in the Wolfram Language -- a homage to [Manim](https://github.com/ManimCommunity/manim).
+A piece is a `Timeline`: a list of layers, one creation tool per segment, drawn with a canvas kit and scored
+with Strudel/TidalCycles-style patterns whose `Track`s the picture can query. Published as
+`WolframInstitute/WAnim`.
 
-Reproduced [gallery](https://docs.manim.community/en/stable/examples.html) examples so far: [Link](https://www.wolframcloud.com/obj/murzin.nikolay/Published/WolfAnimGallery.nb)
+```wl
+PacletDirectoryLoad["path/to/this/repo"]; Needs["WolframInstitute`WAnim`"]
 
-## Timeline and Canvas: film-scale animation
+Timeline[{
+    Backdrop[Black],
+    Typewriter["Every language starts with a few words.", {0.5, 4}, "Highlight" -> "words", "Exit" -> "Collapse"],
+    Terminal[{{4.1, "#I[1]::  Ex[(a + b)^3]"}, {4.6, "#O[1]:   a^3 + 3 a^2 b + 3 a b^2 + b^3", "Output"}}, {4, 8}],
+    NotebookSession[{{8, "In", "Plot3D[Sin[x y], {x, 0, 3}, {y, 0, 3}]"}}, {8, 12}, "Evaluate" -> True],
+    Spikey[{8, 12}, "Pulse" -> Track["bd*4"]]
+  }, "SecondsPerUnit" -> 2, "Soundtrack" -> Track["bd [~ bd] sd ~, hh*8"]]["Dynamic"]
+```
+
+- **Documentation**: sources in `docs/en` (guide, symbol pages), built to `WAnim/Documentation` with
+  `wolframscript -f scripts/build_docs.wls` (needs [MarkdownToNotebook](https://github.com/WolframInstitute/MarkdownToNotebook)
+  next to this repo). Start at the `WAnim` guide.
+- **Tests**: `TestReport["WAnim/Tests/Toolkit.wlt"]` after loading.
+- **Drum kit**: synthesized by `scripts/make_drums.wls` into the paclet's `Drums` asset (`$DrumKit`); no downloads.
+- **Fonts**: the creation tools default to Source Sans 3 / Serif 4 / Code Pro, VT323, Arimo and Courier Prime;
+  the front end only sees installed fonts.
+- Research notes on the design are in `docs/*.md`; the Manim gallery reproductions are in `Notebooks/`
+  ([published](https://www.wolframcloud.com/obj/murzin.nikolay/Published/WolfAnimGallery.nb)).
+
+## Timeline and Canvas
 
 A `Timeline` is an ordered stack of layers, each a pure function of time over a span, composited
 into one fixed-size frame. It renders live (`tl["Dynamic"]`, clocked by its soundtrack when it has
@@ -37,4 +60,4 @@ tl["Dynamic"]
   `AnimationEffect` `"Rate"`.
 
 The first user is the Wolfram Language port of the film *In[1]:=*:
-[WolframFilm/notebook](https://github.com/WolframInstitute/WolframFilm/tree/main/notebook).
+[WolframFilm/notebook](https://github.com/WolframInstitute/WolframFilm/tree/main/notebook), written almost entirely in creation tools.

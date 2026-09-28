@@ -1,17 +1,17 @@
 (* ::Package:: *)
 
-(* WolfAnim`Strudel`  --  optional lowercase, Strudel-style shortcuts for the WolfAnim` pattern
+(* WolframInstitute`WAnim`Strudel`  --  optional lowercase, Strudel-style shortcuts for the WolframInstitute`WAnim` pattern
    DSL.  These short names (s, n, note, fast, rev, stack, seq, ...) deliberately do NOT live in
-   the WolfAnim` context -- `s` and `n` are common variable names and shouldn't be forced onto
-   every WolfAnim user.  Opt in explicitly, after loading WolfAnim:
+   the WolframInstitute`WAnim` context -- `s` and `n` are common variable names and shouldn't be forced onto
+   every WAnim user.  Opt in explicitly, after loading WAnim:
 
-       Needs["WolfAnim`Strudel`"]
+       Needs["WolframInstitute`WAnim`Strudel`"]
 
    Then:  stack[s["bd*4"], note["<c4 e4 g4>"] // fast[2] // every[4, rev]]
    Chain transforms postfix with //  (x // f  ==  f[x]).
    Loading this also registers s/note/n/sound as LiveCode atom heads so they highlight. *)
 
-BeginPackage["WolfAnim`Strudel`", {"WolfAnim`"}]
+BeginPackage["WolframInstitute`WAnim`Strudel`", {"WolframInstitute`WAnim`"}]
 
 s::usage          = "s[str] = Track[str] -- a sample/sound pattern.";
 sound::usage      = "sound[str] = Track[str].";
@@ -77,6 +77,6 @@ scale       = InScale
 silence     = Silence
 
 (* let LiveCode treat these atom heads as highlightable single-token leaves *)
-WolfAnim`$LiveAtomHeads = DeleteDuplicates @ Join[WolfAnim`$LiveAtomHeads, {s, sound, note, n}]
+WolframInstitute`WAnim`$LiveAtomHeads = DeleteDuplicates @ Join[WolframInstitute`WAnim`$LiveAtomHeads, {s, sound, note, n}]
 
 EndPackage[]

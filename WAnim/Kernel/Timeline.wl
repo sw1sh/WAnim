@@ -29,14 +29,17 @@ Options[Timeline] = {
     "SecondsPerUnit" -> 1, "FrameRate" -> 60, "Soundtrack" -> None
 }
 
-Timeline[layers_List, opts : OptionsPattern[]] := Timeline[<|
+Timeline[layers0_List, opts : OptionsPattern[]] := With[{layers = Flatten[layers0]}, Timeline[<|
     "Layers" -> normalizeLayer /@ layers,
     "Duration" -> Replace[OptionValue["Duration"], Automatic :> Max[0, Cases[normalizeLayer /@ layers, <|___, "Span" -> {_, e_ ? NumericQ}, ___|> :> e]]],
     "Size" -> OptionValue["Size"], "Background" -> OptionValue[Background],
     "SecondsPerUnit" -> OptionValue["SecondsPerUnit"], "FrameRate" -> OptionValue["FrameRate"],
     "Soundtrack" -> OptionValue["Soundtrack"]
-|>]
+|>]]
 
+(* creation tools return TimelineLayers; a colour is a backdrop; lists of layers are flattened *)
+normalizeLayer[l_TimelineLayer] := <|"Span" -> l["Span"], "Draw" -> l["Draw"]|>
+normalizeLayer[c_ ? ColorQ] := normalizeLayer[Backdrop[c]]
 normalizeLayer[(Rule | RuleDelayed)[{a_, b_}, obj_AnimatedObject]] := <|"Span" -> {a, b}, "Draw" -> Function[t, obj["Update", t - a]["Graphics"]]|>
 normalizeLayer[(Rule | RuleDelayed)[{a_, b_}, f_]] := <|"Span" -> {a, b}, "Draw" -> f|>
 normalizeLayer[f_] := <|"Span" -> {-Infinity, Infinity}, "Draw" -> f|>
@@ -67,7 +70,7 @@ tl_Timeline["Audio"] := With[{s = tl["Soundtrack"]},
     Which[
         s === None, None,
         MatchQ[s, _Audio], s,
-        True, Audio[s, Ceiling[tl["Seconds"] WolfAnim`$CyclesPerSecond]]
+        True, Audio[s, Ceiling[tl["Seconds"] WolframInstitute`WAnim`$CyclesPerSecond]]
     ]
 ]
 
@@ -130,7 +133,7 @@ seekTo[Hold[t_, playing_, stream_, begin_], aud_, spu_, x_] := If[stream =!= Non
 (* ::Section:: *)
 (*Video*)
 
-(* Frames are rasterized in parallel -- each subkernel loads WolfAnim, receives the definitions the
+(* tl["Video", file] renders the timeline and returns it as a Video object.  Frames are rasterized in parallel -- each subkernel loads WAnim, receives the definitions the
    layers use (DistributeDefinitions, so a notebook's own functions just work) and runs any extra
    "KernelInitialization" -- written as PNGs, then encoded with ffmpeg together with the soundtrack.
    "From"/"To" select a range in timeline units. *)
@@ -148,8 +151,8 @@ tl_Timeline["Video", file_String, opts : OptionsPattern[timelineVideo]] := Modul
     times = from + Range[0, n - 1] / (spu fps);
     If[ TrueQ @ OptionValue[timelineVideo, {opts}, "Parallel"],
         If[$KernelCount == 0, LaunchKernels[]];
-        With[{root = ParentDirectory[PacletObject["WolfAnim"]["Location"]], cps = WolfAnim`$CyclesPerSecond},
-            ParallelEvaluate[PacletDirectoryLoad[root]; Needs["WolfAnim`"]; WolfAnim`$CyclesPerSecond = cps]];
+        With[{root = ParentDirectory[PacletObject["WolframInstitute/WAnim"]["Location"]], cps = WolframInstitute`WAnim`$CyclesPerSecond},
+            ParallelEvaluate[PacletDirectoryLoad[root]; Needs["WolframInstitute`WAnim`"]; WolframInstitute`WAnim`$CyclesPerSecond = cps]];
         With[{init = Unevaluated @@ {OptionValue[timelineVideo, {opts}, "KernelInitialization"]}},
             ParallelEvaluate[ReleaseHold[Hold[init]]]
         ];
@@ -174,8 +177,10 @@ tl_Timeline["Video", file_String, opts : OptionsPattern[timelineVideo]] := Modul
     ];
     res = RunProcess[args];
     If[res["ExitCode"] =!= 0, Return[Failure["FFmpeg", <|"MessageTemplate" -> res["StandardError"]|>]]];
-    ExpandFileName[file]
+    Video[ExpandFileName[file]]
 ]
+(* without a file name the video goes to a temporary file *)
+tl_Timeline["Video", opts : OptionsPattern[timelineVideo]] := tl["Video", FileNameJoin[{$TemporaryDirectory, CreateUUID["timeline-"] <> ".mp4"}], opts]
 
 
 (* ::Section:: *)
@@ -265,7 +270,7 @@ clampU[u_] := Clip[u, {0, 1}]
    second) until the next: the kick that makes a picture hop, read off the same Track that sounds it.
    t is in cycles. *)
 TrackPulse[track_, decay_ : 9][t_] := With[{on = Quiet @ track["Onsets", t - 4, t + 10^-9]},
-    If[! ListQ[on] || on === {}, 0., Exp[-decay (t - Max[#["Whole"][[1]] & /@ on]) / WolfAnim`$CyclesPerSecond]]];
+    If[! ListQ[on] || on === {}, 0., N @ Exp[-decay (t - Max[#["Whole"][[1]] & /@ on]) / WolframInstitute`WAnim`$CyclesPerSecond]]];
 
 
 (* ::Section:: *)
@@ -276,7 +281,7 @@ TrackPulse[track_, decay_ : 9][t_] := With[{on = Quiet @ track["Onsets", t - 4, 
    transcription).  Queries clip each event to the span, keeping its whole extent, so onsets,
    visuals and audio rendering all behave as for any other Track. *)
 EventTrack[events_List] := With[{ev = SortBy[events, First]},
-    WolfAnim`Track[Function[span, eventsIn[ev, span]], <|"Events" -> ev|>]
+    WolframInstitute`WAnim`Track[Function[span, eventsIn[ev, span]], <|"Events" -> ev|>]
 ]
 eventsIn[ev_, {b_, e_}] := Map[
     <|"Value" -> #[[3]], "Whole" -> {#[[1]], #[[1]] + #[[2]]}, "Part" -> {Max[b, #[[1]]], Min[e, #[[1]] + #[[2]]]}|> &,

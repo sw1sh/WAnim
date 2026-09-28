@@ -3,7 +3,7 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Punchcard, Beat, Struct, Pan, Delay, Room, Dec, Duck, InScale, $Scales, Bars, Solo, TrackPlay, TrackPause, TrackReset, TrackSeek, Fastcat, LiveCode, $LiveAtomHeads}]
+PackageExported[{Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, $DrumKit, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Punchcard, Beat, Struct, Pan, Delay, Room, Dec, Duck, InScale, $Scales, Bars, Solo, TrackPlay, TrackPause, TrackReset, TrackSeek, Fastcat, LiveCode, $LiveAtomHeads}]
 
 (* shared with MiniNotation.wl so the TraditionalForm can render the same live Visual *)
 PackageScoped[{renderVisual, renderVisuals, visualsOf, visualOf, cyclesOf, buttonsQ, clockPhase, visPhase, seekStream, registerStream, unregisterStream, enabledQ, soloStream, soloFlagQ, frameIfDisabled, timecat, $Playing, $Streams}]
@@ -373,7 +373,15 @@ $SampleBank = <||>
 
 LoadSample[name_String, file_String] := ($SampleBank[name] = AudioNormalize @ AudioChannelMix[Import[file], "Mono"])
 LoadSamples[dir_String] := (LoadSample[FileBaseName[#], #] & /@ FileNames["*.wav", dir]; Keys[$SampleBank])
-sampleQ[v_] := KeyExistsQ[$SampleBank, v]
+sampleQ[v_] := KeyExistsQ[$SampleBank, v] || KeyExistsQ[$DrumKit, drumAlias[v]]
+
+(* The built-in kit, synthesized by scripts/make_drums.wls and shipped as the paclet's "Drums" asset:
+   bd sd cp hh oh cr rim lt, loaded on first use.  A name in $SampleBank (LoadSamples) wins over it. *)
+$DrumKit := $DrumKit = Association[# -> AudioNormalize[Import[FileNameJoin[{PacletObject["WolframInstitute/WAnim"]["AssetLocation", "Drums"], # <> ".wav"}]]] & /@
+    FileBaseName /@ FileNames["*.wav", PacletObject["WolframInstitute/WAnim"]["AssetLocation", "Drums"]]]
+drumAlias[v_String] := Replace[ToLowerCase[First[StringSplit[v, ":"], v]], {"kick" | "bass" | "b" -> "bd", "sn" | "snare" -> "sd", "clap" | "hc" -> "cp",
+    "ch" | "hat" | "h" -> "hh", "open" -> "oh", "crash" | "ride" | "rd" -> "cr", "rs" | "cl" -> "rim", "tom" | "mt" | "ht" | "t" -> "lt"}]
+drumAlias[v_] := v
 
 
 (* ::Subsection:: Notation: pitched events -> MusicScore (drives Sound / MusicPlot) *)
@@ -535,8 +543,9 @@ synthDrum[v_] := synthDrum[v] = AudioNormalize @ Switch[ToLowerCase[v],
    base synth drum -- so indexed tokens always sound even with no variant bank. *)
 sampleBase[v_String] := First @ StringSplit[v, ":"]
 sampleBase[v_] := v
-drumSound[v_] := Which[sampleQ[v], $SampleBank[v],
-    StringQ[v] && sampleQ[sampleBase[v]], $SampleBank[sampleBase[v]],
+drumSound[v_] := Which[KeyExistsQ[$SampleBank, v], $SampleBank[v],
+    StringQ[v] && KeyExistsQ[$SampleBank, sampleBase[v]], $SampleBank[sampleBase[v]],
+    KeyExistsQ[$DrumKit, drumAlias[v]], $DrumKit[drumAlias[v]],
     True, synthDrum[ToString @ sampleBase[v]]]
 (* dec: shorten a sound to d seconds with a fade -- the Strudel .dec envelope *)
 shorten[a_, None] := a
@@ -979,7 +988,7 @@ Track /: Spectrogram[t_Track, nCycles_ : 2, opts : OptionsPattern[]] := Spectrog
 Fastcat[ps__] := fastcatList[{ps}]
 
 (* heads LiveCode treats as atoms (single-token leaves).  The optional Strudel` context
-   (WolfAnim/Strudel.wl) registers its own s/note/n/sound here when loaded; the lowercase
+   (WAnim/Strudel.wl) registers its own s/note/n/sound here when loaded; the lowercase
    Strudel-style shortcuts now live there, NOT in this paclet context. *)
 $LiveAtomHeads = {Track}
 

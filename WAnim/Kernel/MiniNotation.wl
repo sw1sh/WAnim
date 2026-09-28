@@ -1,14 +1,14 @@
 (* ::Package:: *)
 
-(* WolfAnim`MiniNotation`  --  a proper AST parser for the mini-notation, built on the
+(* WolframInstitute`WAnim`MiniNotation`  --  a proper AST parser for the mini-notation, built on the
    Wolfram`Parser` paclet.  It makes Track HOLD its source string + AST (as the
    pattern's 2nd metadata arg), and renders an EDITABLE, event-highlighting TraditionalForm:
    the input string is reconstructed as boxes, each atom's characters light up the instant
    its events sound, and editing the field re-parses + re-plays live.
 
-   Requires the Wolfram`Parser` paclet.  Load AFTER WolfAnim:
+   Requires the Wolfram`Parser` paclet.  Load AFTER WAnim:
        PacletDirectoryLoad["<.../WolframParser/Parser>"];   (* or install the paclet *)
-       Get["<.../WolfAnim/MiniNotation.wl>"]                                          *)
+       Get["<.../WAnim/MiniNotation.wl>"]                                          *)
 
 
 
@@ -38,10 +38,12 @@ $grammar := $grammar = Module[
     seq = ParseAction[step ~~ ParseMany[ParseAction[space ~~ step, #2 &]],
         Function[{h, t}, If[t === {}, h, GroupNode["Seq", Prepend[t, h], <||>]]]];
     SetRec[seqCell, seq];
-    ParseAction[optSpace ~~ seq ~~ optSpace, #2 &]
+    (* a top-level "a b, c d" stacks its sequences, as Strudel does (no brackets needed) *)
+    ParseAction[optSpace ~~ ParseSepBy[seq, comma] ~~ optSpace,
+        Function[{s1, seqs, s2}, If[Length[seqs] == 1, First[seqs], GroupNode["Stack", seqs, <||>]]]]
 ]
 
-parseMini[str_String] := Quiet @ Check[Parse[$grammar, str], $Failed]
+parseMini[str_String] := With[{r = Quiet @ Check[Parse[$grammar, str], $Failed]}, If[FailureQ[r], $Failed, r]]
 
 (* ---------- AST -> Track, tagging each atom's events with its char span ---------- *)
 tagSpan[span_][cp_] := With[{q = First[cp]}, Track[Function[sp, (Append[#, "Source" -> span] &) /@ q[sp]]]]
@@ -75,12 +77,14 @@ ap[_] := Silence
    (fast/slow/rev/degrade/euclid/every/late/early).  This is the inverse of the combinators'
    source-building (Pattern.wl `chain`), so Fast[2][p] and Track["... // fast 2"] are
    the same pattern -- the bijection. *)
-WolfAnim`Track[str0_String] := With[{str = StringTrim[str0]},
+WolframInstitute`WAnim`Track[str0_String] := With[{str = StringTrim[str0]},
     If[StringContainsQ[str, "//"],
         Fold[applyChainStep, Track[StringTrim @ First @ StringSplit[str, "//"]],
             StringTrim /@ Rest @ StringSplit[str, "//"]],
         With[{ast = parseMini[str]},
-            If[ast === $Failed, Silence, Append[ap[ast], <|"Source" -> str, "AST" -> ast|>]]]]]
+            (* a typo must not fail silently while live coding: say so, and play nothing *)
+            If[ast === $Failed, Message[Track::parse, str]; Silence, Append[ap[ast], <|"Source" -> str, "AST" -> ast|>]]]]]
+Track::parse = "Could not parse the mini-notation \"`1`\"; the track is silent.";
 
 parseChainNum[s_] := Which[
     StringContainsQ[s, "/"], With[{ab = ToExpression /@ StringSplit[s, "/"]}, ab[[1]]/ab[[2]]],
@@ -195,9 +199,9 @@ traceOf[pat_, n_, steps_] := Module[{src = pat["Source"], events, sched, cs = N[
             <|"Phase" -> ph, "Lit" -> (traceText[src, #] & /@ activeSpans[sched, ph, n])|>], {k, 0, steps - 1}]
     |>
 ]
-WolfAnim`Track[q_, m___]["Trace", n_ : 2, steps_ : 32] := traceOf[Track[q, m], n, steps]
+WolframInstitute`WAnim`Track[q_, m___]["Trace", n_ : 2, steps_ : 32] := traceOf[Track[q, m], n, steps]
 
-WolfAnim`Track /: MakeBoxes[p : WolfAnim`Track[_, meta_Association] /; KeyExistsQ[meta, "Source"], TraditionalForm] :=
+WolframInstitute`WAnim`Track /: MakeBoxes[p : WolframInstitute`WAnim`Track[_, meta_Association] /; KeyExistsQ[meta, "Source"], TraditionalForm] :=
     With[{boxes = ToBoxes[miniDisplay[p, cyclesOf[p]]]}, InterpretationBox[boxes, p]]
 
 

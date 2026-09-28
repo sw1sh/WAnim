@@ -1,0 +1,62 @@
+---
+Template: Symbol
+Name: Spikey
+Context: WolframInstitute`WAnim`
+Paclet: WolframInstitute/WAnim
+URI: WolframInstitute/WAnim/ref/Spikey
+Keywords: [Spikey, mascot, polyhedron, stellated icosahedron, rhombic hexecontahedron, dance]
+SeeAlso: [PolyhedronData, TrackPulse, AutomatonTape]
+RelatedGuides: [WAnim]
+---
+
+## Usage
+
+<code>[Spikey]()[{$t_0$, $t_1$}]</code> is the Wolfram mascot, dancing: spinning, swaying each beat and hopping.
+
+## Details & Options
+
+- "Form" follows the versions: "Stellated" (the stellated icosahedron of 1.0), "Spiked" (a spiked dodecahedron, versions 2 to 9) or "Hexecontahedron" (the rhombic hexecontahedron, 10 onward). Geometry comes from [PolyhedronData]().
+- "Style" follows the displays: "1Bit", "Gray", "Classic" (lilac) or "Red".
+- "Pulse" -> *track* squashes and pumps the spikes on each onset of *track* (see [TrackPulse]()); "BeatsPerUnit" sets the sway.
+
+| Option | Default | Description |
+| --- | --- | --- |
+| "Form" | "Stellated" | "Stellated", "Spiked" or "Hexecontahedron" |
+| "Style" | "Red" | "1Bit", "Gray", "Classic" or "Red" |
+| "Radius" | 46 | size in pixels |
+| "Pulse" | None | a Track to dance to |
+| "BeatsPerUnit" | 4 | sway beats per timeline unit |
+| "Dance" | 1 | how much it moves |
+| Position | {1790, 930} | centre |
+
+## Basic Examples
+
+Spikey in each of its forms:
+
+```wl
+Table[Spikey[{0, 2}, "Form" -> f, Position -> {960, 540}, "Radius" -> 300]["Graphics", 1, ImageSize -> 160], {f, {"Stellated", "Spiked", "Hexecontahedron"}}]
+```
+
+<!-- => three Spikeys: a stellated icosahedron, a spiked dodecahedron, a hexecontahedron -->
+
+---
+
+And in each style:
+
+```wl
+Table[Spikey[{0, 2}, "Style" -> s, Position -> {960, 540}, "Radius" -> 300]["Graphics", 1, ImageSize -> 120], {s, {"1Bit", "Gray", "Classic", "Red"}}]
+```
+
+<!-- => four stellated icosahedra: one-bit, grey, lilac and red -->
+
+## Options
+
+### Pulse
+
+Dancing to a kick drum Track, just after a kick:
+
+```wl
+Spikey[{0, 4}, "Pulse" -> EventTrack[Table[{b / 4, 1 / 4, "bd"}, {b, 0, 15}]], Position -> {960, 540}, "Radius" -> 300]["Graphics", 0.26, ImageSize -> 200]
+```
+
+<!-- => Spikey squashed, its spikes extended -->

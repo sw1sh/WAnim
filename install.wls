@@ -2,7 +2,7 @@
 
 $successQ = True;
 
-pacletName = FileBaseName[DirectoryName[$InputFileName]]
+pacletName = "WolframInstitute/WAnim"
 
 (* If any messages are produced, fail with non-zero exit code. *)
 Check[
@@ -20,7 +20,7 @@ Check[
   If[PacletFind[pacletName] =!= {}, PacletUninstall[pacletName]];
 
   If[PacletObjectQ[PacletInstall[First[$latestPacletFiles], "IgnoreVersion" -> True]],
-    Print["Installed " <> First[$latestPacletFiles] <> ". Run Get[\"" <> pacletName <> "`\"] to reload the package."],
+    Print["Installed " <> First[$latestPacletFiles] <> ". Run Needs[\"WolframInstitute`WAnim`\"] to load the package."],
     Print["Install failed."];
     $successQ = False];,
 
