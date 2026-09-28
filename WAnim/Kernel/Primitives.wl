@@ -9,7 +9,7 @@ PackageExported[{Brace}]
 
 
 
-Options[Brace] = {"Direction" -> Down, "WidthMultiplier" -> 2, "Buffer" -> 0.2}
+Options[Brace] = {"Direction" -> Down, "WidthMultiplier" -> 2, "Buffer" -> 0.2, "Height" -> 0.22}
 
 Brace[obj_AnimatedObject, Optional[dir : _ ? directiveQ | Automatic, $AnimatedObjectDefaultDirective],
     Optional[text_AnimatedObject, AnimatedObject[""]],
@@ -22,7 +22,7 @@ Brace[obj_AnimatedObject, Optional[dir : _ ? directiveQ | Automatic, $AnimatedOb
     {left, right} = Values@corners[[{Key[{-1, -1}], Key[{1, -1}]}]];
     width = First[right] - First[left];
     numQuads = Clip[width OptionValue["WidthMultiplier"], {2, 15}];
-    brace = AnimatedObject[StringTemplate["\\underbrace{``}"][StringJoin @ Table["\\qquad", numQuads]], dir /. Automatic -> obj["Directive"]]["Apply", "Stretch", width];
+    brace = AnimatedObject[StringTemplate["\\underbrace{``}"][StringJoin @ Table["\\qquad", numQuads]], dir /. Automatic -> obj["Directive"]]["Apply", "Stretch", width, OptionValue["Height"]];   (* stretched across only, like Manim's: a long brace keeps its weight *)
     tip = RotationTransform[- angle][left + {width / 2, -  (OptionValue["Buffer"] + 3 brace["Height"])}];
     AnimatedObject[{
         text["Apply", "Translate", tip],

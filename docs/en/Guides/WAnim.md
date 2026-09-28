@@ -57,12 +57,10 @@ places text exactly where a browser canvas would, so designs port from web tools
 
 ### The stage: Manim-style scenes
 
-- `Stage` ordinary graphics in math coordinates as a function of time, with a camera and displays that may move
+- `Stage` ordinary graphics in math coordinates as a function of time, with a camera and displays that may move; AnimatedObjects on it play their effects, and inset plots keep their proportions
 - `Tween` a value over time: eased from one value to another, or through keyframes (Manim's ValueTracker)
 - `Morph` one shape turning into another (Manim's Transform)
 - `PartialPath` a shape's outline drawn part way (Manim's Create)
-- `StageAxes` axes on the stage: graphs, areas, Riemann rectangles, labels
-- `StageBrace` a curly brace along a span, with a place for its label
 
 ### Diagrams
 

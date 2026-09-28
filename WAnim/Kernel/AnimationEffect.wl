@@ -42,6 +42,7 @@ AnimationEffect[] := Dataset[{
     <|"Effect" -> "Translate", "Method" -> "", "Arguments" -> "vector", "Options" -> "Duration, Rate, Reverse", "Description" -> "translate by a vector (or Left/Right/Up/Down)"|>,
     <|"Effect" -> "Stretch", "Method" -> "", "Arguments" -> "width, height", "Options" -> "Duration, Rate, Reverse", "Description" -> "stretch to a width and/or height"|>,
     <|"Effect" -> "Wait", "Method" -> "", "Arguments" -> "", "Options" -> "Duration, Reverse", "Description" -> "hold without changing"|>,
+    <|"Effect" -> "Transform", "Method" -> "", "Arguments" -> "target", "Options" -> "Duration, Rate, Reverse", "Description" -> "turn into another object's shape (Transform)"|>,
     <|"Effect" -> "Creation", "Method" -> "Write", "Arguments" -> "", "Options" -> "Duration, Rate, Reverse, Delay (0), LagRatio (0), BorderFraction (0.5)", "Description" -> "trace the outline then fade the fill in (aka Partial, DrawBorderThenFill)"|>,
     <|"Effect" -> "Creation", "Method" -> "Create", "Arguments" -> "", "Options" -> "Duration, Rate, Reverse, Delay, LagRatio", "Description" -> "reveal the partial filled path (aka ShowCreation)"|>,
     <|"Effect" -> "Creation", "Method" -> "FadeIn", "Arguments" -> "", "Options" -> "Duration, Rate, Reverse, Delay, LagRatio", "Description" -> "fade in"|>,
@@ -216,18 +217,22 @@ creationEffect[duration_, rate_, opts : OptionsPattern[]] := Module[{method, arg
     If[reverse, AnimationEffect[Append[First[result], "Reverse" -> True]], result]
 ]
 
+(* an object's primitives with its nested objects spliced in, each after its own directive *)
+flatPrimitives[obj_] := Flatten[{obj["Primitives"]} /. o_AnimatedObject :> Flatten[{o["Directive"], flatPrimitives[o]}]]
+
 (* methods that reveal each primitive with its own drawer, optionally staggered by LagRatio *)
 perPrimitiveCreation[duration_, delay_, rate_, lag0_, method_, args_] :=
     Module[{cachedObj = None, drawers = {}, staggerIdx = {}, maxEnd = 1, lag},
         lag = If[method === "ShowIncreasingSubsets" && lag0 == 0, 1, lag0];
         AnimationEffect[
             Function @ Module[{obj = #Object, frac},
-                frac = Min[Ramp[rate[#t / duration] - delay / duration], 1];
+                frac = rate[Clip[(#t - delay) / duration, {0, 1}]];
                 If[ frac >= 1,
                     obj,
                     If[ cachedObj =!= obj,
                         cachedObj = obj;
-                        With[{prims = Flatten[{obj["Primitives"]}]},
+                        (* nested objects (the parts of a formula) are drawn glyph by glyph too *)
+                        With[{prims = flatPrimitives[obj]},
                             drawers = creationPrimitiveDrawer[method, args] /@ prims;
                             With[{drawable = Boole[! directiveQ[#] && ! MatchQ[#, _AnimatedObject]] & /@ prims},
                                 staggerIdx = Accumulate[drawable] - drawable;
@@ -245,7 +250,7 @@ perPrimitiveCreation[duration_, delay_, rate_, lag0_, method_, args_] :=
 growCreation[duration_, delay_, rate_, point_, fromScale_] :=
     AnimationEffect[
         Function @ With[{
-            alpha = Min[Ramp[rate[#t / duration] - delay / duration], 1],
+            alpha = rate[Clip[(#t - delay) / duration, {0, 1}]],
             pt = point /. Automatic :> #Object["Center"]},
             #Object["TransformPrimitives", ScalingTransform[ConstantArray[Max[fromScale + alpha (1 - fromScale), 1.*^-3], Length[pt]], pt]]
         ],
@@ -255,7 +260,7 @@ growCreation[duration_, delay_, rate_, point_, fromScale_] :=
 spiralCreation[duration_, delay_, rate_, scaleFactor_, fadeFraction_, angle_] :=
     AnimationEffect[
         Function @ Module[{alpha, c, transformed},
-            alpha = Min[Ramp[rate[#t / duration] - delay / duration], 1];
+            alpha = rate[Clip[(#t - delay) / duration, {0, 1}]];
             c = #Object["Center"];
             transformed = #Object["TransformPrimitives", Composition[
                 ScalingTransform[ConstantArray[1 + (1 - alpha) (scaleFactor - 1), Length[c]], c],
@@ -287,7 +292,7 @@ gradientCreation[duration_, delay_, rate_, direction_, softness_] :=
     Module[{cachedObj = None, prims = {}, pos = {}},
         AnimationEffect[
             Function @ Module[{obj = #Object, frac, edge},
-                frac = Min[Ramp[rate[#t / duration] - delay / duration], 1];
+                frac = rate[Clip[(#t - delay) / duration, {0, 1}]];
                 If[ frac >= 1,
                     obj,   (* end on the crisp, solid object *)
                     If[ cachedObj =!= obj,
@@ -356,6 +361,19 @@ AnimationEffect["Creation", opts : OptionsPattern[Join[Options[AnimationEffect],
     creationEffect[OptionValue["Duration"], animationRateFunction @ OptionValue["Rate"], FilterRules[{opts}, Options[creationEffect]]]
 
 AnimationEffect["Wait", opts : OptionsPattern[]] := AnimationEffect[#Object &, opts]
+
+(* the object's shape turning into target's (Manim's Transform / ReplacementTransform): the outlines
+   are blended with Morph and, when it is done, the object is the target *)
+AnimationEffect["Transform", target_AnimatedObject, opts : OptionsPattern[]] := With[{
+    duration = OptionValue["Duration"], rate = animationRateFunction @ OptionValue["Rate"]
+},
+    AnimationEffect[Function @ With[{u = rate[#t / duration]},
+        If[u >= 1, #Object["SetPrimitives", target["Primitives"]]["SetDirective", target["Directive"]],
+            #Object["SetPrimitives", morphPrimitive[#Object["Primitives"], target["Primitives"], u]]]], opts]]
+firstShape[p_] := FirstCase[{p}, _Line | _Polygon | _Rectangle | _Disk | _Circle | _Triangle | _RegularPolygon, None, Infinity]
+morphPrimitive[a_, b_, u_] := With[{sa = firstShape[a], sb = firstShape[b]},
+    If[sa === None || sb === None, If[u < 0.5, a, b],
+        With[{m = Morph[sa, sb][u]}, If[MatchQ[sa, _Line | _Circle], Line[Append[First[m], First[First[m]]]], m]]]]
 
 
 AnimationEffect[effects : {__AnimationEffect}] := AnimationEffect[

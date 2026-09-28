@@ -3,7 +3,7 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{Stage, StageAxes, StageBrace, Tween, Morph, PartialPath}]
+PackageExported[{Stage, Tween, Morph, PartialPath}]
 
 
 (* ::Section:: *)
@@ -20,21 +20,28 @@ Options[Stage] = Join[{PlotRange -> {{-64/9, 64/9}, {-4, 4}}, "Screen" -> Automa
    Sizes are in pixels of a 1080p frame and scale with it (Manim's font size 48 reads as about 72): FontSize -> n, Style[s, n],
    AbsoluteThickness[n], AbsolutePointSize[n]; text is FontColor on FontFamily at FontSize, lines
    "Thickness" pixels wide, unless the primitives say otherwise. *)
-Stage[f_, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[Stage]]},
-    makeLayer["Stage", {t0, t1}, Function[t, stageDraw[f, t, atTime[o, t]]]]];
+Stage[f_, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[Stage]], g = If[Head[f] === Function, f, Function[t, f]]},
+    makeLayer["Stage", {t0, t1}, Function[t, stageDraw[g, t, t0, atTime[o, t]]]]];
 
-stageDraw[f_, t_, o_] := Module[{r = Replace[ov[o, "Screen"], {Automatic -> {0, 0, $CanvasSize[[1]], $CanvasSize[[2]]}, c : Except[_List] :> c[t]}], p0, p1, w, g = f[t], pr = Replace[ov[o, PlotRange], c : Except[_List] :> c[t]]},
+stageDraw[f_, t_, t0_, o_] := Module[{r = Replace[ov[o, "Screen"], {Automatic -> {0, 0, $CanvasSize[[1]], $CanvasSize[[2]]}, c : Except[_List] :> c[t]}], p0, p1, w, g = f[t] /. obj_AnimatedObject :> obj["Update", t - t0]["Graphics"], pr = Replace[ov[o, PlotRange], c : Except[_List] :> c[t]]},
     p0 = cxf[{r[[1]], r[[2]] + r[[4]]}]; p1 = cxf[{r[[1]] + r[[3]], r[[2]]}]; w = r[[3]] cscaleX[];
     Inset[If[Head[g] === Graphics3D,
             Show[g, AspectRatio -> r[[4]] / r[[3]], ImagePadding -> None, Background -> Replace[ov[o, Background], None -> Lookup[Options[g], Background, None]]],
-            Graphics[{ov[o, FontColor], Thickness[ov[o, "Thickness"] / w], stagePrims[g, w]}, PlotRange -> pr, AspectRatio -> (pr[[2, 2]] - pr[[2, 1]]) / (pr[[1, 2]] - pr[[1, 1]]),
+            Graphics[{ov[o, FontColor], Thickness[ov[o, "Thickness"] / w], stagePrims[g, w, pr[[1, 2]] - pr[[1, 1]]]}, PlotRange -> pr, AspectRatio -> (pr[[2, 2]] - pr[[2, 1]]) / (pr[[1, 2]] - pr[[1, 1]]),
                 PlotRangePadding -> None, ImagePadding -> None, PlotRangeClipping -> True, Background -> ov[o, Background],
                 BaseStyle -> {FontFamily -> ov[o, FontFamily], FontSize -> Scaled[ov[o, FontSize] / w], FontColor -> ov[o, FontColor]}]],
         p0, {Left, Bottom}, p1[[1]] - p0[[1]]]];
-(* pixel sizes -> fractions of the stage width, so a frame keeps its proportions at any size *)
-stagePrims[g_, w_] := g /. {
+(* pixel sizes -> fractions of the stage width, so a frame keeps its proportions at any size; an
+   inset Graphics (a Plot, AxisObject axes) gets the same treatment relative to its own width, with a
+   default text size for its tick labels *)
+stagePrims[g_, w_, prw_] := g /. Join[{
+    Inset[gr_Graphics, pos_, opos_, size : (_ ? NumericQ | {_ ? NumericQ, _}), rest___] :>
+        With[{px = w First[Flatten[{size}]] / prw}, Inset[Show[gr /. sizeRules[px], BaseStyle -> Join[{FontSize -> Scaled[36 / px]}, Flatten[{Lookup[Options[gr /. sizeRules[px]], BaseStyle, {}]}]]], pos, opos, size, rest]]},
+    sizeRules[w]];
+sizeRules[w_] := {
     (FontSize -> n_ ? NumericQ) :> (FontSize -> Scaled[n / w]),
-    Style[x_, n_ ? NumericQ, rest___] :> Style[x, FontSize -> Scaled[n / w], rest],
+    Style[x_, a___, n_ ? NumericQ, b___] :> Style[x, a, FontSize -> Scaled[n / w], b],
+    Directive[a___, n_ ? NumericQ, b___] :> Directive[a, FontSize -> Scaled[n / w], b],
     AbsoluteThickness[n_ ? NumericQ] :> Thickness[n / w],
     AbsolutePointSize[n_ ? NumericQ] :> PointSize[n / w]};
 
@@ -96,54 +103,3 @@ ring[Rectangle[{x0_, y0_}, {x1_, y1_}, ___]] := {{x0, y0}, {x1, y0}, {x1, y1}, {
 ring[Rectangle[{x0_, y0_}]] := ring[Rectangle[{x0, y0}, {x0, y0} + 1]];
 ring[(Polygon | Triangle | Line)[pts_ ? MatrixQ, ___]] := If[First[pts] == Last[pts], Most[pts], pts];
 ring[r_ ? RegionQ] := First[BoundaryDiscretizeRegion[r]["BoundaryPolygons"]][[1]];
-
-
-(* ::Section:: *)
-(*StageAxes: a coordinate system on the stage*)
-
-Options[StageAxes] = {"Size" -> {12, 6}, "Center" -> {0, 0}, "Color" -> White, "Tips" -> True, "Numbers" -> {{}, {}}, "LongTicks" -> {{}, {}},
-    "Thickness" -> 2, "TickLength" -> 0.1, "NumberSize" -> 36};
-
-(* ax = StageAxes[{x0, x1, dx}, {y0, y1, dy}] is a pair of axes on a Stage, "Size" stage units big
-   around "Center" (Manim's Axes): ax["Primitives"] draws them, with ticks every step, the numbers
-   in "Numbers" -> {{x, ...}, {y, ...}} and arrow tips; ax[{x, y}] is where a data point sits on the
-   stage; ax["Graph", f, {a, b}] is the curve of f; ax["Area", f, g, {a, b}] the region between two
-   functions (g may be a constant); ax["Riemann", f, {a, b}, dx] rectangles under f;
-   ax["VerticalLine", {x, y}] a line down to the x axis; ax["Labels", xlabel, ylabel] the axis names. *)
-StageAxes[{x0_, x1_, dx_ : 1}, {y0_, y1_, dy_ : 1}, opts : OptionsPattern[]] := StageAxes[<|"X" -> {x0, x1, dx}, "Y" -> {y0, y1, dy},
-    "Options" -> Join[{opts}, Options[StageAxes]]|>];
-axesQ[a_] := AssociationQ[a] && KeyExistsQ[a, "X"] && KeyExistsQ[a, "Options"];
-axOpt[a_, name_] := ov[a["Options"], name];
-StageAxes[a_ ? axesQ][{x_ ? NumericQ, y_ ? NumericQ}] := With[{sz = axOpt[a, "Size"], c = axOpt[a, "Center"], X = a["X"], Y = a["Y"]},
-    c + {sz[[1]] ((x - X[[1]]) / (X[[2]] - X[[1]]) - 1/2), sz[[2]] ((y - Y[[1]]) / (Y[[2]] - Y[[1]]) - 1/2)}];
-StageAxes[a_ ? axesQ][pts_ ? MatrixQ] := StageAxes[a] /@ pts;
-StageAxes[a_ ? axesQ]["Primitives"] := Module[{ax = StageAxes[a], X = a["X"], Y = a["Y"], ox, oy, tl = axOpt[a, "TickLength"], col = axOpt[a, "Color"], nums = axOpt[a, "Numbers"], long = axOpt[a, "LongTicks"]},
-    ox = Clip[0, X[[;; 2]]]; oy = Clip[0, Y[[;; 2]]];
-    {col, AbsoluteThickness[axOpt[a, "Thickness"]], If[TrueQ[axOpt[a, "Tips"]], Arrowheads[0.012], Arrowheads[0]],
-     Arrow[ax[{{X[[1]], oy}, {X[[2]], oy}}]], Arrow[ax[{{ox, Y[[1]]}, {ox, Y[[2]]}}]],
-     Table[With[{p = ax[{x, oy}], k = If[MemberQ[long[[1]], x], 2, 1]}, Line[{p - {0, k tl}, p + {0, k tl}}]], {x, Select[Range[X[[1]], X[[2]], X[[3]]], # != ox &]}],
-     Table[With[{p = ax[{ox, y}], k = If[MemberQ[long[[2]], y], 2, 1]}, Line[{p - {k tl, 0}, p + {k tl, 0}}]], {y, Select[Range[Y[[1]], Y[[2]], Y[[3]]], # != oy &]}],
-     Text[Style[#, axOpt[a, "NumberSize"]], ax[{#, oy}] - {0, 0.35}] & /@ nums[[1]],
-     Text[Style[#, axOpt[a, "NumberSize"]], ax[{ox, #}] - {0.35, 0}, {1, 0}] & /@ nums[[2]]}];
-StageAxes[a_ ? axesQ]["Graph", f_, {xa_, xb_}, n_Integer : 200] := Line[StageAxes[a][Table[{x, f[x]}, {x, Subdivide[N[xa], xb, n]}]]];
-StageAxes[a_ ? axesQ]["Graph", f_] := StageAxes[a]["Graph", f, a["X"][[;; 2]]];
-StageAxes[a_ ? axesQ]["Area", f_, g_, {xa_, xb_}, n_Integer : 100] := With[{gg = If[NumericQ[g], g &, g]},
-    Polygon[StageAxes[a][Join[Table[{x, f[x]}, {x, Subdivide[N[xa], xb, n]}], Table[{x, gg[x]}, {x, Subdivide[N[xb], xa, n]}]]]]];
-StageAxes[a_ ? axesQ]["Riemann", f_, {xa_, xb_}, dx_] := Table[Polygon[StageAxes[a][{{x, 0}, {x + dx, 0}, {x + dx, f[x]}, {x, f[x]}}]], {x, xa, xb - dx / 2, dx}];
-StageAxes[a_ ? axesQ]["VerticalLine", {x_, y_}] := Line[StageAxes[a][{{x, Clip[0, a["Y"][[;; 2]]]}, {x, y}}]];
-StageAxes[a_ ? axesQ]["Labels", xl_ : "x", yl_ : "y"] := With[{ax = StageAxes[a], X = a["X"], Y = a["Y"]},
-    {Text[xl, ax[{X[[2]], Clip[0, Y[[;; 2]]]}] + {0.1, 0.25}, {-1, -1}], Text[yl, ax[{Clip[0, X[[;; 2]]], Y[[2]]}] + {0.25, 0}, {-1, 0}]}];
-
-
-(* ::Section:: *)
-(*StageBrace*)
-
-(* StageBrace[{a, b}] is a curly brace spanning a to b on their right-hand side (below, for a left-to-
-   right span), "Depth" deep, its tip pointing away; StageBrace[{a, b}, "Tip"] is where a label goes. *)
-Options[StageBrace] = {"Depth" -> 0.3, "Buffer" -> 0.15};
-StageBrace[{a_, b_}, opts : OptionsPattern[]] := With[{u = Normalize[b - a], L = Norm[b - a], d = OptionValue["Depth"], buf = OptionValue["Buffer"]},
-    With[{n = {u[[2]], -u[[1]]}, half = Table[{L s, -d braceProfile[s]}, {s, Subdivide[0., 0.5, 40]}]},
-        Line[a + buf n + #[[1]] u - #[[2]] n & /@ Join[half, Reverse[{L - #[[1]], #[[2]]} & /@ Most[half]]]]]];
-StageBrace[{a_, b_}, "Tip", opts : OptionsPattern[]] := With[{u = Normalize[b - a]}, (a + b) / 2 + (OptionValue[StageBrace, {opts}, "Buffer"] + OptionValue[StageBrace, {opts}, "Depth"] + 0.35) {u[[2]], -u[[1]]}];
-(* half a brace, 0 at the end to 1 at the tip: a quick turn at the end, a long flat run, a sharp tip *)
-braceProfile[s_] := Which[s < 0.06, 0.45 Sin[Pi / 2 s / 0.06], s < 0.44, 0.45, True, 0.45 + 0.55 Sin[Pi / 2 (s - 0.44) / 0.06]];

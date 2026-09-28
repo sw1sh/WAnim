@@ -208,7 +208,8 @@ tl_Timeline["Video", opts : OptionsPattern[timelineVideo]] := tl["Video", FileNa
 
 Timeline /: MakeBoxes[tl : Timeline[data_ ? timelineQ], StandardForm] := BoxForm`ArrangeSummaryBox[
     Timeline, tl,
-    Show[tl["Graphics", 0], ImageSize -> 96],
+    (* the icon plays the timeline, looping, a few frames a second *)
+    Dynamic[Refresh[Show[tl["Graphics", Clock[{0, tl["Duration"]}, tl["Seconds"]]], ImageSize -> 96], UpdateInterval -> 0.25], SynchronousUpdating -> False],
     {
         {BoxForm`SummaryItem[{"Duration: ", data["Duration"]}], BoxForm`SummaryItem[{"Layers: ", Length[data["Layers"]]}]},
         {BoxForm`SummaryItem[{"Size: ", data["Size"]}], BoxForm`SummaryItem[{"Soundtrack: ", If[data["Soundtrack"] === None, None, Head[data["Soundtrack"]]]}]}

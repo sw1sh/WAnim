@@ -37,6 +37,7 @@ VerificationTest[Tween[{0, 1}] /@ {-1, 0.5, 2}, {0, 0.5, 1}, SameTest -> (Norm[N
 VerificationTest[Tween[{{1, 110}, {2, 40}, {3, 180}}] /@ {0, 2, 5}, {110, 40, 180}, TestID -> "Tween-keyframes"]
 VerificationTest[Length[First[Morph[Rectangle[{-1, -1}, {1, 1}], Disk[]][0.5]]], 120, TestID -> "Morph-points"]
 VerificationTest[Round[Total[Norm /@ Differences[First[PartialPath[Circle[], 1/2]]]], 0.01], Round[N[Pi], 0.01], TestID -> "PartialPath-half-circle"]
-VerificationTest[StageAxes[{0, 10, 1}, {0, 100, 10}][{5, 50}], {0, 0}, TestID -> "StageAxes-centre"]
+VerificationTest[Length[AnimatedObject[{"a", "+", "b"}]["Primitives"]], 3, TestID -> "AnimatedObject-tex-parts"]
+VerificationTest[Head[Timeline[{Stage[{AnimatedObject[Disk[]]["Play", "Transform", AnimatedObject[Rectangle[]]]}, {0, 1}]}, "Duration" -> 1]["Graphics", 0.5]], Graphics, TestID -> "Stage-plays-objects"]
 VerificationTest[Head[Timeline[{Stage[Function[t, {White, Disk[{t, 0}, 0.5], Text["hi", {0, 2}]}], {0, 1}]}, "Duration" -> 1, Background -> Black]["Graphics", 0.5]], Graphics, TestID -> "Stage-draws"]
 VerificationTest[Head[Timeline[{Backdrop[Red]}, "Duration" -> 0.2, "Size" -> {160, 90}]["AnimatedImage", "FrameRate" -> 10]], AnimatedImage, TestID -> "Timeline-AnimatedImage"]

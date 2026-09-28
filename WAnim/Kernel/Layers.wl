@@ -54,8 +54,10 @@ TimelineLayer[a_ ? layerQ]["Shift", dt_] := TimelineLayer[<|a, "Span" -> a["Span
 
 TimelineLayer /: MakeBoxes[l : TimelineLayer[a_ ? layerQ], StandardForm] := BoxForm`ArrangeSummaryBox[
     TimelineLayer, l,
-    Graphics[CanvasBlock[{1920, 1080}, a["Draw"][Mean[a["Span"] /. Infinity -> 1]]], PlotRange -> {{0, 1920}, {0, 1080}},
-        ImageSize -> 96, Background -> GrayLevel[0.9], PlotRangePadding -> None, ImagePadding -> None],
+    (* the icon plays the layer over its span, looping, a few frames a second *)
+    With[{span = a["Span"] /. {-Infinity -> 0, Infinity -> 1}, draw = a["Draw"]},
+        Dynamic[Refresh[Graphics[CanvasBlock[{1920, 1080}, draw[Clock[span, Max[2, span[[2]] - span[[1]]]]]], PlotRange -> {{0, 1920}, {0, 1080}},
+            ImageSize -> 96, Background -> GrayLevel[0.9], PlotRangePadding -> None, ImagePadding -> None], UpdateInterval -> 0.2], SynchronousUpdating -> False]],
     {{BoxForm`SummaryItem[{"Name: ", a["Name"]}]}, {BoxForm`SummaryItem[{"Span: ", a["Span"]}]}},
     {}, StandardForm, "Interpretable" -> Automatic];
 

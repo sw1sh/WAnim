@@ -4,8 +4,8 @@ Name: "WAnim Gallery"
 Author: Nikolay Murzin
 Date: 2026
 Description: "The Manim example gallery, scene by scene, in the Wolfram Language with WAnim"
-Abstract: "Manim's gallery is the standard tour of what an animation library can do: shapes and braces, value trackers and updaters, plots, moving and zoomed cameras, 3D scenes. Here is every one of its scenes written with WAnim. A scene is a Timeline; its picture is a Stage, a function of time that returns ordinary Wolfram Language graphics in Manim's coordinates. Values that move are Tweens, a shape turning into another is a Morph, a path being drawn is a PartialPath, and plots sit on StageAxes. There are no updaters: every frame is computed from the time alone."
-Keywords: [WAnim, Manim, animation, gallery, Timeline, Stage, Tween]
+Abstract: "Manim's gallery is the standard tour of what an animation library can do: shapes and braces, value trackers and updaters, plots, moving and zoomed cameras, 3D scenes. Here is every one of its scenes written with WAnim, following Manim's code. Mobjects are AnimatedObjects, TeX is typeset with MaTeX, and self.play is an object playing an effect: Creation (Write, Create, FadeIn, GrowFromCenter), Transform, Scale, Rotate, Translate. Axes are ordinary Plots. A scene is a Timeline whose picture is a Stage: a function of time, or a list of objects playing on its clock. A ValueTracker is a Tween, and where Manim needs updaters the picture is simply computed from the time."
+Keywords: [WAnim, Manim, animation, gallery, AnimatedObject, MaTeX, Timeline, Stage, Tween]
 Sources: ["[Manim example gallery](https://docs.manim.community/en/stable/examples.html)", "[WAnim](https://github.com/sw1sh/WAnim)"]
 ---
 
@@ -26,46 +26,44 @@ mc = <|"Blue" -> RGBColor["#58C4DD"], "BlueD" -> RGBColor["#29ABCA"], "Green" ->
     "Grey" -> RGBColor["#888888"], "Gold" -> RGBColor["#F0AC5F"]|>
 ```
 
-Three small conveniences: a dot, a scene of a given length on black, and playing it as an animated image:
+A scene of a given length on black; played as an animated image, or its last frame for Manim's still scenes; and Manim's dot:
 
 ```wl
-dot[p_, col_ : White, r_ : 0.08] := {col, Disk[p, r]};
 scene[layers_, dur_, bg_ : Black] := Timeline[Flatten[{layers}], "Duration" -> dur, Background -> bg];
 play[tl_] := tl["AnimatedImage", "FrameRate" -> 15, ImageSize -> 480];
+still[tl_] := tl["Image", tl["Duration"] - 10^-3, ImageSize -> 480];
+dot[p_, col_ : White, r_ : 0.08] := {col, Disk[p, r]};
 ```
 
-A shape grown or scaled about a point:
+Plots styled like Manim's axes, for insetting on a stage (Plot holds its arguments, so the options go in evaluated, last, after a plot's own):
 
 ```wl
-scaled[g_, s_, c_] := GeometricTransformation[g, ScalingTransform[{1, 1} Max[s, 0.001], c]];
+manimPlot = Sequence[AxesStyle -> Directive[White, AbsoluteThickness[2]], TicksStyle -> Directive[White, FontSize -> 30], LabelStyle -> Directive[White, FontSize -> 40], Background -> None,
+    PlotRangePadding -> None, AspectRatio -> Full];
 ```
 
 ## Basic Concepts
 
-### The Logo
+### Manim's Logo, as a W
 
-Manim's logo, assembled piece by piece, with a W for its letter:
+A blackboard W over a triangle, a square and a circle, the group moved to the centre:
 
 ```wl
-logo = Module[{grow = Tween[{#, # + 0.5}, "OutBack"] &},
-    Stage[Function[t, Translate[{
-        scaled[{RGBColor["#e07a5f"], Triangle[{{1, 1}, {1 - Sqrt[3]/2, -0.5}, {1 + Sqrt[3]/2, -0.5}}]}, grow[0][t], {1, 0}],
-        scaled[{RGBColor["#525893"], Rectangle[{-1, 0}, {1, 2}]}, grow[0.3][t], {0, 1}],
-        scaled[{RGBColor["#87c2a5"], Disk[{-1, 0}, 1]}, grow[0.6][t], {-1, 0}],
-        Text[Style["\[DoubleStruckCapitalW]", 330, FontColor -> RGBColor[0.2, 0.2, 0.2, Tween[{1.1, 1.6}][t]]], {-2.25, 1.5}]}, {0.52, -0.65}]], {0, 3}]];
-play[scene[logo, 3, RGBColor["#ece6e2"]]]
+logo = AnimatedObject[{AnimatedObject[RegularPolygon[{1, 0}, {1, Pi/2}, 3], RGBColor["#e07a5f"]], AnimatedObject[Rectangle[{-1, 0}, {1, 2}], RGBColor["#525893"]],
+    AnimatedObject[Disk[{-1, 0}], RGBColor["#87c2a5"]], AnimatedObject["\\mathbb{W}", RGBColor["#343434"]]["Apply", "Scale", 3.5]["Apply", "Translate", 2.25 Left + 1.5 Up]}]["Centralize"];
+still[scene[Stage[{logo}, {0, 1}], 1, RGBColor["#ece6e2"]]]
 ```
 
 ### Brace Annotation
 
-A line between two dots, braced along it and across it:
+A line between two dots, braced below and across:
 
 ```wl
-braces = With[{a = {-2, -1}, b = {2, 1}},
-    Stage[Function[t, {{mc["Orange"], PartialPath[Line[{a, b}], Tween[{0, 1}][t]]}, dot[a], dot[b],
-        {Opacity[Tween[{1, 1.5}][t]], StageBrace[{{-2, -1.1}, {2, -1.1}}], Text["Horizontal distance", StageBrace[{{-2, -1.1}, {2, -1.1}}, "Tip"]],
-            StageBrace[{b, a}], Text[Style[TraditionalForm[x - Subscript[x, 1]], 72], StageBrace[{b, a}, "Tip"]]}}], {0, 2.5}]];
-play[scene[braces, 2.5]]
+line = AnimatedObject[Line[{{-2, -1}, {2, 1}}], mc["Orange"]];
+braces = Stage[{line, dot[{-2, -1}], dot[{2, 1}],
+    Brace[line, White, AnimatedObject["\\text{Horizontal distance}", White]["Apply", "Scale", 0.3]],
+    Brace[line, White, AnimatedObject["x - x_1", White]["Apply", "Scale", 0.3], "Direction" -> RotationTransform[Pi/2][{4, 2}]]}, {0, 1}];
+still[scene[braces, 1]]
 ```
 
 ### Vector Arrow
@@ -73,12 +71,10 @@ play[scene[braces, 2.5]]
 A vector on the number plane:
 
 ```wl
-plane[] := {{mc["BlueD"], AbsoluteThickness[2], Table[Line[{{x, -4}, {x, 4}}], {x, -7, 7}], Table[Line[{{-7.2, y}, {7.2, y}}], {y, -4, 4}]},
+plane = {{mc["BlueD"], AbsoluteThickness[2], Table[Line[{{x, -4}, {x, 4}}], {x, -7, 7}], Table[Line[{{-7.2, y}, {7.2, y}}], {y, -4, 4}]},
     {White, AbsoluteThickness[2], Line[{{-7.2, 0}, {7.2, 0}}], Line[{{0, -4}, {0, 4}}]}};
-vectorArrow = Stage[Function[t, With[{p = Tween[{0.2, 1.2}, {{0, 0}, {2, 2}}][t]}, {plane[], dot[{0, 0}],
-    {White, Arrowheads[0.025], If[Norm[p] > 0.01, Arrow[{{0, 0}, p}], {}]},
-    Text["(0, 0)", {0, -0.45}], {Opacity[Tween[{1.1, 1.4}][t]], Text["(2, 2)", {2.25, 2}, {-1, 0}]}}]], {0, 2}];
-play[scene[vectorArrow, 2]]
+vectorArrow = Stage[{plane, dot[{0, 0}], {White, Arrowheads[0.025], Arrow[{{0, 0}, {2, 2}}]}, Text["(0, 0)", {0, -0.45}], Text["(2, 2)", {2.25, 2}, {-1, 0}]}, {0, 1}];
+still[scene[vectorArrow, 1]]
 ```
 
 ### Gradient Image from an Array
@@ -86,30 +82,26 @@ play[scene[vectorArrow, 2]]
 An image made from an array of numbers, framed:
 
 ```wl
-gradient = Image[Table[i / 255., {256}, {i, 0, 255}]];
-gradientImage = Stage[Function[t, {Inset[gradient, {0, 0}, Center, 4 Tween[{0, 1}][t] + 0.001],
-    {mc["Green"], FaceForm[], EdgeForm[{mc["Green"], AbsoluteThickness[4]}], PartialPath[Rectangle[{-2, -2}, {2, 2}], Tween[{0.8, 1.8}][t]]}}], {0, 2}];
-play[scene[gradientImage, 2]]
+gradientImage = Stage[{Inset[Image[Table[i / 255., {256}, {i, 0, 255}]], {0, 0}, Center, 4],
+    {FaceForm[], EdgeForm[{mc["Green"], AbsoluteThickness[4]}], Rectangle[{-2, -2}, {2, 2}]}}, {0, 1}];
+still[scene[gradientImage, 1]]
 ```
 
 ### Boolean Operations
 
-Two ellipses and the regions they make; each result flies to its corner:
+Two ellipses fade in; each boolean region then shrinks off to its corner, one per second, and is named. A scene's later animations are layers that start later:
 
 ```wl
 e1 = Disk[{-4, -0.5}, {2, 2.5}]; e2 = Disk[{-2, -0.5}, {2, 2.5}];
-region[r_] := BoundaryDiscretizeRegion[r]["BoundaryPolygons"];
-ops = {{"Intersection", mc["Green"], region[RegionIntersection[e1, e2]], {5, 2.5}, 0.25},
-    {"Union", mc["Orange"], region[RegionUnion[e1, e2]], {5, 0.1}, 0.3},
-    {"Exclusion", mc["Yellow"], region[RegionSymmetricDifference[e1, e2]], {5, -2.5}, 0.3},
-    {"Difference", mc["Pink"], region[RegionDifference[e1, e2]], {1.6, 0.1}, 0.3}};
-boolean = Stage[Function[t, With[{fade = Tween[{0, 1}][t]}, {
-    {Opacity[fade], FaceForm[Opacity[0.5, mc["Blue"]]], EdgeForm[{mc["Blue"], AbsoluteThickness[10]}], e1, FaceForm[Opacity[0.5, mc["Red"]]], EdgeForm[{mc["Red"], AbsoluteThickness[10]}], e2,
-        White, Text[Style["Boolean Operation", Underlined], {-3, 2.6}]},
-    Table[With[{k = i, op = ops[[i]]}, With[{u = Tween[{2 k - 1, 2 k}][t], c = RegionCentroid[RegionUnion @@ op[[3]]]},
-        If[t < 2 k - 1, {}, {{FaceForm[Opacity[0.5, op[[2]]]], EdgeForm[{op[[2]], AbsoluteThickness[4]}],
-            GeometricTransformation[op[[3]], TranslationTransform[u (op[[4]] - c)] @* ScalingTransform[{1, 1} (1 - u (1 - op[[5]])), c]]},
-            {Opacity[Tween[{2 k, 2 k + 0.5}][t]], White, Text[Style[op[[1]], 35], op[[4]] + {0, 0.9 op[[5]] / 0.3}]}}]]], {i, 4}]}]], {0, 9}];
+regionObject[r_, col_] := AnimatedObject[BoundaryDiscretizeRegion[r]["BoundaryPolygons"], {FaceForm[Opacity[0.5, col]], EdgeForm[{col, AbsoluteThickness[4]}]}];
+ops = {{"Intersection", RegionIntersection, mc["Green"], {5, 2.5}, 0.25}, {"Union", RegionUnion, mc["Orange"], {5, 0.1}, 0.3},
+    {"Exclusion", RegionSymmetricDifference, mc["Yellow"], {5, -2.5}, 0.3}, {"Difference", RegionDifference, mc["Pink"], {1.6, 0.1}, 0.3}};
+boolean = {Stage[{AnimatedObject[{AnimatedObject[e1, {FaceForm[Opacity[0.5, mc["Blue"]]], EdgeForm[{mc["Blue"], AbsoluteThickness[10]}]}],
+        AnimatedObject[e2, {FaceForm[Opacity[0.5, mc["Red"]]], EdgeForm[{mc["Red"], AbsoluteThickness[10]}]}],
+        AnimatedObject["\\underline{\\text{Boolean Operation}}", White]["Apply", "Scale", 0.5]["Apply", "Translate", {-3, 2.6}]}]["Play", "Creation", Method -> "FadeIn"]}, {0, 9}],
+    MapIndexed[With[{k = 2 #2[[1]] - 1, obj = regionObject[#1[[2]][e1, e2], #1[[3]]]},
+        {Stage[{obj["Play", AnimationEffect[{AnimationEffect["Scale", #1[[5]]], AnimationEffect["Translate", #1[[4]] - obj["Center"]]}]]}, {k, 9}],
+         Stage[{AnimatedObject["\\text{" <> #1[[1]] <> "}", White]["Apply", "Scale", 0.25]["Apply", "Translate", #1[[4]] + {0, 0.9 #1[[5]] / 0.3}]["Play", "Creation", Method -> "FadeIn"]}, {k + 1, 9}]}] &, ops]};
 play[scene[boolean, 9]]
 ```
 
@@ -117,36 +109,34 @@ play[scene[boolean, 9]]
 
 ### Point Moving on Shapes
 
-A circle grows, a dot hops onto it, runs around it, then spins about a point:
+A circle grows from its centre; a dot moves onto it, runs around it, then spins about a point. Running along a path is an effect written as a function of the object and time:
 
 ```wl
-pointOnShapes = Stage[Function[t, With[{p = Which[t < 1, {0, 0}, t < 2, Tween[{1, 2}, {{0, 0}, {1, 0}}][t],
-        t < 4, {Cos[Pi (t - 2)], Sin[Pi (t - 2)]}, True, {2, 0} + RotationMatrix[2 Pi Tween[{4, 5.5}][t]] . {-1, 0}]},
-    {{mc["Blue"], scaled[Circle[{0, 0}, 1], Tween[{0, 1}][t], {0, 0}]}, {White, Line[{{3, 0}, {5, 0}}]}, dot[p]}]], {0, 6.5}];
+alongCircle = AnimationEffect[#Object["TransformPrimitives", TranslationTransform[{Cos[Pi #t], Sin[Pi #t]} - {1, 0}]] &, "Duration" -> 2];
+pointOnShapes = Stage[{AnimatedObject[Circle[], mc["Blue"]]["Play", "Creation", Method -> "GrowFromCenter"], {White, Line[{{3, 0}, {5, 0}}]},
+    AnimatedObject[Disk[{0, 0}, 0.08], White]["Wait"]["Play", "Translate", Right]["Play", alongCircle]["Play", "Rotate", 2 Pi, {2, 0}, "Duration" -> 1.5, "Rate" -> "Linear"]}, {0, 6.5}];
 play[scene[pointOnShapes, 6.5]]
 ```
 
 ### Moving Around
 
-A square shifted, recoloured, shrunk and turned, one move per second:
+A square shifted, recoloured, shrunk and turned, one move per second; recolouring is an effect on the object's directive:
 
 ```wl
-movingAround = Stage[Function[t, With[{c = Tween[{0, 1}, {{0, 0}, {-1, 0}}][t], s = Tween[{2, 3}, {1, 0.3}][t], a = Tween[{3, 4}, {0, 0.4}][t],
-        col = Tween[{1, 2}, {mc["Blue"], mc["Orange"]}][t]},
-    {EdgeForm[{mc["Blue"], AbsoluteThickness[4]}], FaceForm[col],
-        GeometricTransformation[Rectangle[{-1, -1}, {1, 1}], TranslationTransform[c] @* RotationTransform[a] @* ScalingTransform[{s, s}]]}]], {0, 4}];
+recolour[a_, b_] := AnimationEffect[#Object["SetDirective", Blend[{a, b}, Easing["Smooth"][#t]]] &];
+movingAround = Stage[{AnimatedObject[Rectangle[{-1, -1}, {1, 1}], mc["Blue"]]["Play", "Translate", Left]["Play", recolour[mc["Blue"], mc["Orange"]]]["Play", "Scale", 0.3]["Play", "Rotate", 0.4]}, {0, 4}];
 play[scene[movingAround, 4]]
 ```
 
 ### Moving Angle
 
-An angle driven by a tracked value, its arc and its label following:
+An angle driven by a tracked value, its arc and its label following. A ValueTracker and its animations are one Tween through keyframes:
 
 ```wl
 theta = Tween[{{1, 110}, {2, 40}, {3, 180}, {3.5, 180}, {4.5, 350}}];
-movingAngle = Stage[Function[t, With[{th = theta[t] Degree, lab = Tween[{3, 3.5}, {White, mc["Red"]}][t]},
-    {White, Line[{{-1, 0}, {1, 0}}], Line[{{-1, 0}, {-1, 0} + 2 {Cos[th], Sin[th]}}], Circle[{-1, 0}, 0.5, {0, th}],
-        Text[Style[TraditionalForm[\[Theta]], 72, lab], {-1, 0} + 0.8 {Cos[th / 2], Sin[th / 2]}]}]], {0, 4.5}];
+thetaLabel = AnimatedObject["\\theta", White]["Apply", "Scale", 0.4];
+movingAngle = Stage[Function[t, With[{th = theta[t] Degree}, {White, Line[{{-1, 0}, {1, 0}}], Line[{{-1, 0}, {-1, 0} + 2 {Cos[th], Sin[th]}}], Circle[{-1, 0}, 0.5, {0, th}],
+    thetaLabel["SetDirective", Tween[{3, 3.5}, {White, mc["Red"]}][t]]["TransformPrimitives", TranslationTransform[{-1, 0} + 0.8 {Cos[th / 2], Sin[th / 2]}]]}]], {0, 4.5}];
 play[scene[movingAngle, 4.5]]
 ```
 
@@ -165,34 +155,29 @@ play[scene[movingDots, 3]]
 A row of dots moved so that its red one lands on the yellow:
 
 ```wl
-movingGroup = Stage[Function[t, With[{v = Tween[{0, 1}, {{0, 0}, {4, 3} - {1.2, 0}}][t]},
-    {dot[{4, 3}, mc["Yellow"], 0.11], dot[# + v, White, 0.11] & /@ {{-1.6, 0}, {-0.2, 0}, {2.6, 0}}, dot[{1.2, 0} + v, mc["Red"], 0.11]}]], {0, 1.5}];
+group = AnimatedObject[{dot[{-1.6, 0}, White, 0.11], dot[{-0.2, 0}, White, 0.11], dot[{1.2, 0}, mc["Red"], 0.11], dot[{2.6, 0}, White, 0.11]}];
+movingGroup = Stage[{dot[{4, 3}, mc["Yellow"], 0.11], group["Play", "Translate", {4, 3} - {1.2, 0}]["Wait", "Duration" -> 0.5]}, {0, 1.5}];
 play[scene[movingGroup, 1.5]]
 ```
 
 ### Moving Frame Box
 
-The product rule, written out; a box around one term moves to the other:
+The product rule written out; a box drawn round one term becomes a box round the other. The formula is typeset once, in parts, and each box is taken from its part:
 
 ```wl
-terms = {Row[{TraditionalForm[HoldForm[Dt[f[x] g[x], x]]], " ="}], TraditionalForm[HoldForm[f[x] Dt[g[x], x]]], "+", TraditionalForm[HoldForm[g[x] Dt[f[x], x]]]};
-widths = (Rasterize[Style[#, 72, FontFamily -> "Source Sans 3"], "BoundingBox"][[1]] 128/9 / 1920) & /@ terms;
-lefts = -Total[widths + 0.2] / 2 + Most[Accumulate[Prepend[widths + 0.2, 0]]];
-box[i_] := {{lefts[[i]] - 0.1, -0.75}, {lefts[[i]] + widths[[i]] + 0.1, 0.75}};
-frameBox = Stage[Function[t, {
-    MapIndexed[{Opacity[Tween[{0.25 (#2[[1]] - 1), 0.25 (#2[[1]] - 1) + 0.5}][t]], White, Text[Style[#1, 72], {lefts[[#2[[1]]]], 0}, {-1, 0}]} &, terms],
-    {FaceForm[], EdgeForm[{mc["Yellow"], AbsoluteThickness[4]}], mc["Yellow"],
-        If[t < 3, PartialPath[Rectangle @@ box[2], Tween[{1, 2}][t]], Rectangle @@ Tween[{3, 4}, {box[2], box[4]}][t]]}}], {0, 5}];
+text = AnimatedObject[{"\\frac{d}{dx}f(x)g(x)=", "f(x)\\frac{d}{dx}g(x)", "+", "g(x)\\frac{d}{dx}f(x)"}];
+frameBox = Stage[{text["Play", "Creation", Method -> "Write"],
+    text["Part", 2]["SurroundingRectangle"]["Play", "Creation", Method -> "Create", "Delay" -> 1]["Wait"]["Play", "Transform", text["Part", 4]["SurroundingRectangle"]]}, {0, 5}];
 play[scene[frameBox, 5]]
 ```
 
 ### Rotation Updater
 
-A line turned forth for two seconds and back for two, as a function of time:
+A line turned forth for two seconds and back for two:
 
 ```wl
-rotation = Stage[Function[t, With[{a = Which[t < 2, t, t < 4, 4 - t, True, 0]},
-    {White, Line[{{0, 0}, {-1, 0}}], mc["Yellow"], Line[{{0, 0}, RotationMatrix[a] . {-1, 0}}]}]], {0, 4.5}];
+rotation = Stage[{AnimatedObject[Line[{{0, 0}, {-1, 0}}], White], AnimatedObject[Line[{{0, 0}, {-1, 0}}], mc["Yellow"]]["Play", "Rotate", 2, {0, 0}, "Duration" -> 2, "Rate" -> "Linear"][
+    "Play", "Rotate", -2, {0, 0}, "Duration" -> 2, "Rate" -> "Linear"]}, {0, 4.5}];
 play[scene[rotation, 4.5]]
 ```
 
@@ -210,17 +195,15 @@ play[scene[trace, 6]]
 
 ### Sine and Cosine
 
-Two functions on axes with numbered, elongated ticks, drawn in:
+Two functions on axes with numbered ticks, a vertical line at 2π, and labels:
 
 ```wl
-axes1 = StageAxes[{-10, 10.3, 1}, {-1.5, 1.5, 1}, "Size" -> {10, 6}, "Color" -> mc["Green"], "Tips" -> False,
-    "Numbers" -> {Range[-10, 10, 2], {}}, "LongTicks" -> {Range[-10, 10, 2], {}}];
-sinCos = Stage[Function[t, With[{u = Tween[{0.3, 1.8}][t]}, {axes1["Primitives"], White, axes1["Labels"],
-    {mc["Blue"], PartialPath[axes1["Graph", Sin], u]}, {mc["Red"], PartialPath[axes1["Graph", Cos], u]},
-    {Opacity[Tween[{1.8, 2.3}][t]], Text[Style[TraditionalForm[Sin[x]], 60, mc["Blue"]], axes1[{-10, Sin[-10]}] + {0, 0.5}],
-        Text[Style[TraditionalForm[Cos[x]], 60, mc["Red"]], axes1[{10.3, Cos[10.3]}] + {0.3, 0.3}, {-1, 0}],
-        {mc["Yellow"], axes1["VerticalLine", {2 Pi, 1}]}, Text[Style[TraditionalForm[x == 2 Pi], 60], axes1[{2 Pi, 1}] + {0.5, 0.4}]}}]], {0, 3}];
-play[scene[sinCos, 3]]
+sinCos = Stage[{Inset[Plot[{Sin[x], Cos[x]}, {x, -10, 10.3}, PlotStyle -> {Directive[mc["Blue"], AbsoluteThickness[4]], Directive[mc["Red"], AbsoluteThickness[4]]},
+    Ticks -> {Range[-10, 10, 2], {-1, 1}}, AxesLabel -> {"x", "y"}, PlotRange -> {-1.5, 1.5}, AxesStyle -> Directive[mc["Green"], AbsoluteThickness[2]],
+    Epilog -> {mc["Yellow"], AbsoluteThickness[4], Line[{{2 Pi, 0}, {2 Pi, 1}}],
+        Text[Style[TraditionalForm[x == 2 \[Pi]], White, 48], {2 Pi, 1.25}], Text[Style[TraditionalForm[Sin[x]], mc["Blue"], 48], {-10, 0.8}, {-1, 0}],
+        Text[Style[TraditionalForm[Cos[x]], mc["Red"], 48], {10.3, -0.6}, {1, 0}]}, Evaluate[manimPlot]], {0, 0}, Center, {10, 6}]}, {0, 1}];
+still[scene[sinCos, 1]]
 ```
 
 ### Arg Min
@@ -228,9 +211,9 @@ play[scene[sinCos, 3]]
 A dot slides down a parabola to its minimum:
 
 ```wl
-axes2 = StageAxes[{0, 10, 1}, {0, 100, 10}, "Tips" -> False];
-argMin = Stage[Function[t, With[{x = Tween[{0, 1}, {0, 5}][t]}, {axes2["Primitives"], axes2["Labels", "x", "f(x)"],
-    {mc["Maroon"], axes2["Graph", 2 (# - 5)^2 &]}, dot[axes2[{x, 2 (x - 5)^2}]]}]], {0, 2}];
+argMin = Stage[Function[t, With[{x = Tween[{0, 1}, {0, 5}][t]},
+    Inset[Plot[2 (u - 5)^2, {u, 0, 10}, PlotStyle -> Directive[mc["Maroon"], AbsoluteThickness[4]], AxesLabel -> {"x", "f(x)"}, Ticks -> None,
+        Epilog -> {White, AbsolutePointSize[16], Point[{x, 2 (x - 5)^2}]}, Evaluate[manimPlot]], {0, 0}, Center, {12, 6}]]], {0, 2}];
 play[scene[argMin, 2]]
 ```
 
@@ -239,55 +222,52 @@ play[scene[argMin, 2]]
 Riemann rectangles, and the area between two curves:
 
 ```wl
-axes3 = StageAxes[{0, 5, 1}, {0, 6, 1}, "Tips" -> False, "Numbers" -> {{2, 3}, {}}];
 c1 = 4 # - #^2 &; c2 = 0.8 #^2 - 3 # + 4 &;
-graphArea = Stage[Function[t, {axes3["Primitives"], axes3["Labels"], {mc["Blue"], axes3["Graph", c1, {0, 4}]}, {mc["GreenB"], axes3["Graph", c2, {0, 4}]},
-    {mc["Yellow"], axes3["VerticalLine", {2, c1[2]}], axes3["VerticalLine", {3, c1[3]}]},
-    {Opacity[0.5 Tween[{0, 1}][t]], mc["Blue"], EdgeForm[Black], axes3["Riemann", c1, {0.3, 0.6}, 0.03]},
-    {Opacity[0.5 Tween[{0.5, 1.5}][t]], mc["Grey"], axes3["Area", c2, c1, {2, 3}]}}], {0, 2}];
-play[scene[graphArea, 2]]
+graphArea = Stage[{Inset[Plot[{c1[x], c2[x]}, {x, 0, 4}, PlotStyle -> {Directive[mc["Blue"], AbsoluteThickness[4]], Directive[mc["GreenB"], AbsoluteThickness[4]]},
+    PlotRange -> {{0, 5}, {0, 6}}, Ticks -> {{2, 3}, None}, AxesLabel -> {"x", "y"},
+    Epilog -> {{mc["Yellow"], AbsoluteThickness[4], Line[{{2, 0}, {2, c1[2]}}], Line[{{3, 0}, {3, c1[3]}}]},
+        {EdgeForm[Black], FaceForm[Opacity[0.5, mc["Blue"]]], Table[Rectangle[{x, 0}, {x + 0.03, c1[x]}], {x, 0.3, 0.57, 0.03}]},
+        {FaceForm[Opacity[0.5, mc["Grey"]]], Polygon[Join[Table[{x, c2[x]}, {x, 2, 3, 0.02}], Table[{x, c1[x]}, {x, 3, 2, -0.02}]]]}}, Evaluate[manimPlot]], {0, 0}, Center, {12, 6}]}, {0, 1}];
+still[scene[graphArea, 1]]
 ```
 
 ### A Rectangle Under a Hyperbola
 
-A rectangle from the origin to a point on y = 25/x keeps its area as the point moves:
+A rectangle from the origin to a point on y = 25/x keeps its area as the point moves; it is drawn in first:
 
 ```wl
-axes4 = StageAxes[{0, 10, 1}, {0, 10, 1}, "Size" -> {6, 6}, "Tips" -> False];
 xt = Tween[{{1, 5}, {2, 10}, {3, 2.5}, {4, 5}}];
-polygonOnAxes = Stage[Function[t, With[{x = xt[t]}, {axes4["Primitives"], {mc["YellowD"], axes4["Graph", 25 / # &, {2.5, 10}]},
-    {FaceForm[Opacity[0.5 Tween[{0, 1}][t], mc["Blue"]]], EdgeForm[{Opacity[Tween[{0, 1}][t], mc["YellowB"]], AbsoluteThickness[1]}],
-        Polygon[axes4[{{x, 25 / x}, {0, 25 / x}, {0, 0}, {x, 0}}]]}, dot[axes4[{x, 25 / x}]]}]], {0, 4}];
+polygonOnAxes = Stage[Function[t, With[{x = xt[t]}, Inset[Plot[25 / u, {u, 2.5, 10}, PlotStyle -> Directive[mc["YellowD"], AbsoluteThickness[4]], PlotRange -> {{0, 10}, {0, 10}},
+    Ticks -> None, Epilog -> {{FaceForm[Opacity[0.5 Tween[{0, 1}][t], mc["Blue"]]], EdgeForm[], Rectangle[{0, 0}, {x, 25 / x}]},
+        {mc["YellowB"], AbsoluteThickness[1], PartialPath[Rectangle[{0, 0}, {x, 25 / x}], Tween[{0, 1}][t]]}, {White, AbsolutePointSize[16], Point[{x, 25 / x}]}}, Evaluate[manimPlot]],
+    {0, 0}, Center, {6, 6}]]], {0, 4}];
 play[scene[polygonOnAxes, 4]]
 ```
 
 ### Heat Diagram
 
-A line graph with its vertices, labelled axes, drawn in:
+A line graph with its vertices, labelled axes:
 
 ```wl
-axes5 = StageAxes[{0, 40, 5}, {-8, 32, 5}, "Size" -> {9, 6}, "Tips" -> False, "Numbers" -> {Range[0, 35, 5], Range[-5, 30, 5]}];
-heatPts = axes5[{{0, 20}, {8, 0}, {38, 0}, {39, -5}}];
-heat = Stage[Function[t, {axes5["Primitives"], axes5["Labels", TraditionalForm[\[CapitalDelta]Q], "T[\[Degree]C]"],
-    {mc["Yellow"], PartialPath[Line[heatPts], Tween[{0, 1.5}][t]], Disk[#, 0.08] & /@ Select[heatPts, Tween[{0, 1.5}][t] > 0 &]}}], {0, 2}];
-play[scene[heat, 2]]
+heat = Stage[{Inset[ListLinePlot[{{0, 20}, {8, 0}, {38, 0}, {39, -5}}, Mesh -> All, MeshStyle -> AbsolutePointSize[12], PlotStyle -> Directive[mc["Yellow"], AbsoluteThickness[4]],
+    PlotRange -> {{0, 40}, {-8, 32}}, Ticks -> {Range[0, 35, 5], Range[-5, 30, 5]}, AxesLabel -> {"\[CapitalDelta]Q", "T[\[Degree]C]"}, Evaluate[manimPlot]], {0, 0}, Center, {9, 6}]}, {0, 1}];
+still[scene[heat, 1]]
 ```
 
 ## Cameras
 
 ### Following the Graph
 
-The camera zooms onto a dot, follows it along the sine curve, and pulls back. The stage's plot range is a function of time:
+The camera zooms onto a dot, follows it along the sine curve, and pulls back; the stage's plot range is a function of time. The plot is inset at a known place, so a data point's place on the stage is a rescaling:
 
 ```wl
-axes6 = StageAxes[{-1, 10, 1}, {-1, 10, 1}];
-along[u_] := axes6[{3 Pi u, Sin[3 Pi u]}];
-dotAt[t_] := along[Tween[{1, 2}, "Linear"][t]];
-camera[t_] := With[{c = Which[t < 1, Tween[{0, 1}, {{0, 0}, along[0]}][t], t < 2, dotAt[t], True, Tween[{2, 3}, {along[1], {0, 0}}][t]],
+onStage[{x_, y_}] := ({x, y} - {4.5, 4.5}) {12, 6} / 11;
+dotAt[t_] := With[{u = 3 Pi Tween[{1, 2}, "Linear"][t]}, {u, Sin[u]}];
+camera[t_] := With[{c = Which[t < 1, Tween[{0, 1}, {{0, 0}, onStage[{0, 0}]}][t], t < 2, onStage[dotAt[t]], True, Tween[{2, 3}, {onStage[dotAt[2]], {0, 0}}][t]],
         s = Which[t < 1, Tween[{0, 1}, {1, 0.5}][t], t < 2, 0.5, True, Tween[{2, 3}, {0.5, 1}][t]]},
     {c[[1]] + s {-64/9, 64/9}, c[[2]] + s {-4, 4}}];
-following = Stage[Function[t, {axes6["Primitives"], {mc["Blue"], axes6["Graph", Sin, {0, 3 Pi}]}, dot[along[0]], dot[along[1]], dot[dotAt[t], mc["Orange"]]}], {0, 3},
-    PlotRange -> camera];
+following = Stage[Function[t, Inset[Plot[Sin[x], {x, 0, 3 Pi}, PlotStyle -> Directive[mc["Blue"], AbsoluteThickness[4]], PlotRange -> {{-1, 10}, {-1, 10}}, Ticks -> None,
+    Epilog -> {White, AbsolutePointSize[16], Point[{{0, 0}, {3 Pi, 0}}], mc["Orange"], Point[dotAt[t]]}, Evaluate[manimPlot]], {0, 0}, Center, {12, 6}]], {0, 3}, PlotRange -> camera];
 play[scene[following, 3]]
 ```
 
@@ -316,16 +296,14 @@ play[scene[zoomed, 13]]
 
 ### Text Fixed in the Frame
 
-A 3D scene seen from above and at an angle, with text that stays put. A Stage can hold a 3D picture as an inset under 2D primitives. The camera is far away with a narrow, fixed angle, so the scale holds as it turns:
+3D axes seen from above and at an angle, with text that stays put: a Stage holds the 3D picture as an inset under 2D primitives. The camera is far away with a narrow, fixed angle, so the scale holds as it turns:
 
 ```wl
 view[phi_, theta_] := Sequence[ViewPoint -> 50 {Sin[phi] Cos[theta], Sin[phi] Sin[theta], Cos[phi]}, ViewVertical -> {0, 0, 1}, ViewCenter -> {0.5, 0.5, 0.5},
-    ViewAngle -> 2 ArcTan[0.62 / 50], Boxed -> False, Lighting -> "Neutral", Background -> None];
+    ViewAngle -> 2 ArcTan[0.62 / 50], Boxed -> False, Lighting -> "Neutral", Background -> None, PlotRange -> {{-6, 6}, {-6, 6}, {-6, 6}}];
 axes3D = {White, Arrowheads[0.02], Arrow[{{-6, 0, 0}, {6, 0, 0}}], Arrow[{{0, -5, 0}, {0, 5, 0}}], Arrow[{{0, 0, -4}, {0, 0, 4}}]};
 in3D[g_] := Inset[g, {0, 0}, Center, {128/9, 8}];
-fixedText = Stage[Function[t, {in3D[Graphics3D[axes3D, view[75 Degree, -45 Degree + 0.2 Tween[{0, 2}][t]], PlotRange -> {{-6, 6}, {-6, 6}, {-6, 6}}]],
-    Text["This is a 3D text", {-64/9 + 0.5, 3.4}, {-1, 0}]}], {0, 2}];
-play[scene[fixedText, 2]]
+still[scene[Stage[{in3D[Graphics3D[axes3D, view[75 Degree, -45 Degree]]], Text["This is a 3D text", {-64/9 + 0.5, 3.4}, {-1, 0}]}, {0, 1}], 1]]
 ```
 
 ### A Light Source Below
@@ -336,8 +314,7 @@ A checkered sphere, lit from underneath:
 sphere = ParametricPlot3D[1.5 {Cos[u] Cos[v], Cos[u] Sin[v], Sin[u]}, {u, -Pi/2, Pi/2}, {v, 0, 2 Pi}, Mesh -> {14, 31}, MeshStyle -> None,
     MeshShading -> {{mc["RedD"], mc["RedE"]}, {mc["RedE"], mc["RedD"]}}, PlotPoints -> 40, Axes -> False,
     Lighting -> {{"Directional", White, {{0, 0, -3}, {0, 0, 0}}}, {"Ambient", GrayLevel[0.35]}}];
-lightBelow = Stage[Function[t, in3D[Show[Graphics3D[axes3D], sphere, view[75 Degree, 30 Degree + 0.3 Tween[{0, 2}][t]], PlotRange -> {{-6, 6}, {-6, 6}, {-6, 6}}]]], {0, 2}];
-play[scene[lightBelow, 2]]
+still[scene[Stage[{in3D[Show[Graphics3D[axes3D], sphere, view[75 Degree, 30 Degree]]]}, {0, 1}], 1]]
 ```
 
 ### An Orbiting Camera
@@ -345,9 +322,8 @@ play[scene[lightBelow, 2]]
 The camera turns about the scene, then returns:
 
 ```wl
-orbit = Stage[Function[t, With[{th = 30 Degree + If[t < 1, 0.1 t, 0.1 (1 - Tween[{1, 2}][t])]},
-    in3D[Graphics3D[{axes3D, mc["Red"], AbsoluteThickness[4], Line[Table[{Cos[a], Sin[a], 0}, {a, 0, 2 Pi, Pi / 60}]]},
-        view[75 Degree, th], PlotRange -> {{-6, 6}, {-6, 6}, {-6, 6}}]]]], {0, 3}];
+circle3D = {mc["Red"], AbsoluteThickness[4], Line[Table[{Cos[a], Sin[a], 0}, {a, 0, 2 Pi, Pi / 60}]]};
+orbit = Stage[Function[t, in3D[Graphics3D[{axes3D, circle3D}, view[75 Degree, 30 Degree + If[t < 1, 0.1 t, 0.1 (1 - Tween[{1, 2}][t])]]]]], {0, 3}];
 play[scene[orbit, 3]]
 ```
 
@@ -356,9 +332,8 @@ play[scene[orbit, 3]]
 The camera circles in two angles at once, so the scene seems to sway:
 
 ```wl
-illusion = Stage[Function[t, in3D[Graphics3D[{axes3D, mc["Red"], AbsoluteThickness[4], Line[Table[{Cos[a], Sin[a], 0}, {a, 0, 2 Pi, Pi / 60}]]},
-    view[75 Degree + 0.2 Sin[2 t], 30 Degree + 0.3 Sin[2 t + Pi / 2] - 0.3], PlotRange -> {{-6, 6}, {-6, 6}, {-6, 6}}]]], {0, Pi}];
-play[scene[illusion, Pi]]
+illusion = Stage[Function[t, in3D[Graphics3D[{axes3D, circle3D}, view[75 Degree + 0.2 Sin[2 t], 30 Degree + 0.3 Sin[2 t + Pi / 2] - 0.3]]]], {0, Pi / 2}];
+play[scene[illusion, Pi / 2]]
 ```
 
 ### A Surface
@@ -368,29 +343,33 @@ A Gaussian bump, checkered and translucent:
 ```wl
 gauss = ParametricPlot3D[{2 u, 2 v, 2 Exp[-(u^2 + v^2) / (2 0.4^2)]}, {u, -2, 2}, {v, -2, 2}, Mesh -> {23, 23}, MeshStyle -> mc["Green"],
     MeshShading -> {{Opacity[0.5, mc["Orange"]], Opacity[0.5, mc["Blue"]]}, {Opacity[0.5, mc["Blue"]], Opacity[0.5, mc["Orange"]]}}, PlotPoints -> 48, Axes -> False, Lighting -> "Neutral"];
-surface = Stage[Function[t, in3D[Show[Graphics3D[axes3D], gauss, view[75 Degree, -30 Degree + 0.4 Tween[{0, 3}][t]], PlotRange -> {{-6, 6}, {-6, 6}, {-6, 6}}]]], {0, 3}];
-play[scene[surface, 3]]
+still[scene[Stage[{in3D[Show[Graphics3D[axes3D], gauss, view[75 Degree, -30 Degree]]]}, {0, 1}], 1]]
 ```
 
 ## Advanced
 
 ### The Opening
 
-A title and a formula, a title moved to the corner, a grid drawn in and bent by a non-linear function:
+A title written as the formula fades in; the title moves to the corner as the formula's terms drop away one after another; a grid is drawn in, line by line, and bent by a non-linear function:
 
 ```wl
-basel = TraditionalForm[HoldForm[Sum[1/n^2, {n, 1, Infinity}] == Pi^2/6]];
-gridLines = Join[Table[{x, y}, {x, -8, 8}, {y, Subdivide[-5., 5., 60]}], Table[{x, y}, {y, -5, 5}, {x, Subdivide[-8., 8., 90]}]];
-bend[p_, u_] := p + u {Sin[p[[2]]], Sin[p[[1]]]};
-titleAt[t_] := {Tween[{2, 3}, {{0, 0.8}, {-4.7, 3.4}}][t], Tween[{2, 3}, {1, 0.75}][t]};
-opening = Stage[Function[t, With[{g = Tween[{5, 8}][t], k = Tween[{4, 5}][t]}, {
-    {Opacity[k], MapIndexed[{If[#2[[1]] <= 17 && #1[[1, 1]] == 0 || #2[[1]] > 17 && #1[[1, 2]] == 0, White, mc["BlueD"]], AbsoluteThickness[2],
-        PartialPath[Line[bend[#, g] & /@ #1], Clip[3 k - 2 #2[[1]] / Length[gridLines], {0, 1}]]} &, gridLines]},
-    {White, Opacity[1 - Tween[{4, 4.5}][t]], Text[Style["This is some typesetting", 72 titleAt[t][[2]]], titleAt[t][[1]]]},
-    {White, Opacity[Tween[{0, 1}][t] - Tween[{2, 3}][t]], Text[Style[basel, 72], {0, -0.6 - 0.5 (1 - Tween[{0, 1}][t]) - Tween[{2, 3}][t]}]},
-    {White, Opacity[Tween[{4, 4.5}][t] - Tween[{9, 9.5}][t]], Text[Style["This is a grid", 108], {-4.2, 3.4 - 0.4 (1 - Tween[{4, 4.5}][t])}]},
-    {White, Opacity[Tween[{9, 9.5}][t]], Text[Style["That was a non-linear function\napplied to the grid", 72], {-6.7, 3.4}, {-1, 0}]}}]], {0, 10.5}];
-play[scene[opening, 10.5]]
+title = AnimatedObject["\\text{This is some \\LaTeX}", White]["Apply", "Scale", 0.6]["Apply", "Translate", {0, 0.9}];
+basel = AnimatedObject[{"\\sum_{n=1}^\\infty", "\\frac{1}{n^2}", "=", "\\frac{\\pi^2}{6}"}]["Apply", "Translate", {0, -0.6}];
+corner = AnimatedObject["\\text{That was a transform}", White]["Apply", "Scale", 0.6]["Apply", "Translate", {-4, 3.4}];
+gridLines = Join[Table[Line[Table[{x, y}, {y, Subdivide[-5., 5., 60]}]], {x, -8, 8}], Table[Line[Table[{x, y}, {x, Subdivide[-8., 8., 90]}]], {y, -5, 5}]];
+bend = AnimationEffect[Function[e, With[{u = Easing["Smooth"][e["t"] / 3]},
+    e["Object"]["SetPrimitives", e["Object"]["Primitives"] /. Line[pts_] :> Line[Function[p, p + u {Sin[p[[2]]], Sin[p[[1]]]}] /@ pts]]]], "Duration" -> 3];
+opening = {
+    Stage[{title["Play", "Creation", Method -> "Write"]["Wait"]["Play", "Creation", Method -> "FadeIn", "Reverse" -> True]}, {0, 3}],
+    Stage[{basel["Play", "Creation", Method -> "FadeIn"]["Wait"]["Play", "Creation", Method -> "FadeIn", "LagRatio" -> 0.3, "Reverse" -> True]}, {0, 3}],
+    Stage[{corner["Play", "Creation", Method -> "FadeIn"]["Wait"]["Play", "Creation", Method -> "FadeIn", "Reverse" -> True]}, {2, 5}],
+    Stage[{AnimatedObject[gridLines, Directive[mc["BlueD"], AbsoluteThickness[2]]]["Play", "Creation", Method -> "Create", "LagRatio" -> 0.1, "Duration" -> 3]["Wait"]["Play", bend]},
+        {4, 12.5}],
+    Stage[{AnimatedObject["\\text{This is a grid}", White]["Apply", "Scale", 0.8]["Apply", "Translate", {-4, 3.4}]["Play", "Creation", Method -> "FadeIn"]["Wait", "Duration" -> 6][
+        "Play", "Creation", Method -> "FadeIn", "Reverse" -> True]}, {4, 12}],
+    Stage[{AnimatedObject["\\text{That was a non-linear function applied to the grid}", White]["Apply", "Scale", 0.45]["Apply", "Translate", {-2.5, 3.4}][
+        "Play", "Creation", Method -> "FadeIn"]}, {11, 12.5}]};
+play[scene[opening, 12.5]]
 ```
 
 ### The Sine Curve from a Unit Circle
@@ -400,8 +379,8 @@ A dot goes round the circle; its height, carried across, draws the sine curve:
 ```wl
 angleAt[t_] := 2 Pi 0.25 t;
 dotPos[t_] := {-4, 0} + {Cos[angleAt[t]], Sin[angleAt[t]]};
-sineCircle = Stage[Function[t, With[{p = dotPos[t], x = -3 + t}, {White, Line[{{-6, 0}, {6, 0}}], Line[{{-4, -2}, {-4, 2}}],
-    Text[Style[TraditionalForm[#[[2]]], 72], {#[[1]], -0.45}] & /@ {{-1, \[Pi]}, {1, 2 \[Pi]}, {3, 3 \[Pi]}, {5, 4 \[Pi]}},
+piLabels = MapThread[AnimatedObject[#1, White]["Apply", "Scale", 0.4]["Apply", "Translate", {#2, -0.4}] &, {{"\\pi", "2\\pi", "3\\pi", "4\\pi"}, {-1, 1, 3, 5}}];
+sineCircle = Stage[Function[t, With[{p = dotPos[t], x = -3 + t}, {White, Line[{{-6, 0}, {6, 0}}], Line[{{-4, -2}, {-4, 2}}], piLabels,
     {mc["Red"], Circle[{-4, 0}, 1]}, {mc["Blue"], Line[{{-4, 0}, p}]}, {mc["YellowA"], AbsoluteThickness[2], Line[{p, {x, p[[2]]}}]},
     {mc["YellowD"], Line[Table[{-3 + s, Sin[angleAt[s]]}, {s, Subdivide[0., t, Max[2, Ceiling[40 t]]]}]]}, dot[p, mc["Yellow"]]}]], {0, 8.5}];
 play[scene[sineCircle, 8.5]]

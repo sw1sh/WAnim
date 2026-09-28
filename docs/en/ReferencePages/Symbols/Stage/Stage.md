@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/Stage
 Keywords: [stage, scene, Manim, math coordinates, camera, animation, graphics]
-SeeAlso: [Tween, Morph, PartialPath, StageAxes, StageBrace, Timeline]
+SeeAlso: [Tween, Morph, PartialPath, AnimatedObject, AxisObject, Timeline]
 RelatedGuides: [WAnim]
 ---
 
@@ -19,6 +19,8 @@ RelatedGuides: [WAnim]
 - *f*[*t*] may also be a [Graphics3D](), which fills the stage; an [Inset]() of one mixes 3D and 2D.
 - Sizes are pixels of a 1080p frame and scale with it: `FontSize -> n`, <code>[Style]()[*s*, *n*]</code>, <code>[AbsoluteThickness]()[*n*]</code>, <code>[AbsolutePointSize]()[*n*]</code>. Manim's font size 48 reads as about 72.
 - Unless the primitives say otherwise, text is FontColor in FontFamily at FontSize, and lines are "Thickness" pixels wide.
+- [AnimatedObject]()s among the primitives play their effects on the stage's clock, from its start, so the content may be a plain list: <code>[Stage]()[{*obj*_1, *obj*_2, …}, {$t_0$, $t_1$}]</code>.
+- An [Inset]() of a [Graphics]() (a [Plot](), axes drawn with [AxisObject]()) keeps its proportions too: its sizes are taken relative to the inset's own width.
 - [PlotRange]() may be a function of time, a camera that pans and zooms; so may "Screen", a display that moves and grows.
 
 | Option | Default | Description |
@@ -62,3 +64,24 @@ Timeline[{Stage[Function[t, {Inset[Graphics3D[Sphere[], Boxed -> False, ViewPoin
 ```
 
 <!-- => a sphere and a caption -->
+
+---
+
+A plot inset on the stage, a dot riding it:
+
+```wl
+Timeline[{Stage[Function[t, Inset[Plot[2 (x - 5)^2, {x, 0, 10}, PlotStyle -> Directive[Pink, AbsoluteThickness[4]], AxesStyle -> White, TicksStyle -> White,
+    Epilog -> {White, AbsolutePointSize[16], Point[{5 t, 2 (5 t - 5)^2}]}], {0, 0}, Center, {12, 6}]], {0, 1}]}, "Duration" -> 1, Background -> Black]["Graphics", 0.6, ImageSize -> 480]
+```
+
+<!-- => a parabola on white axes, a dot on it -->
+
+---
+
+A formula written in, played on the stage's clock:
+
+```wl
+Timeline[{Stage[{AnimatedObject[{"e^{i\\pi}", "+ 1 = 0"}]["Play", "Creation", Method -> "Write"]}, {0, 2}]}, "Duration" -> 2, Background -> Black]["Graphics", 0.6, ImageSize -> 480]
+```
+
+<!-- => the formula half written -->

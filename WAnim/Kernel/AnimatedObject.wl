@@ -98,6 +98,26 @@ maTeXPrimitives[graphics_, default_] := Module[{prev = default, out = {}},
     out
 ]
 
+(* AnimatedObject[{"tex", "tex", ...}] typesets the parts as ONE formula (Manim's MathTex with several
+   strings) and returns an object whose primitives are one object per part, in place: obj["Part", i]
+   is part i.  Each part is tagged with its own colour in the TeX, then the glyphs are grouped by it.
+   Sizes follow "FontSize" (Manim's font size, 48 by default) in stage units, centred at the origin. *)
+Options[texParts] = {"FontSize" -> 48};
+AnimatedObject[parts : {__String}, Optional[dir : _ ? directiveQ, {White}], opts : OptionsPattern[]] := Module[
+    {g, pairs, groups, all, tf, fs = OptionValue[texParts, FilterRules[{opts}, Options[texParts]], "FontSize"]},
+    g = MaTeX`MaTeX[StringJoin[MapIndexed["{\\color[RGB]{" <> ToString[#2[[1]]] <> ",0,0}" <> #1 <> "}" &, parts]], "Preamble" -> {"\\usepackage{xcolor}"}];
+    pairs = maTeXColoredPairs[First[g], None];
+    groups = Table[decodeMaTeXCurve /@ Cases[pairs, {c_ /; ColorQ[c] && Round[255 First[ColorConvert[c, "RGB"]]] == i, p_} :> p], {i, Length[parts]}];
+    all = AnimatedObject[Flatten[groups]];
+    tf = ScalingTransform[{1, 1} 0.06 fs / 48] @* TranslationTransform[-all["Center"]];
+    AnimatedObject[AnimatedObject[#, dir]["TransformPrimitives", tf] & /@ groups, dir, FilterRules[{opts}, Except[Options[texParts]]]]]
+obj_AnimatedObject["Part", i_] := obj["Primitives"][[i]]
+(* a rectangle around an object, buff away from its bounds, as an outline an effect such as Creation
+   can draw (Manim's SurroundingRectangle) *)
+obj_AnimatedObject["SurroundingRectangle", buff_ : 0.1, dir_ : RGBColor["#FFFF00"]] := With[{b = obj["Bounds"]},
+    AnimatedObject[Line[{{b[[1, 1]] - buff, b[[2, 1]] - buff}, {b[[1, 2]] + buff, b[[2, 1]] - buff}, {b[[1, 2]] + buff, b[[2, 2]] + buff},
+        {b[[1, 1]] - buff, b[[2, 2]] + buff}, {b[[1, 1]] - buff, b[[2, 1]] - buff}}], {dir, AbsoluteThickness[4]}]]
+
 AnimatedObject[s_String, Optional[dir : _ ? directiveQ, $AnimatedObjectDefaultDirective], opts : OptionsPattern[]] :=
     AnimatedObject[maTeXPrimitives[MaTeX`MaTeX[s], dir], dir, opts]["Apply", "Stretch", Automatic, 1]["Centralize"]
 
