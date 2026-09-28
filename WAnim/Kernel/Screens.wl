@@ -3,7 +3,7 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{Terminal, NotebookSession, $NotebookEras}]
+PackageExported[{Terminal, NotebookSession, NotebookEra}]
 
 
 (* ::Section:: *)
@@ -60,100 +60,111 @@ terminalDraw[lines_, t_, {t0_, t1_}, o_] := Module[{W = $CanvasSize[[1]], H = $C
 
 
 (* ::Subsection:: *)
-(*Notebook eras*)
-
-(* An era is how a notebook looked: its window chrome (drawn in logical pixels), the rectangle the
-   cells go in, the cell style, and the display ("Pixel" logical-pixel size, "Depth" as RasterScreen).
-   Register more eras by adding to $NotebookEras. *)
-$NotebookEras = <||>;
-
-checkerImg[w_, h_] := checkerImg[w, h] = ColorConvert[Image[Table[Boole[EvenQ[i + j]], {i, h}, {j, w}], "Bit"], "RGB"];
-checker[{x_, y_, w_, h_}] := CanvasImage[checkerImg[Round[w], Round[h]], {x, y, w, h}];
-box[r_, fill_, stroke_ : None] := {CanvasRectangle[r, fill], If[stroke === None, {}, CanvasRectangle[r + {0.5, 0.5, -1, -1}, stroke, "Stroke" -> 1]]};
-tri[{x_, y_}, s_, dir_] := CanvasPolygon[Switch[dir, "up", {{x, y - s}, {x + s, y + 0.6 s}, {x - s, y + 0.6 s}},
-    "down", {{x, y + s}, {x + s, y - 0.6 s}, {x - s, y - 0.6 s}}, "left", {{x - s, y}, {x + 0.6 s, y - s}, {x + 0.6 s, y + s}},
-    _, {{x + s, y}, {x - 0.6 s, y - s}, {x - 0.6 s, y + s}}], Black, "Stroke" -> 1];
-
-(* Mathematica 1.0 on a Macintosh, 1988: System 6 chrome, the 1.0 menus, labels above cells in italics,
-   bold Courier, thin black brackets; half resolution, one bit *)
-mac1988Chrome[lw_, lh_, title_] := Module[{x = 14, wx = 12, wy = 30, ww = lw - 26, wh = lh - 40, sbx, sby, sbh, hby, tw, mf = CanvasFont["Arimo", 12, 700]},
-    sbx = wx + ww - 16; sby = wy + 18; sbh = wh - 33; hby = wy + wh - 16; tw = CanvasTextWidth[title, mf];
-    {checker[{0, 0, lw, lh}], box[{0, 0, lw, 19}, White], box[{0, 19, lw, 1}, Black],
-     Table[{CanvasText[m, {x, 14}, mf, Black], x += CanvasTextWidth[m, mf] + 14}[[1]], {m, {"File", "Edit", "Cells", "Search", "Action", "Styles", "Windows"}}],
-     box[{wx + 1, wy + 1, ww, wh}, Black], box[{wx, wy, ww, wh}, White, Black], Table[box[{wx + 2, yy, ww - 4, 1}, Black], {yy, wy + 4, wy + 14, 2}],
-     box[{wx, wy + 18, ww, 1}, Black], box[{wx + 8, wy + 4, 11, 11}, White, Black], box[{wx + ww - 20, wy + 4, 11, 11}, White, Black],
-     box[{wx + ww - 20, wy + 4, 7, 7}, White, Black], box[{wx + ww / 2 - tw / 2 - 7, wy + 2, tw + 14, 15}, White],
-     CanvasText[title, {wx + ww / 2, wy + 14}, mf, Black, Alignment -> Center],
-     box[{sbx, sby, 16, sbh}, White, Black], checker[{sbx + 1, sby + 16, 14, sbh - 32}], box[{sbx, sby, 16, 16}, White, Black], tri[{sbx + 8, sby + 8}, 4, "up"],
-     box[{sbx, sby + sbh - 16, 16, 16}, White, Black], tri[{sbx + 8, sby + sbh - 8}, 4, "down"], box[{sbx, sby + sbh - 34, 16, 16}, White, Black],
-     box[{wx, hby, ww - 15, 16}, White, Black], checker[{wx + 17, hby + 1, ww - 49, 14}], box[{wx, hby, 16, 16}, White, Black], tri[{wx + 8, hby + 8}, 4, "left"],
-     box[{wx + ww - 32, hby, 16, 16}, White, Black], tri[{wx + ww - 24, hby + 8}, 4, "right"], box[{wx + 17, hby, 16, 16}, White, Black],
-     box[{sbx, hby, 16, 16}, White, Black], box[{sbx + 3, hby + 3, 8, 8}, White, Black], box[{sbx + 6, hby + 6, 7, 7}, White, Black]}];
-$NotebookEras["Mac1988"] = <|
-    "Chrome" -> mac1988Chrome, "Content" -> Function[{lw, lh}, {13, 49, lw - 43, lh - 75}], "Pixel" -> 2, "Depth" -> "Bit",
-    "Code" -> CanvasFont["Courier Prime", 13, 700], "Label" -> CanvasFont["Arimo", 10.5, 400, True], "LabelsAbove" -> True,
-    "Left" -> 22, "Gap" -> 6, "Bracket" -> Black, "Page" -> White, "Ink" -> Black|>;
-
-
-(* ::Subsection:: *)
 (*NotebookSession*)
 
 Options[NotebookSession] = Join[{"Era" -> "Mac1988", "Screen" -> {88, 176, 1100, 780}, "Title" -> "Untitled-1", "Evaluate" -> False,
-    "TypeTime" -> 0.25, "OutputDelay" -> 0.3, "Enter" -> "Burst", "EnterTime" -> 0.22, "Pulse" -> None, "PushIn" -> 0.03, "Shadow" -> True}, $LayerOptions];
+    "TypeTime" -> 0.25, "OutputDelay" -> 0.3, "Enter" -> "Burst", "EnterTime" -> 0.22, "Pulse" -> None, "PushIn" -> 0.03, "Shadow" -> True, "Frames" -> 24, "From" -> None, "Dim" -> None, "Extras" -> Automatic}, $LayerOptions];
 
 (* NotebookSession[{cell, ...}, {t0, t1}] is a notebook window of its era, typing and evaluating on the
-   clock.  Cells are {t, "In", "code"} (typed from t over "TypeTime") or {t, "Out", output}, where output
-   is text (wrapped like the era's output), an Image, or Graphics (rasterized; dithered on a 1-bit
-   display).  With "Evaluate" -> True every input also gets its computed output, "OutputDelay" after it
-   is typed.  In/Out numbers count up automatically.  "Enter" -> "Burst" grows the window out of the
-   middle; "Pulse" -> track punches it on the track's onsets; "PushIn" is the slow zoom across the span. *)
+   clock.  Cells:
+     {t, "In", "code"}            typed from t over "TypeTime" (or {t, "In", "code", typeTime})
+     {t, "Out", output}           text is set in the era's output font; an Image as is; any other
+                                  expression is shown as the front end displays it (graphics always;
+                                  other expressions as OutputForm text in eras before 2007)
+     {t, "Out", u |-> expr, dur}  an animated output: expr at u from 0 to 1 over dur (a moving
+                                  slider, a rotating plot), rendered once as "Frames" pictures
+     {t, "Title", "text"}, {t, "Text", "text"}   the notebook's own prose
+   With "Evaluate" -> True every input also gets its computed output, "OutputDelay" after it is typed.
+   In/Out numbers count up automatically.  "Enter" -> "Burst" grows the window out of the middle;
+   "Pulse" -> track punches it on the track's onsets; "PushIn" is the slow zoom across the span. *)
 NotebookSession[cells_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[NotebookSession]]},
-    With[{era = $NotebookEras[ov[o, "Era"]], cs = sessionCells[cells, o]},
-        makeLayer["NotebookSession", {t0, t1}, Function[t, sessionDraw[cs, era, t, {t0, t1}, o]]]]];
+    With[{era = NotebookEra[ov[o, "Era"]]}, With[{cs = sessionCells[cells, era, o]},
+        With[{screen = Function[t, sessionScreen[cs, era, Min[t, t1 - 10^-3], o]]},
+            makeLayer["NotebookSession", {t0, t1}, Function[t, sessionDraw[screen, t, {t0, t1}, o]], <|"Screen" -> screen|>]]]]];
 
-(* number the cells, add evaluated outputs, turn graphics into pictures once *)
-sessionCells[cells_, o_] := Module[{n = 0, out = {}},
+(* number the cells, add evaluated outputs, turn expressions into pictures once *)
+sessionCells[cells_, era_, o_] := Module[{n = 0, out = {}},
     Do[Switch[c[[2]],
-        "In", n++; AppendTo[out, <|"kind" -> "In", "at" -> c[[1]], "n" -> n, "text" -> c[[3]], "type" -> ov[o, "TypeTime"]|>];
-            If[TrueQ[ov[o, "Evaluate"]], AppendTo[out, outCell[c[[1]] + ov[o, "TypeTime"] + ov[o, "OutputDelay"], n, ToExpression[c[[3]]]]]],
-        "Out", AppendTo[out, outCell[c[[1]], n, c[[3]]]]], {c, SortBy[cells, First]}];
+        "In", n++; With[{tt = If[Length[c] > 3, c[[4]], ov[o, "TypeTime"]]},
+            AppendTo[out, <|"kind" -> "In", "at" -> c[[1]], "n" -> n, "text" -> c[[3]], "type" -> tt|>];
+            If[TrueQ[ov[o, "Evaluate"]], AppendTo[out, outCell[c[[1]] + tt + ov[o, "OutputDelay"], n, ToExpression[c[[3]]], era, o]]]],
+        "Out", AppendTo[out, If[Length[c] > 3, animCell[c[[1]], n, c[[3]], c[[4]], era, o], outCell[c[[1]], n, c[[3]], era, o]]],
+        "Title" | "Text", AppendTo[out, <|"kind" -> c[[2]], "at" -> c[[1]], "n" -> n, "text" -> c[[3]]|>]], {c, SortBy[cells, First]}];
     SortBy[out, #["at"] &]];
-outCell[at_, n_, s_String] := <|"kind" -> "Out", "at" -> at, "n" -> n, "text" -> s|>;
-outCell[at_, n_, img_Image] := <|"kind" -> "Pic", "at" -> at, "n" -> n, "image" -> img|>;
-outCell[at_, n_, g : (_Graphics | _Graphics3D | _Legended)] := outCell[at, n, Rasterize[g, "Image", ImageSize -> 250, ImageResolution -> 72, Background -> White]];
-outCell[at_, n_, e_] := outCell[at, n, ToString[e, OutputForm]];
+richEraQ[era_] := era["Depth"] === "Full";
+outCell[at_, n_, s_String, _, _] := <|"kind" -> "Out", "at" -> at, "n" -> n, "text" -> s|>;
+outCell[at_, n_, img_Image, _, _] := <|"kind" -> "Pic", "at" -> at, "n" -> n, "image" -> img, "size" -> ImageDimensions[img]|>;
+outCell[at_, n_, e_, era_, o_] /; richEraQ[era] || MatchQ[e, _Graphics | _Graphics3D | _Legended | _Image3D | _Graph] :=
+    Join[outCell[at, n, "", era, o], <|"kind" -> "Pic"|>, displayed[e, era]];
+outCell[at_, n_, e_, era_, o_] := outCell[at, n, ToString[e, OutputForm], era, o];
+animCell[at_, n_, f_, dur_, era_, o_] := With[{fr = displayed[f[#], era] & /@ Subdivide[0., 1., ov[o, "Frames"] - 1]},
+    <|"kind" -> "Pic", "at" -> at, "n" -> n, "frames" -> fr[[All, "image"]], "size" -> fr[[1, "size"]], "dur" -> dur|>];
+(* an expression as the front end shows it, in the era's light or dark mode, at twice its logical size for a sharp screen *)
+displayed[e_, era_] := With[{img = Rasterize[Style[e, LightDark -> era["LightDark"]], "Image", ImageResolution -> 144, Background -> era["Page"]]},
+    <|"image" -> img, "size" -> ImageDimensions[img] / 2|>];
 
-sessionDraw[cs_, era_, t_, {t0_, t1_}, o_] := Module[{R = ov[o, "Screen"], s, c, pulse},
-    pulse = If[ov[o, "Pulse"] === None, 0, TrackPulse[ov[o, "Pulse"], 12][t]];
-    s = If[ov[o, "Enter"] === "Burst", 0.08 + 0.92 Easing["OutBack", 1.4][localU[t, t0, t0 + ov[o, "EnterTime"]]], 1] (1 + 0.006 pulse) (1 + ov[o, "PushIn"] Easing["InOutCubic"][localU[t, t0, t1]]);
+(* the window: burst or wipe in, pulse, push in, dim, fly away *)
+sessionDraw[screen_, t_, {t0_, t1_}, o_] := Module[{R = ov[o, "Screen"], s, c, pulse, dim = 0, a = 1, et = ov[o, "EnterTime"], xt = ov[o, "ExitTime"], prev = ov[o, "From"], wipe},
+    pulse = If[ov[o, "Pulse"] === None, 0, TrackPulse[ov[o, "Pulse"], 24][t]];
+    s = If[ov[o, "Enter"] === "Burst", 0.08 + 0.92 Easing["OutBack", 1.4][localU[t, t0, t0 + et]], 1] (1 + 0.006 pulse) (1 + ov[o, "PushIn"] Easing["InOutCubic"][localU[t, t0, t1]]);
+    If[ListQ[ov[o, "Dim"]], With[{u = Easing["InOutCubic"][localU[t, Sequence @@ ov[o, "Dim"]]]}, s *= 1 - 0.14 u; dim = 0.65 u]];
+    If[ov[o, "Exit"] === "FlyAway", With[{u = Easing["InExpo"][localU[t, t1 - xt, t1]]}, s *= 1 + 0.9 u; a = 1 - u]];
+    wipe = If[ov[o, "Enter"] === "Wipe" && Head[prev] === TimelineLayer, localU[t, t0, t0 + et], 1];
     c = R[[1 ;; 2]] + R[[3 ;; 4]] / 2;
-    CanvasTransform[CanvasScale[s, c], {
+    CanvasOpacity[a, CanvasTransform[CanvasScale[s, c], {
         If[TrueQ[ov[o, "Shadow"]], Table[CanvasRectangle[R + {-k, 18 - k / 2, 2 k, k}, Black, Opacity -> 0.04], {k, {2, 6, 12, 20, 30}}], {}],
-        CanvasScreen[R, Function[{lw, lh}, {era["Chrome"][lw, lh, ov[o, "Title"]], notebookDraw[era["Content"][lw, lh], era, cs, Min[t, t1 - 10^-3]]}],
-            "Pixel" -> era["Pixel"], "Depth" -> era["Depth"]],
-        CanvasRectangle[R + {-0.5, -0.5, 1, 1}, Black, "Stroke" -> 1, Opacity -> 0.25]}]];
+        If[wipe < 1, With[{y = R[[2]] + R[[4]] Easing["OutCubic"][wipe]}, {
+            First[prev]["Screen"][t0 - 10^-3],
+            CanvasClip[{R[[1]], R[[2]], R[[3]], y - R[[2]]}, screen[t]],
+            CanvasRectangle[{R[[1]], y - 3, R[[3]], 6}, White, Opacity -> 0.9 (1 - wipe)]}],
+            screen[t]],
+        If[dim > 0, CanvasRectangle[R, Black, Opacity -> dim], {}],
+        CanvasRectangle[R + {-0.5, -0.5, 1, 1}, Black, "Stroke" -> 1, Opacity -> 0.25]}]]];
+(* the screen alone: chrome, cells and the era's extras (the 3.0 BasicInput palette) *)
+sessionScreen[cs_, era_, t_, o_] := CanvasScreen[ov[o, "Screen"], Function[{lw, lh}, {era["Chrome"][lw, lh, ov[o, "Title"]], notebookDraw[era["Content"][lw, lh], era, cs, t],
+    If[ov[o, "Extras"] === Automatic && era["Extras"] =!= None, era["Extras"][lw, lh, t], {}]}], "Pixel" -> era["Pixel"], "Depth" -> era["Depth"]];
 
 (* the cells, top to bottom, scrolled so the newest stays in view and gliding when one arrives *)
-cellHeight[c_, era_, w_] := Switch[c["kind"], "Pic", ImageDimensions[c["image"]][[2]] + 6,
-    _, 1.3 era["Code"]["Size"] Length[CanvasWrap[c["text"], era["Code"], w - era["Left"] - 30, "Break" -> "Code"]] + 4] + If[TrueQ[era["LabelsAbove"]], 1.5 era["Label"]["Size"], 0];
-notebookDraw[{rx_, ry_, rw_, rh_}, era_, cs_, t_] := Module[{vis = Select[cs, t >= #["at"] &], hs, scrollFor, scroll, y, gap = era["Gap"]},
-    hs = cellHeight[#, era, rw] & /@ vis;
+cellFont[c_, era_] := Switch[c["kind"], "In", era["Input"], "Out", era["Output"], "Title", era["Title"], _, era["Text"]];
+labelH[c_, era_] := If[TrueQ[era["LabelsAbove"]] && MatchQ[c["kind"], "In" | "Out" | "Pic"], 1.5 era["Label"]["Size"], 0];
+cellHeight[c_, era_, w_] := labelH[c, era] + Switch[c["kind"], "Pic", c["size"][[2]] + 6,
+    _, With[{f = cellFont[c, era]}, 1.3 f["Size"] Length[CanvasWrap[c["text"], f, w, "Break" -> If[MatchQ[c["kind"], "In" | "Out"], "Code", "Words"]]] + 4]];
+notebookDraw[{rx_, ry_, rw_, rh_}, era_, cs_, t_] := Module[{vis = Select[cs, t >= #["at"] &], w = rw - era["Left"] - 30, hs, scrollFor, scroll, y, gap = era["Gap"]},
+    hs = cellHeight[#, era, w] & /@ vis;
     scrollFor[n_] := Max[0, Total[Take[hs, n]] + gap (n + 3) - rh];
     scroll = If[Length[vis] < 2, scrollFor[Length[vis]], scrollFor[Length[vis] - 1] +
         (scrollFor[Length[vis]] - scrollFor[Length[vis] - 1]) Easing["OutCubic"][localU[t, vis[[-1]]["at"], vis[[-1]]["at"] + 0.15]]];
     y = ry + gap - scroll;
     CanvasClip[{rx, ry, rw, rh}, {CanvasRectangle[{rx, ry, rw, rh}, era["Page"]],
-        MapThread[{cellDraw[#1, {rx + era["Left"], y}, rw - era["Left"] - 30, #2, era, t], y += #2 + gap}[[1]] &, {vis, hs}]}]];
-cellDraw[c_, {x0_, y_}, w_, h_, era_, t_] := Module[{f = era["Code"], ink = era["Ink"], lines, shown, yy = y},
-    {If[TrueQ[era["LabelsAbove"]], {CanvasText[If[c["kind"] === "In", "In[" <> ToString[c["n"]] <> "]:=", "Out[" <> ToString[c["n"]] <> "]="],
-        {x0 - 14, y + 1.1 era["Label"]["Size"]}, era["Label"], ink], yy += 1.5 era["Label"]["Size"]}[[1]], {}],
-     CanvasLine[With[{hh = h Easing["OutExpo"][Clip[(t - c["at"]) / 0.12, {0, 1}]], bx = x0 + w + 16}, {{bx - 4, y - 2}, {bx, y - 2}, {bx, y - 2 + hh}, {bx - 4, y - 2 + hh}}], era["Bracket"]],
+        MapThread[{cellDraw[#1, {rx + era["Left"], y}, w, #2, era, t, ry], y += #2 + gap}[[1]] &, {vis, hs}]}]];
+
+(* the cell bracket: a thin square hook in the classic eras, a lighter one with a small foot since 6.0 *)
+bracket[{bx_, y_}, hh_, era_] := CanvasLine[If[era["BracketKind"] === "Modern", {{bx - 3, y}, {bx, y}, {bx, y + hh}, {bx - 3, y + hh}},
+    {{bx - 4, y}, {bx, y}, {bx, y + hh}, {bx - 4, y + hh}}], era["Bracket"], "Thickness" -> era["BracketWidth"]];
+cellLabel[c_, era_] := Switch[c["kind"], "In", "In[" <> ToString[c["n"]] <> "]:=", "Out" | "Pic", "Out[" <> ToString[c["n"]] <> "]=", _, None];
+
+(* top: the page top; text is not clipped by the page's inset, so lines scrolled above it are dropped *)
+cellDraw[c_, {x0_, y_}, w_, h_, era_, t_, top_] := Module[{f = cellFont[c, era], ink = era["Ink"], lab = cellLabel[c, era], lines, shown, yy = y + labelH[c, era]},
+    {If[lab === None || y < top, {}, If[TrueQ[era["LabelsAbove"]], CanvasText[lab, {x0 - 14, y + 1.1 era["Label"]["Size"]}, era["Label"], era["LabelColor"]],
+        CanvasText[lab, {x0 - 8, yy + If[c["kind"] === "Pic", era["Label"]["Size"] + 4, 1.05 f["Size"]]}, era["Label"], era["LabelColor"], Alignment -> Right]]],
+     bracket[{x0 + w + 16, y - 2}, h Easing["OutExpo"][Clip[(t - c["at"]) / 0.12, {0, 1}]], era],
      Switch[c["kind"],
-        "Pic", CanvasImage[If[era["Depth"] === "Bit", OrderedDither[c["image"], ImageDimensions[c["image"]]], c["image"]],
-            Join[{x0, yy}, ImageDimensions[c["image"]]], Opacity -> Easing["OutCubic"][Clip[(t - c["at"]) / 0.12, {0, 1}]]],
-        _, lines = CanvasWrap[c["text"], f, w, "Break" -> "Code"];
+        "Pic", With[{img = If[KeyExistsQ[c, "frames"], c["frames"][[1 + Floor[Clip[(t - c["at"]) / c["dur"], {0, 1}] (Length[c["frames"]] - 1)]]], c["image"]]},
+            CanvasImage[If[era["Depth"] === "Bit", OrderedDither[img, Round[c["size"]]], img], Join[{x0, yy}, c["size"]], Opacity -> Easing["OutCubic"][Clip[(t - c["at"]) / 0.12, {0, 1}]]]],
+        _, lines = CanvasWrap[c["text"], f, w, "Break" -> If[MatchQ[c["kind"], "In" | "Out"], "Code", "Words"]];
         shown = If[c["kind"] =!= "In", lines, Module[{n = Floor[Clip[(t - c["at"]) / c["type"], {0, 1}] StringLength[c["text"]]]},
             Flatten[Reap[Do[If[n > 0, Sow[StringTake[ln, Min[n, StringLength[ln]]]]; n -= StringLength[ln]], {ln, lines}]][[2]]]]];
-        {MapIndexed[CanvasText[#1, {x0, yy + f["Size"] (1.05 + 1.3 (#2[[1]] - 1))}, f, ink] &, shown],
+        {MapIndexed[With[{p = {x0, yy + f["Size"] (1.05 + 1.3 (#2[[1]] - 1))}}, If[p[[2]] - f["Size"] < top, {}, codeLine[#1, p, f, c["kind"], era]]] &, shown],
          If[c["kind"] === "In" && t - c["at"] < c["type"] + 0.25 && EvenQ[Floor[8 t]],
             CanvasRectangle[{x0 + CanvasTextWidth[Last[shown, ""], f] + 1, yy + 1.3 f["Size"] Max[0, Length[shown] - 1] + 2, 1.1, 1.15 f["Size"]}, ink], {}]}]}];
+
+(* one line of a cell; since 6.0 input is syntax-coloured: strings grey, symbols the system does not
+   know (the user's own) blue *)
+codeLine[s_, p_, f_, kind_, era_] := Which[
+    kind === "Title", CanvasText[s, p, f, Replace[era["TitleColor"], Automatic -> era["Ink"]]],
+    kind === "Out", CanvasText[s, p, f, Replace[era["OutputInk"], Automatic -> era["Ink"]]],
+    kind =!= "In" || era["Syntax"] === None, CanvasText[s, p, f, era["Ink"]],
+    True, Module[{x = p[[1]]}, Map[With[{c = tokenColor[#, era]}, {CanvasText[#, {x, p[[2]]}, f, c], x += CanvasTextWidth[#, f]}[[1]]] &,
+        StringSplit[s, tok : (("\"" ~~ Shortest[___] ~~ ("\"" | EndOfString)) | (("$" | LetterCharacter) ~~ (WordCharacter | "$") ...)) :> tok]]]];
+tokenColor[tok_, era_] := Which[StringStartsQ[tok, "\""], era["Syntax"]["String"],
+    StringMatchQ[tok, ("$" | LetterCharacter) ~~ ___] && Names["System`" <> tok] === {}, era["Syntax"]["User"], True, era["Ink"]];

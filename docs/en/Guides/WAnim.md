@@ -43,7 +43,7 @@ places text exactly where a browser canvas would, so designs port from web tools
 
 - `Terminal` a green-phosphor terminal that powers on, types a session, prints and powers off
 - `NotebookSession` a notebook window of its era, typing and evaluating cells on the clock
-- `$NotebookEras` the registry of notebook eras: chrome, cell style and display
+- `NotebookEra` a notebook era as a value: chrome, cell style and display, from 1988 to 2024
 - `CanvasScreen` a scene drawn at an old display's resolution and depth, placed by a canvas rectangle
 - `RasterScreen` the same, placed by a rectangle in graphics coordinates
 - `OrderedDither` a picture reduced to one bit with 4x4 Bayer dithering

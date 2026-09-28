@@ -112,4 +112,4 @@ rulerDraw[keys_, t_, {t0_, t1_}, o_] := Module[{W = $CanvasSize[[1]], y0, x0, x1
             {y, ov[o, "Every"] Ceiling[yr[[1]] / ov[o, "Every"]], yr[[2]], ov[o, "Every"]}],
         CanvasLine[{{X[keys[[1, 2]]], y0}, {X[my], y0}}, mc, "Thickness" -> 3],
         Table[If[m[[1]] > my + 0.01, Nothing, {CanvasDisk[{X[m[[1]]], y0}, 4.5, mc], CanvasText[m[[2]], {X[m[[1]]], y0 - 14}, CanvasFont[$defaultFonts["Mono"], 14, 600], ov[o, FontColor], Alignment -> Center, Opacity -> 0.85]}], {m, ov[o, "Marks"]}],
-        CanvasDisk[{X[my], y0}, 8 + If[ov[o, "Pulse"] === None, 0, 3 TrackPulse[ov[o, "Pulse"], 10][t]], mc]}]];
+        CanvasDisk[{X[my], y0}, 8 + If[ov[o, "Pulse"] === None, 0, 3 TrackPulse[ov[o, "Pulse"], 20][t]], mc]}]];

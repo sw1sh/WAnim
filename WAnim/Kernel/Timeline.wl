@@ -64,13 +64,13 @@ tl_Timeline["Graphics", t_, opts : OptionsPattern[Graphics]] := With[{w = tl["Si
 
 tl_Timeline["Image", t_, opts : OptionsPattern[Graphics]] := Rasterize[tl["Graphics", t, opts], "Image", ImageResolution -> 72]
 
-(* the soundtrack as one Audio covering the whole timeline (a Track is rendered for as many
-   cycles as the timeline lasts, at the current $CyclesPerSecond) *)
+(* the soundtrack as one Audio covering the whole timeline: one timeline unit is one cycle of a
+   Track, so "SecondsPerUnit" is its tempo *)
 tl_Timeline["Audio"] := With[{s = tl["Soundtrack"]},
     Which[
         s === None, None,
         MatchQ[s, _Audio], s,
-        True, Audio[s, Ceiling[tl["Seconds"] WolframInstitute`WAnim`$CyclesPerSecond]]
+        True, Block[{WolframInstitute`WAnim`$CyclesPerSecond = 1 / tl["SecondsPerUnit"]}, Audio[s, Ceiling[tl["Duration"]]]]
     ]
 ]
 
@@ -151,8 +151,8 @@ tl_Timeline["Video", file_String, opts : OptionsPattern[timelineVideo]] := Modul
     times = from + Range[0, n - 1] / (spu fps);
     If[ TrueQ @ OptionValue[timelineVideo, {opts}, "Parallel"],
         If[$KernelCount == 0, LaunchKernels[]];
-        With[{root = ParentDirectory[PacletObject["WolframInstitute/WAnim"]["Location"]], cps = WolframInstitute`WAnim`$CyclesPerSecond},
-            ParallelEvaluate[PacletDirectoryLoad[root]; Needs["WolframInstitute`WAnim`"]; WolframInstitute`WAnim`$CyclesPerSecond = cps]];
+        With[{root = ParentDirectory[PacletObject["WolframInstitute/WAnim"]["Location"]]},
+            ParallelEvaluate[PacletDirectoryLoad[root]; Needs["WolframInstitute`WAnim`"]]];
         With[{init = Unevaluated @@ {OptionValue[timelineVideo, {opts}, "KernelInitialization"]}},
             ParallelEvaluate[ReleaseHold[Hold[init]]]
         ];
@@ -267,10 +267,10 @@ clampU[u_] := Clip[u, {0, 1}]
 (*Picture locked to sound*)
 
 (* TrackPulse[track, decay][t] is 1 at each onset of the track and decays exponentially (decay per
-   second) until the next: the kick that makes a picture hop, read off the same Track that sounds it.
-   t is in cycles. *)
-TrackPulse[track_, decay_ : 9][t_] := With[{on = Quiet @ track["Onsets", t - 4, t + 10^-9]},
-    If[! ListQ[on] || on === {}, 0., N @ Exp[-decay (t - Max[#["Whole"][[1]] & /@ on]) / WolframInstitute`WAnim`$CyclesPerSecond]]];
+   cycle) until the next: the kick that makes a picture hop, read off the same Track that sounds it.
+   t is in cycles -- a Timeline's own unit. *)
+TrackPulse[track_, decay_ : 18][t_] := With[{on = Quiet @ track["Onsets", t - 4, t + 10^-9]},
+    If[! ListQ[on] || on === {}, 0., N @ Exp[-decay (t - Max[#["Whole"][[1]] & /@ on])]]];
 
 
 (* ::Section:: *)

@@ -91,7 +91,7 @@ ImageDimensions[Timeline[{Backdrop[Blue]}, "Duration" -> 1, "Size" -> {640, 360}
 A soundtrack Track rendered for the timeline's length:
 
 ```wl
-$CyclesPerSecond = 1/2; Timeline[{Backdrop[Black]}, "Duration" -> 4, "SecondsPerUnit" -> 2, "Soundtrack" -> Track["bd [~ bd] sd ~, hh*8"]]["Audio"]
+Timeline[{Backdrop[Black]}, "Duration" -> 4, "SecondsPerUnit" -> 2, "Soundtrack" -> Track["bd [~ bd] sd ~, hh*8"]]["Audio"]
 ```
 
 <!-- => an 8-second Audio of a drum beat -->

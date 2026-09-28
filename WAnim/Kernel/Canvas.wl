@@ -92,6 +92,21 @@ CanvasGradient[{x_, y_, w_, h_}, dir_, c_, stops_, opts : OptionsPattern[]] := W
         If[dir === "Horizontal", CanvasRectangle[{x + w u0, y, w / n + 0.6, h}, c, Opacity -> a], CanvasRectangle[{x, y + h u0, w, h / n + 0.6}, c, Opacity -> a]]],
         {i, n}]];
 
+(* CanvasGradient[rect, dir, {{u, colour}, ...}] blends colours instead, exactly, as vertex-coloured
+   bands; dir may also be "Diagonal" (top-left to bottom-right) *)
+CanvasGradient[{x_, y_, w_, h_}, dir_, stops : {{_ ? NumericQ, _ ? ColorQ | _String} ..}] := Module[
+    {st = {#1, toColor[#2]} & @@@ SortBy[stops, First], col, us, vs},
+    col[u_] := Blend[st, Clip[u, {st[[1, 1]], st[[-1, 1]]}]];
+    us = Union[{0, 1}, Select[st[[All, 1]], 0 < # < 1 &]];
+    Switch[dir,
+        "Horizontal", Table[With[{a = us[[i]], b = us[[i + 1]]}, quad[{x + w a, y, w (b - a), h}, {col[a], col[b], col[b], col[a]}]], {i, Length[us] - 1}],
+        "Vertical", Table[With[{a = us[[i]], b = us[[i + 1]]}, quad[{x, y + h a, w, h (b - a)}, {col[a], col[a], col[b], col[b]}]], {i, Length[us] - 1}],
+        _, vs = Range[0, 1, 1 / 8];
+        Table[With[{a = vs[[i]], b = vs[[i + 1]], c = vs[[j]], d = vs[[j + 1]]},
+            quad[{x + w a, y + h c, w (b - a), h (d - c)}, col /@ ({a + c, b + c, b + d, a + d} / 2)]], {i, 8}, {j, 8}]]];
+(* a rectangle whose corners (tl, tr, br, bl) carry colours; a hair oversized so bands meet without seams *)
+quad[{x_, y_, w_, h_}, cs_] := {cop[], EdgeForm[], Polygon[cxf /@ {{x, y}, {x + w + 0.4, y}, {x + w + 0.4, y + h + 0.4}, {x, y + h + 0.4}}, VertexColors -> cs]};
+
 (* draw only inside a canvas rectangle (ctx.clip): the body goes into an inset whose plot range is the rect *)
 CanvasClip[{x_, y_, w_, h_}, body_] := With[{p0 = cxf[{x, y + h}], p1 = cxf[{x + w, y}]},
     Inset[Graphics[Block[{$canvasRef = p1[[1]] - p0[[1]]}, body], PlotRange -> Transpose[{p0, p1}], PlotRangePadding -> None, ImagePadding -> None, PlotRangeClipping -> True,

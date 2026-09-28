@@ -33,7 +33,7 @@ spikeyShade[_, lam_] := Blend[{Blend[{RGBColor["#5A0600"], RGBColor["#DD1100"]},
 
 spikeyDraw[t_, {t0_, t1_}, o_] := Module[{p = layerPoint[ov[o, Position]], r, kick, beat, d = ov[o, "Dance"], ay, ax, rot, light = Normalize[{-0.5, 0.7, 0.9}], style = ov[o, "Style"], polys},
     r = ov[o, "Radius"] envelope[t, {t0, t1}, o]["Scale"];
-    kick = If[ov[o, "Pulse"] === None, 0, d TrackPulse[ov[o, "Pulse"], 7][t]];
+    kick = If[ov[o, "Pulse"] === None, 0, d TrackPulse[ov[o, "Pulse"], 14][t]];
     beat = ov[o, "BeatsPerUnit"] t; ay = ov[o, "Spin"] t; ax = 0.45 + 0.15 Sin[1.3 t];
     rot[{x_, y_, z_}] := With[{x1 = x Cos[ay] + z Sin[ay], z1 = z Cos[ay] - x Sin[ay]}, {x1, y Cos[ax] - z1 Sin[ax], y Sin[ax] + z1 Cos[ax]}];
     polys = SortBy[Select[{#, Normalize[Cross[#[[2]] - #[[1]], #[[3]] - #[[1]]]]} & /@ Map[rot, spikeyFaces[ov[o, "Form"], kick], {2}], #[[2, 3]] > -0.05 &], Mean[#[[1, All, 3]]] &];
