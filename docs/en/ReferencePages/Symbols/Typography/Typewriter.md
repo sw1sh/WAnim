@@ -17,7 +17,7 @@ RelatedGuides: [WAnim]
 
 - [Typewriter]() returns a [TimelineLayer](); put it in a [Timeline]() or look at it alone with <code>*layer*["Graphics", *t*]</code>.
 - Times are in the timeline's own unit (seconds, bars, ...). Typing starts at $t_0$ and lasts "TypingTime"; the line then holds until $t_1$ and leaves by its "Exit".
-- The text is set in a monospaced face by default and centred on Position, a canvas point ${x, y}$ in pixels with $y$ down, `Center`, or `Scaled[{u, v}]` of the canvas.
+- The text is set in a monospaced face by default with its baseline at Position (centred on it by default), a canvas point {*x*, *y*} in pixels with $y$ down, `Center`, or `Scaled[{u, v}]` of the canvas.
 - "Highlight" words change to "HighlightColor" once typing is done (at "HighlightTime").
 - "Exit" -> "Collapse" folds the line into its cursor over "ExitTime", as if the text were being swallowed by the prompt.
 - Typewriter takes the options common to all creation tools ([$LayerOptions]()) and these:

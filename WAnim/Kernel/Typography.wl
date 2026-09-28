@@ -36,7 +36,7 @@ typewriterDraw[s_, t_, {t0_, t1_}, o_] := Module[{f = layerFont[o, "Mono"], tt, 
     tt = Replace[ov[o, "TypingTime"], Automatic -> Min[0.5 (t1 - t0), 0.05 StringLength[s]]];
     u = localU[t, t0, t0 + tt]; shown = TypedText[s, u];
     full = CanvasTextWidth[s, f]; p = layerPoint[ov[o, Position]];
-    x = Switch[ov[o, Alignment], Center, p[[1]] - full / 2, Right, p[[1]] - full, _, p[[1]]]; y = p[[2]] + 0.22 f["Size"];
+    x = Switch[ov[o, Alignment], Center, p[[1]] - full / 2, Right, p[[1]] - full, _, p[[1]]]; y = p[[2]];   (* Position is the baseline, as for Title and Caption *)
     env = If[ov[o, "Exit"] === "Collapse", <|"Alpha" -> 1., "Offset" -> 0.|>, envelope[t, {t0, t1}, Join[{"Enter" -> "Cut"}, o]]];
     k = If[ov[o, "Exit"] === "Collapse", collapse[t, t1, ov[o, "ExitTime"]], 0];
     hl = Flatten[{ov[o, "Highlight"]}];
@@ -60,7 +60,7 @@ typewriterDraw[s_, t_, {t0_, t1_}, o_] := Module[{f = layerFont[o, "Mono"], tt, 
 (*Title*)
 
 Options[Title] = Join[{FontSize -> 120, FontWeight -> 700, Alignment -> Center, "Enter" -> "Rise", "EnterTime" -> 0.3,
-    "LetterInterval" -> 1/8, "Cursor" -> None, "CursorColor" -> RGBColor["#DD1100"], "CollapsePoint" -> Automatic}, $LayerOptions];
+    "LetterInterval" -> 1/8, "Tracking" -> 0, "Cursor" -> None, "CursorColor" -> RGBColor["#DD1100"], "CollapsePoint" -> Automatic}, $LayerOptions];
 
 (* Title["text", {t0, t1}] sets display type at Position.  "Enter" -> "Rise" | "Fade" | "Pop" | "Cut", or
    "Letters": one letter per "LetterInterval", each popping up from its baseline (with "Cursor" -> True
@@ -77,7 +77,8 @@ titleDraw[s_, t_, {t0_, t1_}, o_] := Module[{f = layerFont[o], p = layerPoint[ov
     k = If[ov[o, "Exit"] === "Collapse", 0.92 collapse[t, t1, ov[o, "ExitTime"]], 0];
     c = Replace[ov[o, "CollapsePoint"], Automatic -> {x + full / 2, y - 0.35 f["Size"]}];
     CanvasOpacity[env["Alpha"], CanvasTransform[CanvasScale[(1 - k) env["Scale"], c],
-        If[! letters, CanvasText[s, {x, y + env["Offset"]}, f, ov[o, FontColor]],
+        If[! letters, CanvasText[s, {Switch[ov[o, Alignment], Center, p[[1]], Right, p[[1]], _, x], y + env["Offset"]}, f, ov[o, FontColor],
+            Alignment -> ov[o, Alignment], "Tracking" -> ov[o, "Tracking"]],
             n = Clip[Floor[(t - t0) / ov[o, "LetterInterval"]] + 1, {0, StringLength[s]}]; cx = x;
             {Table[With[{ch = StringTake[s, {i}], age = t - t0 - (i - 1) ov[o, "LetterInterval"]},
                 {CanvasTransform[CanvasTranslate[{cx, y}] . CanvasScale[{1, Easing["OutBack", 2][localU[age, 0, 0.12]]}] . CanvasTranslate[{-cx, -y}],

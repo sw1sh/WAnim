@@ -24,6 +24,7 @@ RelatedGuides: [WAnim]
 | --- | --- | --- |
 | "Enter" | "Rise" | "Rise", "Fade", "Pop", "Cut" or "Letters" |
 | "LetterInterval" | 1/8 | time between letters for "Letters" |
+| "Tracking" | 0 | extra space between letters, in pixels |
 | "Cursor" | None | True draws a bar after the letters |
 | "CursorColor" | red | the cursor and the newest letter |
 | "CollapsePoint" | Automatic | the point the text shrinks into on "Collapse" |
@@ -51,6 +52,16 @@ Title["Mathematica", {0, 3}, "Enter" -> "Letters", "Cursor" -> True, FontSize ->
 <!-- => "Mathem" with the last letter red and a red bar after it -->
 
 ## Options
+
+### Tracking
+
+A small tracked kicker line, left-aligned:
+
+```wl
+Title["JUNE 23, 1988 \[CenterDot] MACINTOSH", {0, 2}, Position -> {96, 120}, Alignment -> Left, FontSize -> 40, FontWeight -> 600, FontColor -> Red, "Tracking" -> 6]["Graphics", 1, ImageSize -> 480]
+```
+
+<!-- => a spaced-out red line at the upper left -->
 
 ### Enter
 

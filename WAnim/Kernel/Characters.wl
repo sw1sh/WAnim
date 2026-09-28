@@ -84,13 +84,15 @@ tapeDraw[rule_, rows_, track_, t_, span_, o_] := Module[{c = ov[o, "CellSize"], 
 (*WordWall*)
 
 Options[WordWall] = Join[{"Margin" -> {36, 30}, "Presence" -> 0, "Color" -> RGBColor["#B9B3A7"], "StrongColor" -> RGBColor["#2A2825"],
-    "FlashColor" -> RGBColor["#DD1100"], FontWeight -> 600, "Enter" -> "Cut", "Exit" -> "Cut"}, $LayerOptions];
+    "FlashColor" -> RGBColor["#DD1100"], "From" -> None, "FlightTime" -> 0.35, "FlightCount" -> 90, FontWeight -> 600, "Enter" -> "Cut", "Exit" -> "Cut"}, $LayerOptions];
 
 (* WordWall[{{"word", weight, t}, ...}, {t0, t1}] lays every word out alphabetically in justified lines,
    like a dictionary page, each sized by its weight (e.g. a usage frequency, on a log scale) and fitted
    to fill the canvas; each word pops in at its time t, flashes "FlashColor" and settles.  "Presence"
    (0-1, or a function of time) takes the settled words from a faint texture to full strength.  Settled
-   words are rasterized once per half unit, so a wall of thousands of words stays fast. *)
+   words are rasterized once per half unit, so a wall of thousands of words stays fast.  With "From" -> {x, y}
+   the most prominent arriving words (up to "FlightCount" at a time) fly in an arc from that point
+   to their place over "FlightTime", as if coming out of an output. *)
 WordWall[words_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[WordWall]]},
     With[{placed = wallPlace[words, o]}, makeLayer["WordWall", {t0, t1}, Function[t, wallDraw[placed, t, o]]]]];
 
@@ -120,4 +122,11 @@ wallLayer[placed_, cutoff_, presence_, o_, size_] := wallLayer[placed, cutoff, p
         PlotRange -> {{0, size[[1]]}, {0, size[[2]]}}, ImageSize -> size[[1]], PlotRangePadding -> None, ImagePadding -> None], "Image", Background -> None];
 wallDraw[placed_, t_, o_] := With[{pr = Round[If[NumericQ[ov[o, "Presence"]], ov[o, "Presence"], ov[o, "Presence"][t]], 0.001], cutoff = Floor[2 (t - 4)] / 2.},
     {If[AnyTrue[placed, #[[2]] <= cutoff &], CanvasImage[wallLayer[placed, cutoff, pr, o, $CanvasSize], {0, 0, $CanvasSize[[1]], $CanvasSize[[2]]}], {}],
-     wordDraw[#, t, pr, o] & /@ Select[placed, cutoff < #[[2]] <= t &]}];
+     wordDraw[#, t, pr, o] & /@ Select[placed, cutoff < #[[2]] <= t &],
+     If[ov[o, "From"] === None, {}, flightDraw[placed, t, o]]}];
+(* the biggest words still on their way fly from "From" to their place *)
+flightDraw[placed_, t_, o_] := With[{from = layerPoint[ov[o, "From"]], ft = ov[o, "FlightTime"]},
+    Map[With[{u = localU[t, #[[2]] - ft, #[[2]]]}, With[{e = Easing["InOutCubic"][u]},
+        CanvasText[#[[1]], {from[[1]] + (#[[5]] - from[[1]]) e, from[[2]] + (#[[6]] - from[[2]]) e - (120 + 200 Mod[Hash[#[[1]]] 10^-6, 1]) Sin[Pi e]},
+            CanvasFont[$defaultFonts["Sans"], 14 + (#[[3]] - 14) e, 700], ov[o, "FlashColor"], Opacity -> 0.95 Sin[Pi Min[1, 1.2 u]]]]] &,
+        Take[ReverseSortBy[Select[placed, #[[2]] - ft < t < #[[2]] &], #[[3]] &], UpTo[ov[o, "FlightCount"]]]]];
