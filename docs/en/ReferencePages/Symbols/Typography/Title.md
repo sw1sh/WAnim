@@ -18,6 +18,7 @@ RelatedGuides: [WAnim]
 - "Enter" -> "Rise" (default) fades in from slightly below; "Fade", "Pop" (scales up with an overshoot) and "Cut" are the other entrances.
 - "Enter" -> "Letters" brings the text in one letter per "LetterInterval", each popping up from its baseline; the newest letter is drawn in "CursorColor", and with "Cursor" -> True a bar follows the last letter.
 - "Exit" -> "Fade", "Drop", "Cut" or "Collapse": the text shrinks into "CollapsePoint" (default its centre) over "ExitTime".
+- "Highlight" -> "*part*" sets that part of the text in "HighlightColor".
 - Title takes the options common to all creation tools ([$LayerOptions]()) and these:
 
 | Option | Default | Description |
@@ -28,6 +29,8 @@ RelatedGuides: [WAnim]
 | "Cursor" | None | True draws a bar after the letters |
 | "CursorColor" | red | the cursor and the newest letter |
 | "CollapsePoint" | Automatic | the point the text shrinks into on "Collapse" |
+| "Highlight" | None | a part of the text to colour |
+| "HighlightColor" | red | its colour |
 | FontSize | 120 | size in canvas pixels |
 | Alignment | Center | Left, Center or Right about Position |
 
@@ -82,3 +85,13 @@ Title["Mathematica", {0, 2}, "Exit" -> "Collapse", "ExitTime" -> 0.4, FontSize -
 ```
 
 <!-- => the word small, shrinking toward the centre -->
+
+---
+
+A name with one word in red, letter by letter:
+
+```wl
+Title["Wolfram Language", {0, 2}, "Highlight" -> "Wolfram", "Enter" -> "Letters", "LetterInterval" -> 1/32, FontSize -> 150]["Graphics", 1, ImageSize -> 480]
+```
+
+<!-- => Wolfram in red, Language in black -->

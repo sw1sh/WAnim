@@ -27,7 +27,7 @@ places text exactly where a browser canvas would, so designs port from web tools
 - `Timeline` a stack of layers over time, shown live (clocked by its soundtrack), as a frame, or rendered to a Video
 - `TimelineLayer` one segment: a span and a function drawing it at time t; every creation tool returns one
 - `Backdrop` a solid fill of the canvas, a colour or a function of time
-- `$LayerOptions` the options every creation tool shares: Position, fonts, "Enter" and "Exit"
+- `$LayerOptions` the options every creation tool shares: Position, fonts, "Enter" and "Exit"; colours may be functions of time
 - `EventTrack` a written-out score (onset, duration, value) as a Track
 - `TrackPulse` a decaying pulse on every onset of a Track, to lock motion to sound
 - `Easing` the standard easing curves (OutCubic, InOutExpo, OutBack, ...)
@@ -55,6 +55,12 @@ places text exactly where a browser canvas would, so designs port from web tools
 - `YearRuler` a ruler of years whose marker jumps from date to date, with release ticks
 - `WordWall` a whole vocabulary laid out like a dictionary page, each word arriving at its time
 
+### Diagrams
+
+- `TreeDiagram` an expression's tree growing from its head down, level by level
+- `TileGrid` cards dealt out on the beat, each a plot or picture, the animated ones looping
+- `WordScroll` a family of names rolling up the frame like credits
+
 ### Characters
 
 - `Spikey` the Wolfram mascot in each of its forms, dancing to a Track
@@ -80,7 +86,7 @@ places text exactly where a browser canvas would, so designs port from web tools
 - `Fast`, `Slow`, `Late`, `Early`, `Fastcat` time: speed, shift, concatenation
 - `Layer`, `Alternate`, `Every`, `Euclidean`, `Degrade`, `Stagger`, `Superimpose` structure: stack, alternate, every n cycles, Euclidean rhythms, random drops, echoes
 - `Beat`, `Struct`, `InScale`, `$Scales` rhythm and pitch helpers after Strudel
-- `Synth`, `Gain`, `Pan`, `Delay`, `Room`, `Dec`, `Duck` sound: oscillators, level, stereo, effects, sidechain
+- `Synth`, `Gain`, `Pan`, `Delay`, `Room`, `Dec`, `Duck` sound: oscillators (including shaped "Pluck", "Bell", "Riser" and "Impact"), level, stereo, effects, sidechain; `Audio[track, n, "CyclesPerSecond" -> c]` renders at a tempo
 - `$DrumKit`, `LoadSamples`, `$SampleBank` the built-in synthesized drum kit, and your own samples
 - `$CyclesPerSecond`, `$DefaultWave`, `Bars`, `Solo` tempo, default timbre, display length, soloing
 

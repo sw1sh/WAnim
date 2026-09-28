@@ -70,7 +70,7 @@ tl_Timeline["Audio"] := With[{s = tl["Soundtrack"]},
     Which[
         s === None, None,
         MatchQ[s, _Audio], s,
-        True, Block[{WolframInstitute`WAnim`$CyclesPerSecond = 1 / tl["SecondsPerUnit"]}, Audio[s, Ceiling[tl["Duration"]]]]
+        True, Audio[s, Ceiling[tl["Duration"]], "CyclesPerSecond" -> 1 / tl["SecondsPerUnit"]]
     ]
 ]
 

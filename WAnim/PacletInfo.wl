@@ -3,7 +3,7 @@
 PacletObject[<|
   "Name" -> "WolframInstitute/WAnim",
   "PublisherID" -> "WolframInstitute",
-  "Version" -> "0.3.0",
+  "Version" -> "0.4.0",
   "WolframVersion" -> "15.0+",
   "Description" -> "Live audiovisual coding: Manim-style animation, film-scale timelines drawn with a canvas kit, and Strudel/Tidal-style cyclic-time music patterns -- one structure, two renderers.",
   "Creator" -> "Nikolay Murzin",

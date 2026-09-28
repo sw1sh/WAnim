@@ -18,6 +18,7 @@ RelatedGuides: [WAnim]
 - Position is a canvas point {*x*, *y*} in pixels with $y$ down, `Center`, or `Scaled[{u, v}]` of the canvas; Alignment places text about it.
 - FontFamily, FontSize (pixels), FontWeight (a CSS number such as 600, or a name such as "SemiBold"), FontSlant and FontColor set the type.
 - "Enter" ("Fade", "Rise", "Pop", "Cut") and "Exit" ("Fade", "Drop", "Cut") animate arrival and departure over "EnterTime" and "ExitTime"; tools add their own, such as "Letters", "Burst", "PowerOn" and "Collapse".
+- FontColor and every other colour option of a tool (its "...Color" and "Ink" options) may be a function of time, so ink can turn to light as a film goes dark.
 - Each tool overrides some defaults: a [Typewriter]() is monospaced and centred, a [Caption]() sits in the right-hand column.
 
 ## Basic Examples
@@ -39,3 +40,13 @@ Table[Caption["Enter", {0, 2}, "Enter" -> e, Position -> {100, 200}, FontSize ->
 ```
 
 <!-- => two frames of the word arriving -->
+
+---
+
+A colour that changes over time:
+
+```wl
+Title["ink to light", {0, 4}, FontColor -> (Blend[{Black, White}, #/4] &), FontSize -> 90]["Graphics", 3, Background -> GrayLevel[0.4], ImageSize -> 480]
+```
+
+<!-- => the words, almost white on grey -->

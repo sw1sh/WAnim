@@ -17,6 +17,7 @@ RelatedGuides: [WAnim]
 
 - "Form" follows the versions: "Stellated" (the stellated icosahedron of 1.0), "Spiked" (a spiked dodecahedron, versions 2 to 9) or "Hexecontahedron" (the rhombic hexecontahedron, 10 onward). Geometry comes from [PolyhedronData]().
 - "Style" follows the displays: "1Bit", "Gray", "Classic" (lilac) or "Red".
+- "Form" and "Style" may be functions of time, so one Spikey lives through the eras without restarting its dance.
 - "Pulse" -> *track* squashes and pumps the spikes on each onset of *track* (see [TrackPulse]()); "BeatsPerUnit" sets the sway.
 
 | Option | Default | Description |

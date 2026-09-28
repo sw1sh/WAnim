@@ -428,7 +428,7 @@ obj_AnimatedObject["Image", opts : OptionsPattern[AnimatedImage]] := With[{
 
 
 (* loop/trim a soundtrack to exactly the video's duration so the mux lines up *)
-fitAudioToVideo[aud_, durSec_] := With[{d = QuantityMagnitude @ Duration[aud]},
+fitAudioToVideo[aud_, durSec_] := With[{d = QuantityMagnitude[Duration[aud], "Seconds"]},
     AudioTrim[
         If[d >= durSec, aud, AudioJoin @@ ConstantArray[aud, Ceiling[durSec / Max[d, 0.001]]]],
         Quantity[{0, durSec}, "Seconds"]]]

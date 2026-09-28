@@ -511,7 +511,7 @@ midiToFreq[m_] := 440. * 2 ^ ((m - 69) / 12.)
 silence[sec_] := AudioGenerator["Silence", Max[sec, 0.001]]
 at[onsetCycles_] := onsetCycles cycleSeconds[]
 
-fitDuration[a_, sec_] := With[{d = QuantityMagnitude @ Duration[a]},
+fitDuration[a_, sec_] := With[{d = QuantityMagnitude[Duration[a], "Seconds"]},
     Which[d < sec - 0.0005, AudioPad[a, {0, sec - d}], d > sec + 0.0005, AudioTrim[a, Quantity[{0, sec}, "Seconds"]], True, a]]
 
 mix[layers_] := With[{ls = DeleteCases[Flatten[{layers}], Nothing]},
@@ -523,7 +523,18 @@ fitTo[a_, nCycles_] := fitDuration[a, nCycles cycleSeconds[]]
 env[a_, durSec_] := AudioFade[a, {0.004, Min[0.09, 0.5 durSec]}]
 oscNote[wave_, f_, durSec_] := env[Switch[wave,
     "Supersaw", AudioOverlay[AudioGenerator[{"Sawtooth", f #}, durSec] & /@ {0.993, 1., 1.007}],
+    "Pluck" | "Bell" | "Riser" | "Impact", shaped[wave, f, durSec],
     _, AudioGenerator[{wave, f}, durSec]], durSec]
+(* timbres shaped over the note's own length: a plucked string, a bell (inharmonic partials ringing
+   out), a riser (noise swelling and brightening to the end: the note is the build-up) and an impact
+   (a falling boom with a burst of noise) *)
+shaped["Pluck", f_, d_] := LowpassFilter[AudioGenerator[{"Sawtooth", f}, d], Min[8000, 6 f]] AudioGenerator[Exp[-9 #] &, d]
+shaped["Bell", f_, d_] := With[{len = Max[d, 1.2]}, AudioOverlay[{AudioGenerator[{"Sine", f}, len], AudioAmplify[AudioGenerator[{"Sine", 2.76 f}, len], 0.4],
+    AudioAmplify[AudioGenerator[{"Sine", 5.4 f}, len], 0.2]}] AudioGenerator[Exp[-3.5 #] &, len]]
+shaped["Riser", _, d_] := HighpassFilter[AudioGenerator["White", d], 400] AudioGenerator[(# / d)^3 &, d]
+(* the boom falls from f / 8 by 1.5 octaves a second: its phase is the integral of that frequency *)
+shaped["Impact", f_, d_] := With[{f0 = f / 8, k = 1.5 Log[2]}, AudioOverlay[{AudioGenerator[Sin[2 Pi f0 (1 - Exp[-k #]) / k] Exp[-2.5 #] &, d],
+    AudioGenerator["Pink", d] AudioGenerator[0.5 Exp[-7 #] &, d]}]]
 
 (* synthesized drum fallback so percussion tokens are audible with NO samples loaded -- the
    default before LoadSamples replaces them with real WAVs.  Memoized per token. *)
@@ -549,18 +560,29 @@ drumSound[v_] := Which[KeyExistsQ[$SampleBank, v], $SampleBank[v],
     True, synthDrum[ToString @ sampleBase[v]]]
 (* dec: shorten a sound to d seconds with a fade -- the Strudel .dec envelope *)
 shorten[a_, None] := a
-shorten[a_, d_] := If[QuantityMagnitude @ Duration[a] <= d, a,
+shorten[a_, d_] := If[QuantityMagnitude[Duration[a], "Seconds"] <= d, a,
     AudioFade[AudioTrim[a, Quantity[d + 0.02, "Seconds"]], {0, Min[0.05, 0.5 d]}]]
 (* drum/percussion events (a loaded sample, or any non-pitch token) placed at their onsets *)
-sampleLayer[events_, dec_ : None] := mix[AudioPad[shorten[drumSound[#["Value"]], dec], {at[#["Whole"][[1]]], 0}] & /@
+sampleLayer[events_, dec_ : None] := placeAll[{shorten[drumSound[#["Value"]], dec], at[#["Whole"][[1]]]} & /@
     Select[events, ! restQ[#["Value"]] && (sampleQ[#["Value"]] || valuePitches[#["Value"]] === {}) &]]
+(* sounds placed at their onsets (seconds), summed into one buffer: a long score of short notes
+   costs its own length, not notes x length *)
+placeAll[{}] := Nothing;
+placeAll[clips_List] := Module[{sr = 44100, cs, n, buf},
+    cs = {Round[#[[2]] sr], monoData[#[[1]], sr]} & /@ clips;
+    n = Max[#[[1]] + Length[#[[2]]] & /@ cs];
+    buf = ConstantArray[0., n];
+    Do[buf[[c[[1]] + 1 ;; c[[1]] + Length[c[[2]]]]] += c[[2]], {c, cs}];
+    Audio[{buf}, SampleRate -> sr]];
+monoData[a_, sr_] := With[{r = If[QuantityMagnitude[AudioSampleRate[a]] == sr, a, AudioResample[a, sr]]},
+    Developer`ToPackedArray[N[Mean[AudioData[r]]]]];
 (* pitched events -> MusicScore -> Audio (acoustic-ish) *)
 musicLayer[events_, nCycles_] := With[{pe = Select[events, ! sampleQ[#["Value"]] && NumericQ[valueMidi[#["Value"]]] &]},
     If[pe === {}, Nothing, Audio[MusicScore[{eventsToVoice[pe, nCycles]}, MusicTimeSignature[4, 4], MusicTempo -> patternTempo[]]]]]
 (* pitched events -> oscillator synth -> Audio *)
-oscLayer[events_, wave_, dec_ : None] := mix[Flatten[Function[ev,
-    Function[m, AudioPad[oscNote[wave, midiToFreq[m], If[dec === None, #, Min[#, dec]] &[eventDuration[ev] cycleSeconds[]]], {at[ev["Whole"][[1]]], 0}]] /@ valuePitches[ev["Value"]]
-] /@ Select[events, valuePitches[#["Value"]] =!= {} && ! sampleQ[#["Value"]] &]]]
+oscLayer[events_, wave_, dec_ : None] := placeAll[Flatten[Function[ev,
+    Function[m, {oscNote[wave, midiToFreq[m], If[dec === None, #, Min[#, dec]] &[eventDuration[ev] cycleSeconds[]]], at[ev["Whole"][[1]]]}] /@ valuePitches[ev["Value"]]
+] /@ Select[events, valuePitches[#["Value"]] =!= {} && ! sampleQ[#["Value"]] &], 1]]
 
 voiceAudio[GainVoice[g_, v_], nCycles_] := voiceAudio[v, nCycles]  (* gain applied post-normalize via gainMeta *)
 voiceAudio[SynthVoice[wave_, p_], nCycles_] := fitTo[oscLayer[Select[p["Query", 0, nCycles], hasOnset], wave, decayOf[p]], nCycles]
@@ -604,7 +626,7 @@ applyDuck[a_, {trig_, depth_, att_}, nCycles_] := Module[{sr, data, len, env, i0
         at /@ (#["Whole"][[1]] & /@ Select[trig["Query", 0, nCycles], hasOnset])];
     Audio[(# env) & /@ data, SampleRate -> sr]]
 (* delay/reverb tails extend past the loop -- fold them back onto the start so looping is seamless *)
-wrapLoop[a_, sec_] := With[{d = QuantityMagnitude @ Duration[a]},
+wrapLoop[a_, sec_] := With[{d = QuantityMagnitude[Duration[a], "Seconds"]},
     If[d <= sec + 0.001, fitDuration[a, sec],
         fitDuration[AudioOverlay[{AudioTrim[a, Quantity[sec, "Seconds"]],
             AudioTrim[a, Quantity[{sec, Min[d, 2 sec]}, "Seconds"]]}], sec]]]
@@ -615,10 +637,14 @@ renderAudio[t : Track[voices_List, ___], nCycles_] := AudioAmplify[mix[wrapLoop[
 renderAudio[v_, nCycles_] := wrapLoop[voiceRendered[v, nCycles], nCycles cycleSeconds[]]
 
 Track /: Audio[p_Track, nCycles_ : 1] := renderAudio[p, nCycles]
+(* at a given tempo, without touching the session's $CyclesPerSecond *)
+Track /: Audio[p_Track, nCycles_, "CyclesPerSecond" -> cps_] := Block[{$CyclesPerSecond = cps}, renderAudio[p, nCycles]]
 Track /: MusicPlot[p_Track, nCycles_ : 1, opts___] := MusicPlot[patternScore[p, nCycles], opts]
 Track /: Sound[p_Track, nCycles_ : 1] := Sound[patternScore[p, nCycles]]
 SynthVoice /: Audio[v_SynthVoice, nCycles_ : 1] := renderAudio[v, nCycles]
 GainVoice /: Audio[v_GainVoice, nCycles_ : 1] := renderAudio[v, nCycles]
+SynthVoice /: Audio[v_SynthVoice, nCycles_, "CyclesPerSecond" -> cps_] := Block[{$CyclesPerSecond = cps}, renderAudio[v, nCycles]]
+GainVoice /: Audio[v_GainVoice, nCycles_, "CyclesPerSecond" -> cps_] := Block[{$CyclesPerSecond = cps}, renderAudio[v, nCycles]]
 
 
 (* ::Subsection:: Track: a multi-voice composition (each line its own timbre/voice) *)

@@ -17,15 +17,18 @@ RelatedGuides: [WAnim]
 
 - Cells:
   - <code>{*t*, "In", "*code*"}</code> is typed from *t* over "TypeTime"; <code>{*t*, "In", "*code*", *typeTime*}</code> sets its own.
-  - <code>{*t*, "Out", *output*}</code>: text is set in the era's output font, an [Image]() as is, and any other expression as the front end displays it (graphics in every era; other expressions as [OutputForm]() text before 2007).
-  - <code>{*t*, "Out", *u* |-> *expr*, *dur*}</code> is an animated output: *expr* at *u* going from 0 to 1 over *dur*, rendered once as "Frames" pictures (a moving slider, a rotating surface).
+  - <code>{*t*, "In", [HoldForm]()[*expr*]}</code> is a typeset input, 2D mathematics as 3.0 introduced, shown whole.
+  - <code>{*t*, "Out", *output*}</code>: text is set in the era's output font, an [Image]() as is, and any other expression as the front end displays it (graphics in every era; other expressions as [OutputForm]() text before typesetting arrived in 1996).
+  - <code>{*t*, "Out", *u* |-> *expr*, *dur*}</code> is an animated output: *expr* at *u* going from 0 to 1 over *dur*, rendered once as "Frames" pictures (a moving slider, a rotating surface); <code>{*t*, "Out", *f*, *dur*, *frames*}</code> sets its own count.
+  - Before typesetting, a graphics output is followed by its line, such as -Graphics3D-, as the early versions printed.
   - <code>{*t*, "Title", "*text*"}</code> and <code>{*t*, "Text", "*text*"}</code> are the notebook's own prose.
 - In and Out numbers count up automatically. On a one-bit display pictures are reduced with [OrderedDither](); in dark eras expressions are displayed in dark mode.
 - With "Evaluate" -> True every input also gets its computed output, "OutputDelay" after it has been typed.
 - The notebook scrolls so the newest cell stays in view, gliding when one arrives.
 - "Era" is the look: a name from <code>[NotebookEra]()[]</code> or a [NotebookEra]() association. Since 6.0 inputs are syntax-coloured.
 - "Enter" -> "Burst" grows the window out of its middle; "Enter" -> "Wipe" with "From" -> *previous* wipes the new era down over the last frame of the *previous* session, as one window living through its eras.
-- "Pulse" -> *track* punches the window on the track's onsets; "PushIn" is a slow zoom across the span; "Dim" -> {$t_a$, $t_b$} shrinks and darkens it between the two times; "Exit" -> "FlyAway" flies it at the viewer over "ExitTime".
+- "Pulse" -> *track* punches the window on the track's onsets; "PushIn" is a slow zoom across the span; "Dim" -> {$t_a$, $t_b$} shrinks and darkens it between the two times; "Exit" -> "FlyAway" flies it at the viewer over "ExitTime"; "Hide" -> {{$t_a$, $t_b$}, …} takes it off screen for an interlude and bursts it back after.
+- "GraphicsSize" -> *w* shows graphics outputs *w* logical pixels wide.
 
 | Option | Default | Description |
 | --- | --- | --- |
@@ -39,6 +42,8 @@ RelatedGuides: [WAnim]
 | "From" | None | the session a "Wipe" starts from |
 | "Dim" | None | a span over which the window recedes |
 | "Frames" | 24 | pictures in an animated output |
+| "Hide" | {} | spans the window is off screen |
+| "GraphicsSize" | Automatic | width of graphics outputs |
 | "Extras" | Automatic | the era's extras (None hides them) |
 | "Pulse" | None | a Track to punch to |
 | "PushIn" | 0.03 | zoom across the span |

@@ -9,7 +9,7 @@ PackageExported[{TimelineLayer, Backdrop, $LayerOptions}]
 (* ::Section:: *)
 (*PackageScoped*)
 
-PackageScoped[{ov, weightNum, makeLayer, layerFont, layerPoint, envelope, localU, typedCount, $defaultFonts}]
+PackageScoped[{ov, atTime, weightNum, makeLayer, layerFont, layerPoint, envelope, localU, typedCount, defaultFont}]
 
 
 (* ::Section:: *)
@@ -25,13 +25,18 @@ PackageScoped[{ov, weightNum, makeLayer, layerFont, layerPoint, envelope, localU
      Font*       FontFamily, FontSize (px), FontWeight (CSS number or name), FontSlant, FontColor
      "Enter"     how it arrives: "Fade", "Rise", "Pop", "Cut" (tool-specific ones documented per tool)
      "Exit"      how it leaves: "Fade", "Drop", "Cut" (and tool-specific ones)
-     "EnterTime", "ExitTime"   their durations, in timeline units *)
+     "EnterTime", "ExitTime"   their durations, in timeline units
+     colours     FontColor and every other *Color option may also be a function of time *)
 
 $LayerOptions = {Position -> Center, Alignment -> Left, FontFamily -> Automatic, FontSize -> 48, FontWeight -> 600, FontSlant -> Plain,
     FontColor -> Black, Opacity -> 1, "Enter" -> "Fade", "Exit" -> "Fade", "EnterTime" -> 0.25, "ExitTime" -> 0.25};
 
 (* an option from a tool's merged option list (user options first, then the tool's defaults) *)
 ov[o_List, name_] := FirstCase[o, (Rule | RuleDelayed)[name, v_] :> v, Missing["NoOption", name]];
+
+(* a tool's options at time t: any colour option (FontColor, "Color", "HeadColor", ...) may be a
+   function of time -- ink that turns to bone as the film goes dark -- and is evaluated here *)
+atTime[o_List, t_] := Replace[o, (r : Rule | RuleDelayed)[k_, f : (_Function | _InterpolatingFunction)] /; StringContainsQ[ToString[k], "Color" | "Ink"] :> r[k, f[t]], {1}];
 
 makeLayer[name_String, {t0_, t1_}, draw_, extra_Association : <||>] :=
     TimelineLayer[<|"Name" -> name, "Span" -> {t0, t1}, "Draw" -> draw, extra|>];
@@ -62,13 +67,13 @@ Backdrop[c_, span : {_, _} : {-Infinity, Infinity}] := makeLayer["Backdrop", spa
 (* ::Section:: *)
 (*Shared helpers*)
 
-$defaultFonts = <|"Sans" -> "Source Sans 3", "Serif" -> "Source Serif 4", "Mono" -> "Source Code Pro", "Terminal" -> "VT323"|>;
+defaultFont["Sans"] = "Source Sans 3"; defaultFont["Serif"] = "Source Serif 4"; defaultFont["Mono"] = "Source Code Pro"; defaultFont["Terminal"] = "VT323";
 weightNum[w_ ? NumericQ] := w;
 weightNum[w_String] := Lookup[<|"Light" -> 300, "Plain" -> 400, "Regular" -> 400, "Medium" -> 500, "SemiBold" -> 600, "Bold" -> 700, "Black" -> 900|>, w, 400];
 weightNum[Bold] := 700; weightNum[Plain] := 400;
 (* the CanvasFont a tool's options describe; a size factor lets a tool derive a smaller/larger face *)
 layerFont[opts_List, default_String : "Sans", k_ : 1] := CanvasFont[
-    Replace[ov[opts, FontFamily], Automatic -> $defaultFonts[default]],
+    Replace[ov[opts, FontFamily], Automatic -> defaultFont[default]],
     k ov[opts, FontSize], weightNum[ov[opts, FontWeight]],
     MatchQ[ov[opts, FontSlant], "Italic" | Italic]];
 layerPoint[p_] := Switch[p, Center, $CanvasSize / 2, Scaled[{_, _}], First[p] $CanvasSize, _, p];

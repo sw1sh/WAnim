@@ -30,7 +30,7 @@ Options[Typewriter] = Join[{FontFamily -> Automatic, FontSize -> 64, FontWeight 
    half the span), with a blinking "Cursor" ("Block", "Bar" or None).  "Highlight" -> {"word", ...}
    lights words up once typing is done.  "Exit" -> "Collapse" folds the line into its cursor. *)
 Typewriter[s_String, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[Typewriter]]},
-    makeLayer["Typewriter", {t0, t1}, Function[t, typewriterDraw[s, t, {t0, t1}, o]]]];
+    makeLayer["Typewriter", {t0, t1}, Function[t, typewriterDraw[s, t, {t0, t1}, atTime[o, t]]]]];
 
 typewriterDraw[s_, t_, {t0_, t1_}, o_] := Module[{f = layerFont[o, "Mono"], tt, u, shown, full, p, x, y, k, env, cur, hl, hlt},
     tt = Replace[ov[o, "TypingTime"], Automatic -> Min[0.5 (t1 - t0), 0.05 StringLength[s]]];
@@ -39,7 +39,7 @@ typewriterDraw[s_, t_, {t0_, t1_}, o_] := Module[{f = layerFont[o, "Mono"], tt, 
     x = Switch[ov[o, Alignment], Center, p[[1]] - full / 2, Right, p[[1]] - full, _, p[[1]]]; y = p[[2]];   (* Position is the baseline, as for Title and Caption *)
     env = If[ov[o, "Exit"] === "Collapse", <|"Alpha" -> 1., "Offset" -> 0.|>, envelope[t, {t0, t1}, Join[{"Enter" -> "Cut"}, o]]];
     k = If[ov[o, "Exit"] === "Collapse", collapse[t, t1, ov[o, "ExitTime"]], 0];
-    hl = Flatten[{ov[o, "Highlight"]}];
+    hl = DeleteCases[Flatten[{ov[o, "Highlight"]}], None];
     hlt = Replace[ov[o, "HighlightTime"], Automatic -> t0 + tt + 0.2];
     cur = ov[o, "Cursor"];
     CanvasOpacity[env["Alpha"], {
@@ -60,16 +60,22 @@ typewriterDraw[s_, t_, {t0_, t1_}, o_] := Module[{f = layerFont[o, "Mono"], tt, 
 (*Title*)
 
 Options[Title] = Join[{FontSize -> 120, FontWeight -> 700, Alignment -> Center, "Enter" -> "Rise", "EnterTime" -> 0.3,
-    "LetterInterval" -> 1/8, "Tracking" -> 0, "Cursor" -> None, "CursorColor" -> RGBColor["#DD1100"], "CollapsePoint" -> Automatic}, $LayerOptions];
+    "LetterInterval" -> 1/8, "Tracking" -> 0, "Cursor" -> None, "CursorColor" -> RGBColor["#DD1100"], "CollapsePoint" -> Automatic,
+    "Highlight" -> None, "HighlightColor" -> RGBColor["#DD1100"]}, $LayerOptions];
 
-(* Title["text", {t0, t1}] sets display type at Position.  "Enter" -> "Rise" | "Fade" | "Pop" | "Cut", or
+(* Title["text", {t0, t1}] sets display type at Position; "Highlight" -> "part" sets that part in
+   "HighlightColor".  "Enter" -> "Rise" | "Fade" | "Pop" | "Cut", or
    "Letters": one letter per "LetterInterval", each popping up from its baseline (with "Cursor" -> True
    a bar follows the last letter).  "Exit" -> "Fade" | "Drop" | "Cut" | "Collapse" (shrinks into
    "CollapsePoint", default the text's centre). *)
 Title[s_String, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[Title]]},
-    makeLayer["Title", {t0, t1}, Function[t, titleDraw[s, t, {t0, t1}, o]]]];
+    makeLayer["Title", {t0, t1}, Function[t, titleDraw[s, t, {t0, t1}, atTime[o, t]]]]];
 
-titleDraw[s_, t_, {t0_, t1_}, o_] := Module[{f = layerFont[o], p = layerPoint[ov[o, Position]], full, x, y, env, k, c, letters, n, cx},
+(* the character positions of the highlighted part, and the text cut into {piece, highlighted?} *)
+highlightPositions[s_, parts_] := Union @@ (Flatten[Range @@@ StringPosition[s, #, 1]] & /@ DeleteCases[Flatten[{parts}], None]);
+textPieces[s_, hl_] := {StringJoin[#[[All, 1]]], #[[1, 2]]} & /@ SplitBy[Transpose[{Characters[s], MemberQ[hl, #] & /@ Range[StringLength[s]]}], Last];
+
+titleDraw[s_, t_, {t0_, t1_}, o_] := Module[{f = layerFont[o], p = layerPoint[ov[o, Position]], hl = highlightPositions[s, ov[o, "Highlight"]], full, x, y, env, k, c, letters, n, cx},
     full = CanvasTextWidth[s, f, -2]; y = p[[2]];
     x = Switch[ov[o, Alignment], Center, p[[1]] - full / 2, Right, p[[1]] - full, _, p[[1]]];
     letters = ov[o, "Enter"] === "Letters";
@@ -77,12 +83,16 @@ titleDraw[s_, t_, {t0_, t1_}, o_] := Module[{f = layerFont[o], p = layerPoint[ov
     k = If[ov[o, "Exit"] === "Collapse", 0.92 collapse[t, t1, ov[o, "ExitTime"]], 0];
     c = Replace[ov[o, "CollapsePoint"], Automatic -> {x + full / 2, y - 0.35 f["Size"]}];
     CanvasOpacity[env["Alpha"], CanvasTransform[CanvasScale[(1 - k) env["Scale"], c],
-        If[! letters, CanvasText[s, {Switch[ov[o, Alignment], Center, p[[1]], Right, p[[1]], _, x], y + env["Offset"]}, f, ov[o, FontColor],
+        If[! letters, If[hl === {}, CanvasText[s, {Switch[ov[o, Alignment], Center, p[[1]], Right, p[[1]], _, x], y + env["Offset"]}, f, ov[o, FontColor],
             Alignment -> ov[o, Alignment], "Tracking" -> ov[o, "Tracking"]],
+            (* in pieces, the highlighted one coloured *)
+            Module[{tr = ov[o, "Tracking"], xx}, xx = Switch[ov[o, Alignment], Center, p[[1]] - CanvasTextWidth[s, f, tr] / 2, Right, p[[1]] - CanvasTextWidth[s, f, tr], _, p[[1]]];
+                Map[{CanvasText[#[[1]], {xx, y + env["Offset"]}, f, If[#[[2]], ov[o, "HighlightColor"], ov[o, FontColor]], "Tracking" -> tr], xx += CanvasTextWidth[#[[1]], f, tr] + tr}[[1]] &,
+                    textPieces[s, hl]]]],
             n = Clip[Floor[(t - t0) / ov[o, "LetterInterval"]] + 1, {0, StringLength[s]}]; cx = x;
             {Table[With[{ch = StringTake[s, {i}], age = t - t0 - (i - 1) ov[o, "LetterInterval"]},
                 {CanvasTransform[CanvasTranslate[{cx, y}] . CanvasScale[{1, Easing["OutBack", 2][localU[age, 0, 0.12]]}] . CanvasTranslate[{-cx, -y}],
-                    CanvasText[ch, {cx, y}, f, If[i == n && age < 0.1, ov[o, "CursorColor"], ov[o, FontColor]]]],
+                    CanvasText[ch, {cx, y}, f, Which[i == n && age < 0.1, ov[o, "CursorColor"], MemberQ[hl, i], ov[o, "HighlightColor"], True, ov[o, FontColor]]]],
                  cx += CanvasTextWidth[ch, f] - 2}[[1]]], {i, n}],
              If[TrueQ[ov[o, "Cursor"]] && (n < StringLength[s] || cursorBlink[t]),
                 CanvasRectangle[{cx + 0.05 f["Size"], y - 0.74 f["Size"], 0.06 f["Size"], 0.9 f["Size"]}, ov[o, "CursorColor"]], {}]}]]]];
@@ -98,10 +108,10 @@ Options[Caption] = Join[{Position -> {1250, 720}, FontSize -> 52, "Width" -> 590
    first baseline), each word rising in on its own beat ("WordInterval" apart); "Highlight" words
    are drawn in "HighlightColor". *)
 Caption[s_String, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[Caption]]},
-    makeLayer["Caption", {t0, t1 + ov[o, "ExitTime"]}, Function[t, captionDraw[s, t, {t0, t1}, o]]]];
+    makeLayer["Caption", {t0, t1 + ov[o, "ExitTime"]}, Function[t, captionDraw[s, t, {t0, t1}, atTime[o, t]]]]];
 
 captionDraw[s_, t_, {t0_, t1_}, o_] := Module[{f = layerFont[o], p = layerPoint[ov[o, Position]], lines, k = 0, di = ov[o, "WordInterval"],
-    xt = ov[o, "ExitTime"], leave, hl = StringDelete[#, PunctuationCharacter] & /@ Flatten[{ov[o, "Highlight"]}]},
+    xt = ov[o, "ExitTime"], leave, hl = StringDelete[#, PunctuationCharacter] & /@ DeleteCases[Flatten[{ov[o, "Highlight"]}], None]},
     lines = CanvasWrap[s, f, ov[o, "Width"]];
     leave = Easing["InCubic"][localU[t, t1, t1 + xt]];
     MapIndexed[Function[{ln, li}, Module[{cx = p[[1]]}, Table[

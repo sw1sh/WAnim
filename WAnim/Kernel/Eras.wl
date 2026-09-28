@@ -262,7 +262,7 @@ eraStyle["Dark2024"] = <|"Input" -> CanvasFont["Source Code Pro", 16.5, 700], "O
    a darker page); NotebookEra[] lists the names.  NotebookSession takes either through "Era". *)
 NotebookEra[] = {"Mac1988", "NeXT1988", "Win1991", "Win1996", "Mac1999", "WinXP2004", "MacOSX2007", "Yosemite2014", "BigSur2020", "Dark2024"};
 NotebookEra[name_String, changes : (_Rule | _RuleDelayed) ...] /; MemberQ[NotebookEra[], name] := Join[
-    <|"Name" -> name, "LightDark" -> "Light", "Page" -> White, "Ink" -> Black, "OutputInk" -> Automatic, "Extras" -> None, "TitleColor" -> Automatic, "Syntax" -> None|>,
+    <|"Name" -> name, "LightDark" -> "Light", "Page" -> White, "Ink" -> Black, "OutputInk" -> Automatic, "Extras" -> None, "Typeset" -> ! MemberQ[{"Mac1988", "NeXT1988", "Win1991"}, name], "TitleColor" -> Automatic, "Syntax" -> None|>,
     eraStyle[eraLook[name]], eraWindow[name], <|changes|>];
 NotebookEra[era_Association, changes : (_Rule | _RuleDelayed) ...] := Join[era, <|changes|>];
 NotebookEra::unknown = "`1` is not a notebook era; NotebookEra[] lists them.";
