@@ -17,7 +17,7 @@ RelatedGuides: [WAnim]
 
 - Weights are usage frequencies or any positive numbers; sizes grow with their logarithm, and the whole wall is scaled to fill the canvas.
 - A word pops in at its time, flashes "FlashColor" and settles into "Color"; "Presence" (a number from 0 to 1, or a function of time) raises the settled words from a faint texture to full strength ("StrongColor").
-- Settled words are rasterized once per half unit, so a wall of thousands of words stays fast.
+- Settled words are rasterized once per half unit, so a wall of thousands of words stays fast. Give Background -> the colour beneath the wall (or a function of time) so that picture is opaque, which is much cheaper to draw frame after frame.
 - With "From" -> {*x*, *y*}, arriving words fly in an arc from that point to their places over "FlightTime", the biggest "FlightCount" of them at a time, as if coming out of an output.
 
 | Option | Default | Description |
@@ -27,6 +27,7 @@ RelatedGuides: [WAnim]
 | "StrongColor" | near black | settled words at full presence |
 | "FlashColor" | red | arriving words |
 | "Margin" | {36, 30} | margins in pixels |
+| Background | None | the colour the wall sits on, or a function of time |
 | "From" | None | a point arriving words fly from |
 | "FlightTime" | 0.35 | how long a flight takes |
 | "FlightCount" | 90 | most words in flight at once |

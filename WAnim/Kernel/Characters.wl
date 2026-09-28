@@ -86,7 +86,7 @@ tapeDraw[rule_, rows_, track_, t_, span_, o_] := Module[{c = ov[o, "CellSize"], 
 (* ::Section:: *)
 (*WordWall*)
 
-Options[WordWall] = Join[{"Margin" -> {36, 30}, "Presence" -> 0, "Color" -> RGBColor["#B9B3A7"], "StrongColor" -> RGBColor["#2A2825"],
+Options[WordWall] = Join[{"Margin" -> {36, 30}, "Presence" -> 0, Background -> None, "Color" -> RGBColor["#B9B3A7"], "StrongColor" -> RGBColor["#2A2825"],
     "FlashColor" -> RGBColor["#DD1100"], "From" -> None, "FlightTime" -> 0.35, "FlightCount" -> 90, FontWeight -> 600, "Enter" -> "Cut", "Exit" -> "Cut"}, $LayerOptions];
 
 (* WordWall[{{"word", weight, t}, ...}, {t0, t1}] lays every word out alphabetically in justified lines,
@@ -95,7 +95,8 @@ Options[WordWall] = Join[{"Margin" -> {36, 30}, "Presence" -> 0, "Color" -> RGBC
    (0-1, or a function of time) takes the settled words from a faint texture to full strength.  Settled
    words are rasterized once per half unit, so a wall of thousands of words stays fast.  With "From" -> {x, y}
    the most prominent arriving words (up to "FlightCount" at a time) fly in an arc from that point
-   to their place over "FlightTime", as if coming out of an output. *)
+   to their place over "FlightTime", as if coming out of an output.  Give Background -> the colour
+   beneath the wall (or a function of time) so the cached layer is opaque: much cheaper to draw. *)
 WordWall[words_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[WordWall]]},
     With[{placed = wallPlace[words, o]}, makeLayer["WordWall", {t0, t1}, Function[t, wallDraw[placed, t, atTime[o, t]]]]]];
 
@@ -122,11 +123,15 @@ wordDraw[{name_, at_, size_, width_, x_, y_}, t_, presence_, o_] := Module[{age 
         If[heat > 0.02, Blend[{base, ov[o, "FlashColor"]}, heat], base], Opacity -> Clip[(0.18 + 0.82 presence) pop + 0.9 heat, {0, 1}]]];
 wallLayer[placed_, cutoff_, presence_, o_, size_] := wallLayer[placed, cutoff, presence, o, size] = Rasterize[
     Graphics[CanvasBlock[size, wordDraw[{#[[1]], #[[2]], #[[3]], #[[4]], #[[5]], #[[6]]}, Infinity, presence, o] & /@ Select[placed, #[[2]] <= cutoff &]],
-        PlotRange -> {{0, size[[1]]}, {0, size[[2]]}}, ImageSize -> size[[1]], PlotRangePadding -> None, ImagePadding -> None], "Image", Background -> None];
+        PlotRange -> {{0, size[[1]]}, {0, size[[2]]}}, ImageSize -> size[[1]], PlotRangePadding -> None, ImagePadding -> None], "Image", Background -> ov[o, Background]];
 (* the settled layer is cached by its options, so colours changing over time are coarsened to a few steps *)
 coarseColors[o_] := Replace[o, (r : Rule | RuleDelayed)[k_, c_ ? ColorQ] :> r[k, RGBColor @@ Round[List @@ ColorConvert[c, "RGB"], 1/12]], {1}];
-wallDraw[placed_, t_, o_] := With[{pr = Round[If[NumericQ[ov[o, "Presence"]], ov[o, "Presence"], ov[o, "Presence"][t]], 0.001], cutoff = Floor[2 (t - 4)] / 2.},
-    {If[AnyTrue[placed, #[[2]] <= cutoff &], CanvasImage[wallLayer[placed, cutoff, pr, coarseColors[o], $CanvasSize], {0, 0, $CanvasSize[[1]], $CanvasSize[[2]]}], {}],
+(* Background -> colour (or a function of time) makes the settled layer opaque, the colour of what the
+   wall sits on: a front end keeps a fresh copy of a transparent image every time it draws one, so a
+   transparent full-frame layer would cost a frame's worth of memory per frame *)
+wallDraw[placed_, t_, o_] := With[{pr = Round[If[NumericQ[ov[o, "Presence"]], ov[o, "Presence"], ov[o, "Presence"][t]], 0.001], cutoff = Floor[2 (t - 4)] / 2.,
+        lo = coarseColors[Join[{Background -> Replace[ov[o, Background], f : Except[None | _ ? ColorQ] :> f[t]]}, o]]},
+    {If[AnyTrue[placed, #[[2]] <= cutoff &], CanvasImage[wallLayer[placed, cutoff, pr, lo, $CanvasSize], {0, 0, $CanvasSize[[1]], $CanvasSize[[2]]}], {}],
      wordDraw[#, t, pr, o] & /@ Select[placed, cutoff < #[[2]] <= t &],
      If[ov[o, "From"] === None, {}, flightDraw[placed, t, o]]}];
 (* the biggest words still on their way fly from "From" to their place *)

@@ -80,10 +80,14 @@ Options[NotebookSession] = Join[{"Era" -> "Mac1988", "Screen" -> {88, 176, 1100,
    In/Out numbers count up automatically.  "Enter" -> "Burst" grows the window out of the middle;
    "Pulse" -> track punches it on the track's onsets; "PushIn" is the slow zoom across the span; "Hide" -> {{ta, tb}, ...} takes the window off
    screen for an interlude and bursts it back after. *)
-NotebookSession[cells_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[NotebookSession]]},
+NotebookSession[cells_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = fromSnapshot[Join[{opts}, Options[NotebookSession]], t0]},
     With[{era = NotebookEra[ov[o, "Era"]]}, With[{cs = sessionCells[cells, era, o]},
         With[{screen = Function[t, sessionScreen[cs, era, Min[t, t1 - 10^-3], o]]},
             makeLayer["NotebookSession", {t0, t1}, Function[t, sessionDraw[screen, t, {t0, t1}, atTime[o, t]]], <|"Screen" -> screen|>]]]]];
+
+(* a wipe only needs the previous window's last picture, so keep that instead of the whole previous
+   session (which would carry its own predecessor, and so on down the film) *)
+fromSnapshot[o_, t0_] := Replace[o, ("From" -> l_TimelineLayer) :> ("From" -> <|"Screen" -> First[l]["Screen"][t0 - 10^-3]|>), {1}];
 
 (* number the cells, add evaluated outputs, turn expressions into pictures once *)
 sessionCells[cells_, era_, o_] := Module[{n = 0, out = {}},
@@ -111,9 +115,11 @@ outCell[at_, n_, e_, era_, o_] /; richEraQ[era] || graphicsQ[e] := Join[outCell[
 outCell[at_, n_, e_, era_, o_] := outCell[at, n, ToString[e, OutputForm], era, o];
 animCell[at_, n_, f_, dur_, era_, o_] := With[{fr = displayed[f[#], era, o] & /@ Subdivide[0., 1., ov[o, "Frames"] - 1]},
     <|"kind" -> "Pic", "at" -> at, "n" -> n, "frames" -> fr[[All, "image"]], "size" -> fr[[1, "size"]], "dur" -> dur|>];
-(* an expression as the front end shows it, in the era's light or dark mode, at twice its logical size for a sharp screen *)
-displayed[e_, era_, o_] := With[{img = Rasterize[Style[sized[e, ov[o, "GraphicsSize"]], LightDark -> era["LightDark"]], "Image", ImageResolution -> 144, Background -> era["Page"]]},
-    <|"image" -> img, "size" -> ImageDimensions[img] / 2|>];
+(* an expression as the front end shows it, in the era's light or dark mode, at the display's own
+   resolution: a logical pixel is "Pixel" screen pixels on a full-depth display, one on the old ones *)
+displayed[e_, era_, o_] := With[{k = If[era["Depth"] === "Full", era["Pixel"], 1]},
+    With[{img = Rasterize[Style[sized[e, ov[o, "GraphicsSize"]], LightDark -> era["LightDark"]], "Image", ImageResolution -> 72 k, Background -> era["Page"]]},
+        <|"image" -> img, "size" -> ImageDimensions[img] / k|>]];
 
 (* the window: burst or wipe in, pulse, push in, dim, fly away *)
 sessionDraw[screen_, t_, {t0_, t1_}, o_] /; AnyTrue[ov[o, "Hide"], #[[1]] <= t < #[[2]] &] := {};
@@ -125,12 +131,12 @@ sessionDraw[screen_, t_, {t0_, t1_}, o_] := Module[{R = ov[o, "Screen"], s, c, p
     s = If[burst === None, 1, 0.08 + 0.92 Easing["OutBack", 1.4][localU[t, burst, burst + et]]] (1 + 0.006 pulse) (1 + ov[o, "PushIn"] Easing["InOutCubic"][localU[t, t0, t1]]);
     If[ListQ[ov[o, "Dim"]], With[{u = Easing["InOutCubic"][localU[t, Sequence @@ ov[o, "Dim"]]]}, s *= 1 - 0.14 u; dim = 0.65 u]];
     If[ov[o, "Exit"] === "FlyAway", With[{u = Easing["InExpo"][localU[t, t1 - xt, t1]]}, s *= 1 + 0.9 u; a = 1 - u]];
-    wipe = If[ov[o, "Enter"] === "Wipe" && Head[prev] === TimelineLayer, localU[t, t0, t0 + et], 1];
+    wipe = If[ov[o, "Enter"] === "Wipe" && AssociationQ[prev], localU[t, t0, t0 + et], 1];
     c = R[[1 ;; 2]] + R[[3 ;; 4]] / 2;
     CanvasOpacity[a, CanvasTransform[CanvasScale[s, c], {
         If[TrueQ[ov[o, "Shadow"]], Table[CanvasRectangle[R + {-k, 18 - k / 2, 2 k, k}, Black, Opacity -> 0.04], {k, {2, 6, 12, 20, 30}}], {}],
         If[wipe < 1, With[{y = R[[2]] + R[[4]] Easing["OutCubic"][wipe]}, {
-            First[prev]["Screen"][t0 - 10^-3],
+            prev["Screen"],
             CanvasClip[{R[[1]], R[[2]], R[[3]], y - R[[2]]}, screen[t]],
             CanvasRectangle[{R[[1]], y - 3, R[[3]], 6}, White, Opacity -> 0.9 (1 - wipe)]}],
             screen[t]],
@@ -139,6 +145,9 @@ sessionDraw[screen_, t_, {t0_, t1_}, o_] := Module[{R = ov[o, "Screen"], s, c, p
 (* the screen alone: chrome, cells and the era's extras (the 3.0 BasicInput palette) *)
 sessionScreen[cs_, era_, t_, o_] := CanvasScreen[ov[o, "Screen"], Function[{lw, lh}, {era["Chrome"][lw, lh, ov[o, "Title"]], notebookDraw[era["Content"][lw, lh], era, cs, t],
     If[ov[o, "Extras"] === Automatic && era["Extras"] =!= None, era["Extras"][lw, lh, t], {}]}], "Pixel" -> era["Pixel"], "Depth" -> era["Depth"]];
+
+(* a picture on a one-bit display, dithered once: a new image every frame would also be kept by the front end *)
+dithered[img_, size_] := dithered[img, size] = OrderedDither[img, size];
 
 (* the cells, top to bottom, scrolled so the newest stays in view and gliding when one arrives *)
 cellFont[c_, era_] := Switch[c["kind"], "In", era["Input"], "Out", era["Output"], "Title", era["Title"], _, era["Text"]];
@@ -166,7 +175,7 @@ cellDraw[c_, {x0_, y_}, w_, h_, era_, t_, top_] := Module[{f = cellFont[c, era],
      bracket[{x0 + w + 16, y - 2}, h Easing["OutExpo"][Clip[(t - c["at"]) / 0.12, {0, 1}]], era],
      Switch[c["kind"],
         "Pic", With[{img = If[KeyExistsQ[c, "frames"], c["frames"][[1 + Floor[Clip[(t - c["at"]) / c["dur"], {0, 1}] (Length[c["frames"]] - 1)]]], c["image"]]},
-            CanvasImage[If[era["Depth"] === "Bit", OrderedDither[img, Round[c["size"]]], img], Join[{x0, yy}, c["size"]], Opacity -> Easing["OutCubic"][Clip[(t - c["at"]) / 0.12, {0, 1}]]]],
+            CanvasImage[If[era["Depth"] === "Bit", dithered[img, Round[c["size"]]], img], Join[{x0, yy}, c["size"]], Opacity -> Easing["OutCubic"][Clip[(t - c["at"]) / 0.12, {0, 1}]]]],
         _, lines = CanvasWrap[c["text"], f, w, "Break" -> If[MatchQ[c["kind"], "In" | "Out"], "Code", "Words"]];
         shown = If[c["kind"] =!= "In", lines, Module[{n = Floor[Clip[(t - c["at"]) / c["type"], {0, 1}] StringLength[c["text"]]]},
             Flatten[Reap[Do[If[n > 0, Sow[StringTake[ln, Min[n, StringLength[ln]]]]; n -= StringLength[ln]], {ln, lines}]][[2]]]]];

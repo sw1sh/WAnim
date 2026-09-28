@@ -53,8 +53,11 @@ Options[PhotoPrint] = Join[{Position -> {1250, 150}, "Size" -> {590, 420}, "Tilt
 (* PhotoPrint[image, "caption", {t0, t1}] pins a photo or scan like a print: a white border, a soft
    shadow, a small "Kicker" line (e.g. "FROM THE ARCHIVE · 1981") and an italic caption, tilted by
    "Tilt" degrees.  The image is fitted inside "Size" at Position (top-left). *)
-PhotoPrint[img_Image, cap_String, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[PhotoPrint]]},
+PhotoPrint[img0_Image, cap_String, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[PhotoPrint]], img = opaque[img0]},
     makeLayer["PhotoPrint", {t0, t1 + ov[o, "ExitTime"]}, Function[t, printDraw[img, cap, t, {t0, t1}, atTime[o, t]]]]];
+(* photos often carry an alpha channel they do not use; drawing a transparent image makes the front
+   end keep a fresh copy every frame, so drop it when it is fully opaque *)
+opaque[img_] := If[ImageChannels[img] == 4 && Min[ImageData[AlphaChannel[img], "Byte"]] == 255, RemoveAlphaChannel[img], img];
 
 printDraw[img_, cap_, t_, {t0_, t1_}, o_] := Module[{p = layerPoint[ov[o, Position]], box = ov[o, "Size"], d = ImageDimensions[img], s, w, h, u, leave},
     s = Min[box[[1]] / d[[1]], box[[2]] / d[[2]]]; {w, h} = d s;

@@ -6,7 +6,7 @@
      docs/en/Tutorials/**/<Name>.md               -> WAnim/Documentation/English/Tutorials/<Name>.nb
    Output is flat by basename (the documentation system resolves guide/ref URIs in a flat namespace).
    Examples are evaluated against this checkout of the paclet; tutorials thread state across sections.
-   The converter is the local MarkdownToNotebook checkout next to this repo (or $WAnimMTN / WANIM_MTN).
+   The converter is the deployed MarkdownToNotebook resource function in the cloud.
    An optional pattern (e.g. "Typewriter") rebuilds only the matching pages.  Built notebooks are
    artifacts (notebooks are gitignored); the markdown is the source.  Exits 1 if a page fails. *)
 
@@ -15,10 +15,9 @@ PacletDirectoryLoad[repoRoot];
 Needs["WolframInstitute`WAnim`"];
 Quiet @ UsingFrontEnd[CurrentValue[$FrontEnd, LightDark] = "Light"];
 
-mtnSource = SelectFirst[{Environment["WANIM_MTN"], FileNameJoin[{ParentDirectory[repoRoot], "MarkdownToNotebook", "MarkdownToNotebook.wl"}]},
-    StringQ[#] && FileExistsQ[#] &, None];
-If[mtnSource === None, Print["build_docs: MarkdownToNotebook.wl not found next to this repo (set WANIM_MTN)."]; Exit[1]];
-Get[mtnSource];
+(* the converter is the deployed MarkdownToNotebook resource function; wrapping the URL in
+   ResourceObject makes it resolve on parallel subkernels too *)
+mtn = ResourceFunction[ResourceObject["https://www.wolframcloud.com/obj/nikm/DeployedResources/Function/MarkdownToNotebook"]];
 
 docOut = FileNameJoin[{repoRoot, "WAnim", "Documentation", "English"}];
 kinds = {{"Guides", "Guides", Automatic}, {FileNameJoin[{"ReferencePages", "Symbols"}], FileNameJoin[{"ReferencePages", "Symbols"}], Automatic}, {"Tutorials", "Tutorials", None}};
@@ -27,7 +26,7 @@ pattern = If[Length[$ScriptCommandLine] >= 2, $ScriptCommandLine[[2]], "*"];
 buildPage[md_, out_, sep_] := With[{nb = FileNameJoin[{out, FileBaseName[md] <> ".nb"}]},
     Print["building ", FileNameTake[md]];
     Quiet @ DeleteFile[nb];
-    TimeConstrained[MarkdownToNotebook[md, nb, "UseCache" -> False, "EvaluateSeparator" -> sep], 600];
+    TimeConstrained[mtn[md, nb, "UseCache" -> False, "EvaluateSeparator" -> sep], 600];
     If[FileExistsQ[nb], {md, True}, Print["  FAILED: ", FileNameTake[md]]; {md, False}]];
 results = Flatten[Reap[Do[
     With[{src = FileNameJoin[{repoRoot, "docs", "en", k[[1]]}], out = FileNameJoin[{docOut, k[[2]]}]},

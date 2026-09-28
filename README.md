@@ -18,8 +18,8 @@ Timeline[{
 ```
 
 - **Documentation**: sources in `docs/en` (guide, symbol pages), built to `WAnim/Documentation` with
-  `wolframscript -f scripts/build_docs.wls` (needs [MarkdownToNotebook](https://github.com/WolframInstitute/MarkdownToNotebook)
-  next to this repo). Start at the `WAnim` guide.
+  `wolframscript -f scripts/build_docs.wls` (uses the deployed [MarkdownToNotebook](https://github.com/WolframInstitute/MarkdownToNotebook)
+  resource function from the cloud). Start at the `WAnim` guide.
 - **Tests**: `TestReport["WAnim/Tests/Toolkit.wlt"]` after loading.
 - **Drum kit**: synthesized by `scripts/make_drums.wls` into the paclet's `Drums` asset (`$DrumKit`); no downloads.
 - **Fonts**: the creation tools default to Source Sans 3 / Serif 4 / Code Pro, VT323, Arimo and Courier Prime;

@@ -11,7 +11,7 @@ PackageExported[{
 }]
 
 (* shared with Timeline.wl (CanvasScreen places a screen by its canvas rectangle) *)
-PackageScoped[{cxf}]
+PackageScoped[{cxf, cscaleX}]
 
 
 (* ::Section:: *)
@@ -63,26 +63,31 @@ thick[lw_] := Thickness[lw cscale[] / $canvasRef];
 (* ::Section:: *)
 (*Shapes*)
 
+(* colour and opacity go together, as Opacity[a, colour] (FaceForm[...] for fills): a front end keeps
+   something for every separate Opacity directive it meets at a new position, so translucent shapes
+   that move would otherwise grow it every frame *)
+paint[c_, a_ : 1] := With[{al = Clip[$canvasAlpha a, {0, 1}]}, If[al >= 1, toColor[c], Opacity[al, toColor[c]]]];
+
 (* CanvasRectangle[{x, y, w, h}, colour]: filled, or outlined with "Stroke" -> width; "Radius" rounds the corners *)
 Options[CanvasRectangle] = {Opacity -> 1, "Stroke" -> None, "Radius" -> 0};
 CanvasRectangle[{x_, y_, w_, h_}, c_, opts : OptionsPattern[]] := With[{a = OptionValue[Opacity], s = OptionValue["Stroke"], r = OptionValue["Radius"]},
     Which[
         r > 0,   (* exact when the transform is a translation / uniform scale *)
         With[{rect = Rectangle[cxf[{x, y + h}], cxf[{x + w, y}], RoundingRadius -> Min[r, w / 2, h / 2] cscale[]]},
-            If[s === None, {toColor[c], cop[a], EdgeForm[], rect}, {FaceForm[], EdgeForm[{toColor[c], cop[a], thick[s]}], rect}]],   (* EdgeForm takes the same Scaled thickness *)
-        s === None, {toColor[c], cop[a], EdgeForm[], Polygon[cxf /@ {{x, y}, {x + w, y}, {x + w, y + h}, {x, y + h}}]},
-        True, {toColor[c], cop[a], thick[s], Line[cxf /@ {{x, y}, {x + w, y}, {x + w, y + h}, {x, y + h}, {x, y}}]}
+            If[s === None, {EdgeForm[], FaceForm[paint[c, a]], rect}, {FaceForm[], EdgeForm[{paint[c, a], thick[s]}], rect}]],   (* EdgeForm takes the same Scaled thickness *)
+        s === None, {EdgeForm[], FaceForm[paint[c, a]], Polygon[cxf /@ {{x, y}, {x + w, y}, {x + w, y + h}, {x, y + h}}]},
+        True, {paint[c, a], thick[s], Line[cxf /@ {{x, y}, {x + w, y}, {x + w, y + h}, {x, y + h}, {x, y}}]}
     ]];
 Options[CanvasPolygon] = {Opacity -> 1, "Stroke" -> None};
 CanvasPolygon[pts_, c_, opts : OptionsPattern[]] := With[{a = OptionValue[Opacity], s = OptionValue["Stroke"]},
-    If[s === None, {toColor[c], cop[a], EdgeForm[], Polygon[cxf /@ pts]},
-        {toColor[c], cop[a], thick[s], JoinForm["Round"], Line[cxf /@ Append[pts, First[pts]]]}]];
+    If[s === None, {EdgeForm[], FaceForm[paint[c, a]], Polygon[cxf /@ pts]},
+        {paint[c, a], thick[s], JoinForm["Round"], Line[cxf /@ Append[pts, First[pts]]]}]];
 Options[CanvasLine] = {Opacity -> 1, "Thickness" -> 1};
-CanvasLine[pts_, c_, opts : OptionsPattern[]] := {toColor[c], cop[OptionValue[Opacity]], thick[OptionValue["Thickness"]], CapForm["Round"], Line[cxf /@ pts]};
+CanvasLine[pts_, c_, opts : OptionsPattern[]] := {paint[c, OptionValue[Opacity]], thick[OptionValue["Thickness"]], CapForm["Round"], Line[cxf /@ pts]};
 Options[CanvasDisk] = {Opacity -> 1, "Stroke" -> None};
 CanvasDisk[{x_, y_}, r_, c_, opts : OptionsPattern[]] := With[{p = cxf[{x, y}], rr = {r cscaleX[], r cscaleY[]}},
-    If[OptionValue["Stroke"] === None, {toColor[c], cop[OptionValue[Opacity]], EdgeForm[], Disk[p, rr]},
-        {toColor[c], cop[OptionValue[Opacity]], thick[OptionValue["Stroke"]], Circle[p, rr]}]];
+    If[OptionValue["Stroke"] === None, {EdgeForm[], FaceForm[paint[c, OptionValue[Opacity]]], Disk[p, rr]},
+        {paint[c, OptionValue[Opacity]], thick[OptionValue["Stroke"]], Circle[p, rr]}]];
 
 (* a colour fading across a rectangle: stops {{u, opacity}, ...} along "Horizontal" or "Vertical",
    drawn as thin strips (LinearGradientFilling has no per-stop opacity) *)
@@ -105,7 +110,7 @@ CanvasGradient[{x_, y_, w_, h_}, dir_, stops : {{_ ? NumericQ, _ ? ColorQ | _Str
         Table[With[{a = vs[[i]], b = vs[[i + 1]], c = vs[[j]], d = vs[[j + 1]]},
             quad[{x + w a, y + h c, w (b - a), h (d - c)}, col /@ ({a + c, b + c, b + d, a + d} / 2)]], {i, 8}, {j, 8}]]];
 (* a rectangle whose corners (tl, tr, br, bl) carry colours; a hair oversized so bands meet without seams *)
-quad[{x_, y_, w_, h_}, cs_] := {cop[], EdgeForm[], Polygon[cxf /@ {{x, y}, {x + w + 0.4, y}, {x + w + 0.4, y + h + 0.4}, {x, y + h + 0.4}}, VertexColors -> cs]};
+quad[{x_, y_, w_, h_}, cs_] := {If[$canvasAlpha < 1, cop[], Nothing], EdgeForm[], Polygon[cxf /@ {{x, y}, {x + w + 0.4, y}, {x + w + 0.4, y + h + 0.4}, {x, y + h + 0.4}}, VertexColors -> cs]};
 
 (* draw only inside a canvas rectangle (ctx.clip): the body goes into an inset whose plot range is the rect *)
 CanvasClip[{x_, y_, w_, h_}, body_] := With[{p0 = cxf[{x, y + h}], p1 = cxf[{x + w, y}]},
@@ -156,7 +161,11 @@ CanvasTextWidth[s_String, f_Association, tracking_ : 0] := f["Size"] Total[charA
 
 (* size follows the transform's horizontal scale, so glyph widths agree with positions even under a
    non-uniform scale (canvas squashes glyphs; WL Text cannot, so it shrinks them evenly) *)
-textPrim[s_, {x_, y_}, f_, c_, align_, a_] := Module[{size = f["Size"] cscaleX[], p = cxf[{x, y}], ang = cangle[]},
+(* sizes are snapped to steps of 1%: a front end keeps the glyphs it renders at every size it has
+   seen, so text that grows or zooms continuously would make new ones every frame without bound *)
+snapSize[s_ ? Positive] := 1.01^Round[Log[1.01, s]];
+snapSize[s_] := s;
+textPrim[s_, {x_, y_}, f_, c_, align_, a_] := Module[{size = snapSize[f["Size"] cscaleX[]], p = cxf[{x, y}], ang = cangle[]},
     With[{t = Text[Style[s, styleOpts[f, size], toColor[c]], p + {0, -faceMetrics[f]["Desc"] size}, {Switch[align, Center, 0, Right, 1, _, -1], -1}]},
         {cop[a], If[Abs[ang] < 10^-6, t, Rotate[t, -ang, p]]}]];
 

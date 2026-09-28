@@ -137,8 +137,17 @@ seekTo[Hold[t_, playing_, stream_, begin_], aud_, spu_, x_] := If[stream =!= Non
    layers use (DistributeDefinitions, so a notebook's own functions just work) and runs any extra
    "KernelInitialization" -- written as PNGs, then encoded with ffmpeg together with the soundtrack.
    "From"/"To" select a range in timeline units. *)
+(* an AnimatedImage of the timeline: small and self-contained, it plays inside a notebook, in the
+   cloud too; "FrameRate" frames per second of film *)
+Options[timelineAnimatedImage] = {"From" -> 0, "To" -> Automatic, "FrameRate" -> 15, ImageSize -> 480};
+tl_Timeline["AnimatedImage", opts : OptionsPattern[timelineAnimatedImage]] := Module[{
+    from = OptionValue[timelineAnimatedImage, {opts}, "From"], to = Replace[OptionValue[timelineAnimatedImage, {opts}, "To"], Automatic -> tl["Duration"]],
+    fps = OptionValue[timelineAnimatedImage, {opts}, "FrameRate"], spu = tl["SecondsPerUnit"], size = OptionValue[timelineAnimatedImage, {opts}, ImageSize]},
+    AnimatedImage[Table[Rasterize[tl["Graphics", t, ImageSize -> size], "Image", ImageResolution -> 72], {t, from, to - 10^-6, 1 / (spu fps)}],
+        FrameRate -> fps, AnimationRepetitions -> Infinity]]
+
 Options[timelineVideo] = {"From" -> 0, "To" -> Automatic, "FrameRate" -> Automatic, "KernelInitialization" :> Null,
-    "Parallel" -> True, "FrameDirectory" -> Automatic, "CRF" -> 18}
+    "Parallel" -> True, "FrameDirectory" -> Automatic, "CRF" -> 18, "Chunk" -> 60}
 
 tl_Timeline["Video", file_String, opts : OptionsPattern[timelineVideo]] := Module[{
     from = OptionValue[timelineVideo, {opts}, "From"],
@@ -156,12 +165,23 @@ tl_Timeline["Video", file_String, opts : OptionsPattern[timelineVideo]] := Modul
         With[{init = Unevaluated @@ {OptionValue[timelineVideo, {opts}, "KernelInitialization"]}},
             ParallelEvaluate[ReleaseHold[Hold[init]]]
         ];
-        (* locals of this package are never distributed, so hand the values over literally *)
-        With[{times = times, dir = dir},
-            ParallelDo[
-                Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], tl["Image", times[[i]]]],
-                {i, Length[times]}, Method -> "FinestGrained"
-            ]],
+        (* the timeline can be large (rasterized outputs, photos, a laid-out wall), so it goes to each
+           kernel ONCE, inside the definition of a frame function made there directly (a fresh symbol:
+           this package's own are protected, and DistributeDefinitions does not carry them); frames
+           are then dealt out in contiguous chunks, so a kernel's layer caches (the wall's settled
+           words) keep being reused *)
+        (* tl is already the timeline itself here: it is this method's pattern variable *)
+        With[{frame = Unique["WAnimVideoFrame"], times = times, dir = dir,
+                chunks = Partition[Range[n], UpTo[OptionValue[timelineVideo, {opts}, "Chunk"]]]},
+            (* rasterizing needs a front end; subkernels do not always come with one *)
+            ParallelEvaluate[frame[i_] := UsingFrontEnd[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], tl["Image", times[[i]]]]]];
+            (* the layers' own functions (a notebook's colours, tracks, helpers) live in the caller's
+               context, which distribution from this package does not follow by itself *)
+            DistributeDefinitions @@ Flatten[Hold @@ Union[Cases[tl, s_Symbol /; MemberQ[{"Global`", $Context}, Context[s]] :> Hold[s], {0, Infinity}, Heads -> True]], 1, Hold];
+            (* a front end grows with every picture it rasterizes, so each kernel starts a fresh one
+               after every chunk: memory stays bounded however long the film *)
+            ParallelDo[Scan[frame, c]; Developer`UninstallFrontEnd[], {c, chunks}, Method -> "FinestGrained"];
+            ParallelEvaluate[Remove[frame]]; Remove[frame]],
         Do[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], tl["Image", times[[i]]]], {i, n}]
     ];
     aud = tl["Audio"];
@@ -209,34 +229,38 @@ Timeline /: MakeBoxes[tl : Timeline[data_ ? timelineQ], StandardForm] := BoxForm
               | "Gray4" four greys (NeXT MegaPixel levels 0, 104, 184, 255)
               | "Color" rasterized at the low resolution, colour kept
    Returns a primitive to place in a Graphics whose units are output pixels. *)
-Options[RasterScreen] = {"Pixel" -> 2, "Depth" -> "Full", Background -> White, "Threshold" -> 160 / 255}
+Options[RasterScreen] = {"Pixel" -> 2, "Depth" -> "Full", Background -> White, "Threshold" -> 160 / 255, "LogicalSize" -> Automatic}
 
 RasterScreen[prims_, {{x0_, y0_}, {x1_, y1_}}, opts : OptionsPattern[]] := With[{
     k = OptionValue["Pixel"], depth = OptionValue["Depth"], w = x1 - x0, h = y1 - y0
 },
-    With[{lw = Round[w / k], lh = Round[h / k]},
+    With[{lw = Replace[OptionValue["LogicalSize"], Automatic -> {Round[w / k], Round[h / k]}][[1]], lh = Replace[OptionValue["LogicalSize"], Automatic -> {Round[w / k], Round[h / k]}][[2]]},
         If[ depth === "Full",
             Inset[
                 Graphics[prims, PlotRange -> {{0, lw}, {0, lh}}, ImageSize -> {w, h}, AspectRatio -> h / w, Background -> OptionValue[Background],
                     PlotRangePadding -> None, ImagePadding -> None, PlotRangeClipping -> True],
                 {x0, y0}, {Left, Bottom}, {w, h}],
-            Inset[
-                ImageResize[
-                    quantize[
-                        Rasterize[Graphics[prims, PlotRange -> {{0, lw}, {0, lh}}, ImageSize -> {lw, lh}, AspectRatio -> lh / lw,
-                            Background -> OptionValue[Background], PlotRangePadding -> None, ImagePadding -> None], "Image", ImageResolution -> 72],
-                        depth, OptionValue["Threshold"]],
-                    {Round[w], Round[h]}, Resampling -> "Nearest"],
+            Inset[screenImage[prims, {lw, lh}, depth, OptionValue[Background], OptionValue["Threshold"], Ceiling[k]],
                 {x0, y0}, {Left, Bottom}, {w, h}]
         ]
     ]
 ]
 
+(* the screen's picture: rasterized at its logical resolution, quantized, and blown up (nearest
+   neighbour) to a fixed multiple of it -- independent of where and how big it is drawn, so an
+   unchanged screen is the very same image from frame to frame.  The last few are kept: a front end
+   keeps a copy of every distinct image it is sent, so a new image per frame would grow it *)
+screenImage[prims_, {lw_, lh_}, depth_, bg_, thr_, m_] := With[{key = Hash[{prims, lw, lh, depth, bg, thr, m}]},
+    Lookup[screenCache, key, With[{img = ImageResize[quantize[Rasterize[Graphics[prims, PlotRange -> {{0, lw}, {0, lh}}, ImageSize -> {lw, lh}, AspectRatio -> lh / lw,
+            Background -> bg, PlotRangePadding -> None, ImagePadding -> None], "Image", ImageResolution -> 72], depth, thr], {lw, lh} m, Resampling -> "Nearest"]},
+        screenCache = Take[Append[screenCache, key -> img], -Min[8, Length[screenCache] + 1]]; img]]];
+screenCache = <||>;
+
 (* CanvasScreen[{x, y, w, h}, f, opts]: the same, placed by a CANVAS rectangle (current transform
    applied) and drawn by f[lw, lh] on the screen's own logical canvas (lw x lh = the rect / "Pixel") *)
 CanvasScreen[{x_, y_, w_, h_}, f_, opts : OptionsPattern[RasterScreen]] := With[{k = OptionValue[RasterScreen, {opts}, "Pixel"]},
     With[{lw = Round[w / k], lh = Round[h / k]},
-        RasterScreen[CanvasBlock[{lw, lh}, f[lw, lh]], {cxf[{x, y + h}], cxf[{x + w, y}]}, opts]]];
+        RasterScreen[CanvasBlock[{lw, lh}, f[lw, lh]], {cxf[{x, y + h}], cxf[{x + w, y}]}, "LogicalSize" -> {lw, lh}, opts]]];
 
 quantize[img_, "Bit", thr_] := ColorConvert[Binarize[ColorConvert[img, "Grayscale"], thr], "RGB"]
 quantize[img_, "Gray4", _] := ColorConvert[ImageApply[Which[# < 52 / 255, 0, # < 144 / 255, 104 / 255, # < 220 / 255, 184 / 255, True, 1] &, ColorConvert[img, "Grayscale"]], "RGB"]

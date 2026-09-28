@@ -67,12 +67,12 @@ TileGrid[tiles_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opt
     With[{pics = tilePictures[#[[2]], o] & /@ tiles},
         makeLayer["TileGrid", {t0, t1}, Function[t, tileGridDraw[tiles, pics, t, {t0, t1}, atTime[o, t]]]]]];
 
-(* each tile's content as a list of frames, rasterized once at twice the card size *)
+(* each tile's content as a list of frames, rasterized once at the card's size *)
 tilePictures[f_Function, o_] := Table[tilePicture[f[u], o], {u, Most[Subdivide[0., 1., ov[o, "Frames"]]]}];
 tilePictures[e_, o_] := {tilePicture[e, o]};
 tilePicture[img_Image, o_] := img;
-tilePicture[e_, o_] := Rasterize[Show[e, ImageSize -> ov[o, "TileSize"] - 20], "Image", ImageResolution -> 144, Background -> White] /; MatchQ[e, _Graphics | _Graphics3D];
-tilePicture[e_, o_] := Rasterize[e, "Image", ImageResolution -> 144, Background -> White];
+tilePicture[e_, o_] := Rasterize[Show[e, ImageSize -> ov[o, "TileSize"] - 20], "Image", ImageResolution -> 72, Background -> White] /; MatchQ[e, _Graphics | _Graphics3D];
+tilePicture[e_, o_] := Rasterize[e, "Image", ImageResolution -> 72, Background -> White];
 
 tileGridDraw[tiles_, pics_, t_, {t0_, t1_}, o_] := Module[{p = layerPoint[ov[o, Position]], ts = ov[o, "TileSize"], gap = ov[o, "Gap"], cols = ov[o, "Columns"],
     f = layerFont[o, "Mono"], env = envelope[t, {t0, t1}, Join[{"Enter" -> "Cut"}, o]], newest = Floor[(t - t0) / ov[o, "Interval"]]},

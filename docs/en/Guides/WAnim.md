@@ -24,7 +24,7 @@ places text exactly where a browser canvas would, so designs port from web tools
 
 ### Timelines: a film as a list of layers
 
-- `Timeline` a stack of layers over time, shown live (clocked by its soundtrack), as a frame, or rendered to a Video
+- `Timeline` a stack of layers over time, shown live (clocked by its soundtrack), as a frame, as an AnimatedImage, or rendered to a Video
 - `TimelineLayer` one segment: a span and a function drawing it at time t; every creation tool returns one
 - `Backdrop` a solid fill of the canvas, a colour or a function of time
 - `$LayerOptions` the options every creation tool shares: Position, fonts, "Enter" and "Exit"; colours may be functions of time
@@ -54,6 +54,15 @@ places text exactly where a browser canvas would, so designs port from web tools
 - `Counter` a number that counts and flashes while it changes, with a label
 - `YearRuler` a ruler of years whose marker jumps from date to date, with release ticks
 - `WordWall` a whole vocabulary laid out like a dictionary page, each word arriving at its time
+
+### The stage: Manim-style scenes
+
+- `Stage` ordinary graphics in math coordinates as a function of time, with a camera and displays that may move
+- `Tween` a value over time: eased from one value to another, or through keyframes (Manim's ValueTracker)
+- `Morph` one shape turning into another (Manim's Transform)
+- `PartialPath` a shape's outline drawn part way (Manim's Create)
+- `StageAxes` axes on the stage: graphs, areas, Riemann rectangles, labels
+- `StageBrace` a curly brace along a span, with a place for its label
 
 ### Diagrams
 
