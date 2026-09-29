@@ -141,3 +141,10 @@ $SampleBank::usage = "$SampleBank holds the samples loaded with LoadSamples, by 
 $Scales::usage = "$Scales gives the scales InScale knows, as semitone steps.";
 $AudioLatency::usage = "$AudioLatency is the delay, in seconds, between the live clock and the sound.";
 $LiveAtomHeads::usage = "$LiveAtomHeads lists the heads whose string arguments LiveCode treats as mini-notation.";
+
+(* ::Subsection:: *)
+(*The studio*)
+
+Instrument::usage = "Instrument[name][track] is a voice playing the events of track on an instrument synthesized sample by sample: \"Kick\", \"SoftKick\", \"Clap\", \"Hat\", \"OpenHat\", \"Crash\", \"Riser\", \"Roll\", \"Impact\", \"Tick\", \"Blip\", \"Pluck\", \"Arp\", \"Pad\", \"Bass\", \"LongBass\", \"Stab\", \"Lead\", \"Bell\" or \"Voice\". Instrument[] lists them.
+A track of Instruments is mixed through drums, music and bass buses with a shared reverb and delay.";
+Mixer::usage = "Mixer[opts][track] sets how a track of Instruments is mixed: \"Sidechain\" -> a track to duck under, \"Cutoff\" -> f for a low-pass on the music bus at f[cycle] Hz, \"DelayTime\", \"DelayFeedback\", \"Master\" and \"FadeOut\".";

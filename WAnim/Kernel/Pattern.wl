@@ -6,7 +6,7 @@
 PackageExported[{Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, $DrumKit, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Punchcard, Beat, Struct, Pan, Delay, Room, Dec, Duck, InScale, $Scales, Bars, Solo, TrackPlay, TrackPause, TrackReset, TrackSeek, Fastcat, LiveCode, $LiveAtomHeads}]
 
 (* shared with MiniNotation.wl so the TraditionalForm can render the same live Visual *)
-PackageScoped[{renderVisual, renderVisuals, visualsOf, visualOf, cyclesOf, buttonsQ, clockPhase, visPhase, seekStream, registerStream, unregisterStream, enabledQ, soloStream, soloFlagQ, frameIfDisabled, timecat, $Playing, $Streams}]
+PackageScoped[{GainVoice, valuePitches, hasOnset, voiceRendered, renderVisual, renderVisuals, visualsOf, visualOf, cyclesOf, buttonsQ, clockPhase, visPhase, seekStream, registerStream, unregisterStream, enabledQ, soloStream, soloFlagQ, frameIfDisabled, timecat, $Playing, $Streams}]
 
 
 
@@ -373,6 +373,7 @@ $SampleBank = <||>
 
 LoadSample[name_String, file_String] := ($SampleBank[name] = AudioNormalize @ AudioChannelMix[Import[file], "Mono"])
 LoadSamples[dir_String] := (LoadSample[FileBaseName[#], #] & /@ FileNames["*.wav", dir]; Keys[$SampleBank])
+sampleQ[_Audio] := True
 sampleQ[v_] := KeyExistsQ[$SampleBank, v] || KeyExistsQ[$DrumKit, drumAlias[v]]
 
 (* The built-in kit, synthesized by scripts/make_drums.wls and shipped as the paclet's "Drums" asset:
@@ -554,6 +555,7 @@ synthDrum[v_] := synthDrum[v] = AudioNormalize @ Switch[ToLowerCase[v],
    base synth drum -- so indexed tokens always sound even with no variant bank. *)
 sampleBase[v_String] := First @ StringSplit[v, ":"]
 sampleBase[v_] := v
+drumSound[a_Audio] := a
 drumSound[v_] := Which[KeyExistsQ[$SampleBank, v], $SampleBank[v],
     StringQ[v] && KeyExistsQ[$SampleBank, sampleBase[v]], $SampleBank[sampleBase[v]],
     KeyExistsQ[$DrumKit, drumAlias[v]], $DrumKit[drumAlias[v]],
@@ -633,6 +635,8 @@ wrapLoop[a_, sec_] := With[{d = QuantityMagnitude[Duration[a], "Seconds"]},
 voiceRendered[v_, nCycles_] := applyDuck[
     Fold[applyFx, AudioAmplify[normAudio @ voiceAudio[v, nCycles], gainMeta[v]], fxOf[v]],
     duckOf[v], nCycles]
+(* a track of Instruments (or one given a Mixer) goes through the studio: buses, sends, master *)
+renderAudio[t_Track, nCycles_] /; studioQ[t] := studioRender[t, nCycles]
 renderAudio[t : Track[voices_List, ___], nCycles_] := AudioAmplify[mix[wrapLoop[voiceRendered[#, nCycles], nCycles cycleSeconds[]] & /@ voices], gainMeta[t]]
 renderAudio[v_, nCycles_] := wrapLoop[voiceRendered[v, nCycles], nCycles cycleSeconds[]]
 

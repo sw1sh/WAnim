@@ -86,6 +86,11 @@ places text exactly where a browser canvas would, so designs port from web tools
 - `TypedText` the part of a text typed by a given fraction of the way through
 - `$CanvasSize`, `$CanvasFixedAdvance` the canvas being drawn and the monospace faces pinned to canvas advances
 
+### The studio
+
+- `Instrument` a voice on an instrument synthesized sample by sample: drums, pads, leads, a bell, a singing voice, key clicks
+- `Mixer` how a track of instruments is mixed: sidechain, an automated low-pass, reverb and delay, the master
+
 ### Music: cyclic-time patterns
 
 - `Track` a pattern: mini-notation ("bd [~ bd] sd, hh*8"), a query function, or a stack of voices

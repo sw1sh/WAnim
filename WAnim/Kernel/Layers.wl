@@ -9,7 +9,7 @@ PackageExported[{TimelineLayer, Backdrop, $LayerOptions}]
 (* ::Section:: *)
 (*PackageScoped*)
 
-PackageScoped[{ov, atTime, weightNum, makeLayer, layerFont, layerPoint, envelope, localU, typedCount, defaultFont}]
+PackageScoped[{ov, atTime, keystrokes, weightNum, makeLayer, layerFont, layerPoint, envelope, localU, typedCount, defaultFont}]
 
 
 (* ::Section:: *)
@@ -90,6 +90,12 @@ envelope[t_, {t0_, t1_}, opts_List] := Module[{enter = ov[opts, "Enter"], exit =
     Switch[enter, "Fade", a = u, "Rise", a = u; dy = 22 (1 - u), "Pop", a = Clip[u, {0, 1}]; s = Easing["OutBack", 1.8][localU[t, t0, t0 + et]], _, Null];
     Switch[exit, "Fade", a *= 1 - v, "Drop", a *= 1 - v; dy += 16 v, _, Null];
     <|"Alpha" -> a, "Offset" -> dy, "Scale" -> s|>];
+
+(* the key presses of typing n characters from at over dur, as foley: {time, "Tick", velocity}, quantized
+   to 1/64 of a unit and at least 1/40 apart, each a little louder or softer than the last *)
+keystrokes[at_, dur_, n_Integer] := Module[{last = -1, b, out = {}},
+    Do[b = Round[(at + k / n dur) 64] / 64; If[b - last >= 1/40, last = b; AppendTo[out, {b, "Tick", 0.55 + 0.45 FractionalPart[0.618 k]}]], {k, 0, n - 1}];
+    out];
 
 (* characters of an n-character text shown u of the way through typing *)
 typedCount[n_, u_] := Floor[Clip[u, {0, 1}] n + 10^-6];

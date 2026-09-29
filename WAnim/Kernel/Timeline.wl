@@ -26,7 +26,7 @@ PackageExported[{Timeline, RasterScreen, CanvasScreen, Easing, EventTrack, Track
 
 Options[Timeline] = {
     "Duration" -> Automatic, "Size" -> {1920, 1080}, Background -> Black,
-    "SecondsPerUnit" -> 1, "FrameRate" -> 60, "Soundtrack" -> None
+    "SecondsPerUnit" -> 1, "FrameRate" -> 60, "Soundtrack" -> None, "Foley" -> False
 }
 
 Timeline[layers0_List, opts : OptionsPattern[]] := With[{layers = Flatten[layers0]}, Timeline[<|
@@ -34,7 +34,9 @@ Timeline[layers0_List, opts : OptionsPattern[]] := With[{layers = Flatten[layers
     "Duration" -> Replace[OptionValue["Duration"], Automatic :> Max[0, Cases[normalizeLayer /@ layers, <|___, "Span" -> {_, e_ ? NumericQ}, ___|> :> e]]],
     "Size" -> OptionValue["Size"], "Background" -> OptionValue[Background],
     "SecondsPerUnit" -> OptionValue["SecondsPerUnit"], "FrameRate" -> OptionValue["FrameRate"],
-    "Soundtrack" -> OptionValue["Soundtrack"]
+    "Soundtrack" -> OptionValue["Soundtrack"], "Foley" -> OptionValue["Foley"],
+    (* what the layers make heard: key presses and blips, from the tools that type and evaluate *)
+    "FoleyEvents" -> Join @@ Cases[layers, l_TimelineLayer :> Lookup[First[l], "Foley", {}]]
 |>]]
 
 (* creation tools return TimelineLayers; a colour is a backdrop; lists of layers are flattened *)
@@ -47,6 +49,10 @@ normalizeLayer[f_] := <|"Span" -> {-Infinity, Infinity}, "Draw" -> f|>
 timelineQ[data_] := AssociationQ[data] && KeyExistsQ[data, "Layers"]
 
 Timeline[data_ ? timelineQ][key : "Layers" | "Duration" | "Size" | "Background" | "SecondsPerUnit" | "FrameRate" | "Soundtrack"] := data[key]
+(* the foley as a stack of instrument voices: key clicks and evaluation blips *)
+Timeline[data_ ? timelineQ]["Foley"] := With[{ev = Lookup[data, "FoleyEvents", {}]},
+    WolframInstitute`WAnim`Track[{Instrument["Tick"][EventTrack[Cases[ev, {t_, "Tick", v_} :> {t, 1/100, 1, v}]]],
+        Instrument["Blip"][EventTrack[Cases[ev, {t_, "Blip", v_} :> {t, 1/20, 91, v}]]]}]]
 tl_Timeline["Seconds"] := tl["Duration"] tl["SecondsPerUnit"]
 
 (* the frame at time t: every layer whose span covers t, in order, each drawn on a fresh canvas of
@@ -64,13 +70,18 @@ tl_Timeline["Graphics", t_, opts : OptionsPattern[Graphics]] := With[{w = tl["Si
 
 tl_Timeline["Image", t_, opts : OptionsPattern[Graphics]] := Rasterize[tl["Graphics", t, opts], "Image", ImageResolution -> 72]
 
+(* with "Foley" -> True the typing heard: its voices join the soundtrack's *)
+withFoley[s_, tl_] := If[! TrueQ[Lookup[First[tl], "Foley", False]], s,
+    Replace[s, {WolframInstitute`WAnim`Track[vs_List, m___] :> WolframInstitute`WAnim`Track[Join[vs, First[tl["Foley"]]], m],
+        other_ :> WolframInstitute`WAnim`Track[Join[{other}, First[tl["Foley"]]]]}]]
+
 (* the soundtrack as one Audio covering the whole timeline: one timeline unit is one cycle of a
    Track, so "SecondsPerUnit" is its tempo *)
 tl_Timeline["Audio"] := With[{s = tl["Soundtrack"]},
     Which[
         s === None, None,
         MatchQ[s, _Audio], s,
-        True, Audio[s, Ceiling[tl["Duration"]], "CyclesPerSecond" -> 1 / tl["SecondsPerUnit"]]
+        True, Audio[withFoley[s, tl], Ceiling[tl["Duration"]], "CyclesPerSecond" -> 1 / tl["SecondsPerUnit"]]
     ]
 ]
 
@@ -139,12 +150,14 @@ seekTo[Hold[t_, playing_, stream_, begin_], aud_, spu_, x_] := If[stream =!= Non
    "From"/"To" select a range in timeline units. *)
 (* an AnimatedImage of the timeline: small and self-contained, it plays inside a notebook, in the
    cloud too; "FrameRate" frames per second of film *)
-Options[timelineAnimatedImage] = {"From" -> 0, "To" -> Automatic, "FrameRate" -> 15, ImageSize -> 480};
+Options[timelineAnimatedImage] = {"From" -> 0, "To" -> Automatic, "FrameRate" -> 15, ImageSize -> 480, "Resolution" -> 2};
 tl_Timeline["AnimatedImage", opts : OptionsPattern[timelineAnimatedImage]] := Module[{
     from = OptionValue[timelineAnimatedImage, {opts}, "From"], to = Replace[OptionValue[timelineAnimatedImage, {opts}, "To"], Automatic -> tl["Duration"]],
     fps = OptionValue[timelineAnimatedImage, {opts}, "FrameRate"], spu = tl["SecondsPerUnit"], size = OptionValue[timelineAnimatedImage, {opts}, ImageSize]},
-    AnimatedImage[Table[Rasterize[tl["Graphics", t, ImageSize -> size], "Image", ImageResolution -> 72], {t, from, to - 10^-6, 1 / (spu fps)}],
-        FrameRate -> fps, AnimationRepetitions -> Infinity]]
+    (* frames at "Resolution" times the size they are shown at, so thin lines stay crisp on a dense display *)
+    With[{k = OptionValue[timelineAnimatedImage, {opts}, "Resolution"]},
+        AnimatedImage[Table[Rasterize[tl["Graphics", t, ImageSize -> k size], "Image", ImageResolution -> 72], {t, from, to - 10^-6, 1 / (spu fps)}],
+            FrameRate -> fps, AnimationRepetitions -> Infinity, ImageSize -> size]]]
 
 Options[timelineVideo] = {"From" -> 0, "To" -> Automatic, "FrameRate" -> Automatic, "KernelInitialization" :> Null,
     "Parallel" -> True, "FrameDirectory" -> Automatic, "CRF" -> 18, "Chunk" -> 60}
@@ -158,8 +171,8 @@ tl_Timeline["Video", file_String, opts : OptionsPattern[timelineVideo]] := Modul
     dir = Replace[OptionValue[timelineVideo, {opts}, "FrameDirectory"], Automatic :> CreateDirectory[]];
     n = Round[(to - from) spu fps];
     times = from + Range[0, n - 1] / (spu fps);
-    If[ TrueQ @ OptionValue[timelineVideo, {opts}, "Parallel"],
-        If[$KernelCount == 0, LaunchKernels[]];
+    (* in parallel when kernels can be had; otherwise (none launched, none licensed) here, in order *)
+    If[ TrueQ @ OptionValue[timelineVideo, {opts}, "Parallel"] && (Length[Kernels[]] > 0 || Length[Quiet[LaunchKernels[]]] > 0 || Length[Quiet[LaunchKernels[$ProcessorCount]]] > 0),
         With[{root = ParentDirectory[PacletObject["WolframInstitute/WAnim"]["Location"]]},
             ParallelEvaluate[PacletDirectoryLoad[root]; Needs["WolframInstitute`WAnim`"]]];
         With[{init = Unevaluated @@ {OptionValue[timelineVideo, {opts}, "KernelInitialization"]}},
@@ -301,7 +314,7 @@ TrackPulse[track_, decay_ : 18][t_] := With[{on = Quiet @ track["Onsets", t - 4,
 (* ::Section:: *)
 (*A Track from explicit events*)
 
-(* EventTrack[{{onset, duration, value}, ...}] is a Track (in cycles) that plays exactly those
+(* EventTrack[{{onset, duration, value}, ...}] (or {onset, duration, value, velocity}) is a Track (in cycles) that plays exactly those
    events: linear time rather than a cycle, for scores written out note by note (a film score, a
    transcription).  Queries clip each event to the span, keeping its whole extent, so onsets,
    visuals and audio rendering all behave as for any other Track. *)
@@ -309,6 +322,6 @@ EventTrack[events_List] := With[{ev = SortBy[events, First]},
     WolframInstitute`WAnim`Track[Function[span, eventsIn[ev, span]], <|"Events" -> ev|>]
 ]
 eventsIn[ev_, {b_, e_}] := Map[
-    <|"Value" -> #[[3]], "Whole" -> {#[[1]], #[[1]] + #[[2]]}, "Part" -> {Max[b, #[[1]]], Min[e, #[[1]] + #[[2]]]}|> &,
+    <|"Value" -> #[[3]], "Whole" -> {#[[1]], #[[1]] + #[[2]]}, "Part" -> {Max[b, #[[1]]], Min[e, #[[1]] + #[[2]]]}, "Velocity" -> If[Length[#] > 3, #[[4]], 1]|> &,
     Select[ev, #[[1]] < e && #[[1]] + #[[2]] > b &]
 ]

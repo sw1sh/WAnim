@@ -30,7 +30,8 @@ Options[Typewriter] = Join[{FontFamily -> Automatic, FontSize -> 64, FontWeight 
    half the span), with a blinking "Cursor" ("Block", "Bar" or None).  "Highlight" -> {"word", ...}
    lights words up once typing is done.  "Exit" -> "Collapse" folds the line into its cursor. *)
 Typewriter[s_String, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[Typewriter]]},
-    makeLayer["Typewriter", {t0, t1}, Function[t, typewriterDraw[s, t, {t0, t1}, atTime[o, t]]]]];
+    makeLayer["Typewriter", {t0, t1}, Function[t, typewriterDraw[s, t, {t0, t1}, atTime[o, t]]],
+        <|"Foley" -> keystrokes[t0, Replace[ov[o, "TypingTime"], Automatic -> Min[0.5 (t1 - t0), 0.05 StringLength[s]]], StringLength[s]]|>]];
 
 typewriterDraw[s_, t_, {t0_, t1_}, o_] := Module[{f = layerFont[o, "Mono"], tt, u, shown, full, p, x, y, k, env, cur, hl, hlt},
     tt = Replace[ov[o, "TypingTime"], Automatic -> Min[0.5 (t1 - t0), 0.05 StringLength[s]]];

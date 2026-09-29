@@ -41,3 +41,7 @@ VerificationTest[Length[AnimatedObject[{"a", "+", "b"}]["Primitives"]], 3, TestI
 VerificationTest[Head[Timeline[{Stage[{AnimatedObject[Disk[]]["Play", "Transform", AnimatedObject[Rectangle[]]]}, {0, 1}]}, "Duration" -> 1]["Graphics", 0.5]], Graphics, TestID -> "Stage-plays-objects"]
 VerificationTest[Head[Timeline[{Stage[Function[t, {White, Disk[{t, 0}, 0.5], Text["hi", {0, 2}]}], {0, 1}]}, "Duration" -> 1, Background -> Black]["Graphics", 0.5]], Graphics, TestID -> "Stage-draws"]
 VerificationTest[Head[Timeline[{Backdrop[Red]}, "Duration" -> 0.2, "Size" -> {160, 90}]["AnimatedImage", "FrameRate" -> 10]], AnimatedImage, TestID -> "Timeline-AnimatedImage"]
+VerificationTest[Length[Instrument[]], 20, TestID -> "Instrument-list"]
+VerificationTest[With[{a = Audio[Mixer["Sidechain" -> EventTrack[{{0, 1/4, "bd"}}]][Track[{Instrument["Kick"][EventTrack[{{0, 1/4, "bd"}}]], Instrument["Pluck"][EventTrack[{{1/2, 1/8, 69, 0.8}}]]}]], 1, "CyclesPerSecond" -> 1/2]},
+    {AudioChannels[a], Round[QuantityMagnitude[Duration[a], "Seconds"], 0.01], AudioMeasurements[a, "Max"] > 0.1}], {2, 2., True}, TestID -> "Instrument-mix"]
+VerificationTest[Length[Cases[First[Timeline[{Typewriter["abc", {0, 1}, "TypingTime" -> 0.5]}, "Duration" -> 1, "Foley" -> True]]["FoleyEvents"], {_, "Tick", _}]], 3, TestID -> "Timeline-foley"]

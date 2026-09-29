@@ -26,7 +26,9 @@ Options[Terminal] = Join[{FontFamily -> "VT323", FontSize -> 46, FontColor -> RG
      "Caption"  typed at the bottom of the screen in large type, captions stacking upward
    Glow and scanlines can be switched off; "Screen" -> {x, y, w, h} places the glass. *)
 Terminal[lines_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[Terminal]]},
-    makeLayer["Terminal", {t0, t1}, Function[t, terminalDraw[lines, t, {t0, t1}, atTime[o, t]]]]];
+    makeLayer["Terminal", {t0, t1}, Function[t, terminalDraw[lines, t, {t0, t1}, atTime[o, t]]],
+        <|"Foley" -> Join @@ Cases[lines, {at_, s_String, kind : ("Input" | "Caption") : "Input"} :>
+            keystrokes[at, ov[o, If[kind === "Input", "TypeTime", "CaptionTime"]], StringLength[s]]]|>]];
 
 glowText[s_, {x_, y_}, f_, c_, glow_] := {If[glow, CanvasOpacity[0.18, Table[CanvasText[s, {x, y} + d, f, RGBColor["#39FF6A"]], {d, {{-2, 0}, {2, 0}, {0, -2}, {0, 2}}}]], {}],
     CanvasText[s, {x, y}, f, c]};
@@ -83,7 +85,12 @@ Options[NotebookSession] = Join[{"Era" -> "Mac1988", "Screen" -> {88, 176, 1100,
 NotebookSession[cells_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = fromSnapshot[Join[{opts}, Options[NotebookSession]], t0]},
     With[{era = NotebookEra[ov[o, "Era"]]}, With[{cs = sessionCells[cells, era, o]},
         With[{screen = Function[t, sessionScreen[cs, era, Min[t, t1 - 10^-3], o]]},
-            makeLayer["NotebookSession", {t0, t1}, Function[t, sessionDraw[screen, t, {t0, t1}, atTime[o, t]]], <|"Screen" -> screen|>]]]]];
+            makeLayer["NotebookSession", {t0, t1}, Function[t, sessionDraw[screen, t, {t0, t1}, atTime[o, t]]], <|"Screen" -> screen, "Foley" -> sessionFoley[cs]|>]]]]];
+(* typing each input, return on its last key, a blip as each output appears *)
+sessionFoley[cs_] := Join @@ Map[Switch[#["kind"],
+    "In", Append[keystrokes[#["at"], #["type"], StringLength[#["text"]]], {#["at"] + #["type"] + 1/16, "Tick", 1}],
+    "Out" | "Pic", If[TrueQ[#["input"]], {}, {{#["at"], "Blip", 1}}],
+    _, {}] &, cs];
 
 (* a wipe only needs the previous window's last picture, so keep that instead of the whole previous
    session (which would carry its own predecessor, and so on down the film) *)
