@@ -45,3 +45,8 @@ VerificationTest[Length[Instrument[]], 20, TestID -> "Instrument-list"]
 VerificationTest[With[{a = Audio[Mixer["Sidechain" -> EventTrack[{{0, 1/4, "bd"}}]][Track[{Instrument["Kick"][EventTrack[{{0, 1/4, "bd"}}]], Instrument["Pluck"][EventTrack[{{1/2, 1/8, 69, 0.8}}]]}]], 1, "CyclesPerSecond" -> 1/2]},
     {AudioChannels[a], Round[QuantityMagnitude[Duration[a], "Seconds"], 0.01], AudioMeasurements[a, "Max"] > 0.1}], {2, 2., True}, TestID -> "Instrument-mix"]
 VerificationTest[Length[Cases[First[Timeline[{Typewriter["abc", {0, 1}, "TypingTime" -> 0.5]}, "Duration" -> 1, "Foley" -> True]]["FoleyEvents"], {_, "Tick", _}]], 3, TestID -> "Timeline-foley"]
+VerificationTest[With[{w = WordWall[{{"alpha", 1., 0}, {"beta", 0.1, 0}}, {0, 1}]}, {Sort[Keys[w["Places"]]], Head[Timeline[{WordWall[{{"alpha", 1., 0}, {"beta", 0.1, 0}}, {0, 1},
+    "Camera" -> (CanvasScale[3, w["Places"]["alpha"]] &), "Emphasis" -> ({# === "beta" &, 1} &)]}, "Duration" -> 1]["Graphics", 0.5]]}], {{"alpha", "beta"}, Graphics}, TestID -> "WordWall-camera"]
+VerificationTest[Head[Timeline[{Spikey[{0, 1}, "Face" -> True, "Raise" -> (# &), "Blink" -> (# > 0.5 &), Position -> ({100 + 50 #, 100} &)]}, "Duration" -> 1]["Graphics", 0.7]], Graphics, TestID -> "Spikey-face"]
+VerificationTest[Length[Cases[First[Timeline[{NotebookSession[{{0, "ChatInput", "hello", 0.3}, {0.5, "ChatOutput", "hi", {"1 + 1"}}}, {0, 1}, "Era" -> "BigSur2020",
+    "ChatBar" -> {0.6, "ok", 0.1, 0.8}]}, "Duration" -> 1, "Foley" -> True]]["FoleyEvents"], {_, "Tick", _}]], 9, TestID -> "NotebookSession-chat-foley"]

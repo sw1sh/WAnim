@@ -65,7 +65,7 @@ terminalDraw[lines_, t_, {t0_, t1_}, o_] := Module[{W = $CanvasSize[[1]], H = $C
 (*NotebookSession*)
 
 Options[NotebookSession] = Join[{"Era" -> "Mac1988", "Screen" -> {88, 176, 1100, 780}, "Title" -> "Untitled-1", "Evaluate" -> False,
-    "TypeTime" -> 0.25, "OutputDelay" -> 0.3, "Enter" -> "Burst", "EnterTime" -> 0.22, "Pulse" -> None, "PushIn" -> 0.03, "Shadow" -> True, "Frames" -> 24, "From" -> None, "Dim" -> None, "Hide" -> {}, "GraphicsSize" -> Automatic, "Extras" -> Automatic}, $LayerOptions];
+    "TypeTime" -> 0.25, "OutputDelay" -> 0.3, "Enter" -> "Burst", "EnterTime" -> 0.22, "Pulse" -> None, "PushIn" -> 0.03, "Shadow" -> True, "Frames" -> 24, "From" -> None, "Dim" -> None, "Hide" -> {}, "GraphicsSize" -> Automatic, "Extras" -> Automatic, "ChatBar" -> None}, $LayerOptions];
 
 (* NotebookSession[{cell, ...}, {t0, t1}] is a notebook window of its era, typing and evaluating on the
    clock.  Cells:
@@ -85,10 +85,13 @@ Options[NotebookSession] = Join[{"Era" -> "Mac1988", "Screen" -> {88, 176, 1100,
 NotebookSession[cells_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = fromSnapshot[Join[{opts}, Options[NotebookSession]], t0]},
     With[{era = NotebookEra[ov[o, "Era"]]}, With[{cs = sessionCells[cells, era, o]},
         With[{screen = Function[t, sessionScreen[cs, era, Min[t, t1 - 10^-3], o]]},
-            makeLayer["NotebookSession", {t0, t1}, Function[t, sessionDraw[screen, t, {t0, t1}, atTime[o, t]]], <|"Screen" -> screen, "Foley" -> sessionFoley[cs]|>]]]]];
+            makeLayer["NotebookSession", {t0, t1}, Function[t, sessionDraw[screen, t, {t0, t1}, atTime[o, t]]], <|"Screen" -> screen, "Foley" -> Join[sessionFoley[cs],
+                Replace[ov[o, "ChatBar"], {{tb_, txt_String, dur_, sent_} :> Append[keystrokes[tb, dur, StringLength[txt]], {sent, "Tick", 1}], _ -> {}}]]|>]]]]];
 (* typing each input, return on its last key, a blip as each output appears *)
 sessionFoley[cs_] := Join @@ Map[Switch[#["kind"],
     "In", Append[keystrokes[#["at"], #["type"], StringLength[#["text"]]], {#["at"] + #["type"] + 1/16, "Tick", 1}],
+    "ChatInput", Append[keystrokes[#["at"], #["type"], StringLength[#["text"]]], {#["at"] + #["type"] + 1/16, "Tick", 1}],
+    "ChatOutput", {{#["at"], "Blip", 1}},
     "Out" | "Pic", If[TrueQ[#["input"]], {}, {{#["at"], "Blip", 1}}],
     _, {}] &, cs];
 
@@ -106,7 +109,10 @@ sessionCells[cells_, era_, o_] := Module[{n = 0, out = {}},
             AppendTo[out, <|"kind" -> "In", "at" -> c[[1]], "n" -> n, "text" -> c[[3]], "type" -> tt|>];
             If[TrueQ[ov[o, "Evaluate"]], out = Join[out, Flatten[{outCell[c[[1]] + tt + ov[o, "OutputDelay"], n, ToExpression[c[[3]]], era, o]}]]]],
         "Out", out = Join[out, Flatten[{If[Length[c] > 3, animCell[c[[1]], n, c[[3]], c[[4]], era, Join[If[Length[c] > 4, {"Frames" -> c[[5]]}, {}], o]], outCell[c[[1]], n, c[[3]], era, o]]}]],
-        "Title" | "Text", AppendTo[out, <|"kind" -> c[[2]], "at" -> c[[1]], "n" -> n, "text" -> c[[3]]|>]], {c, SortBy[cells, First]}];
+        "Title" | "Text", AppendTo[out, <|"kind" -> c[[2]], "at" -> c[[1]], "n" -> n, "text" -> c[[3]]|>],
+        "ChatInput", AppendTo[out, <|"kind" -> "ChatInput", "at" -> c[[1]], "n" -> n, "text" -> c[[3]], "type" -> If[Length[c] > 3, c[[4]], 2 ov[o, "TypeTime"]]|>],
+        "ChatOutput", AppendTo[out, <|"kind" -> "ChatOutput", "at" -> c[[1]], "n" -> n, "text" -> c[[3]], "code" -> If[Length[c] > 3, c[[4]], {}],
+            "link" -> If[Length[c] > 4, c[[5]], None]|>]], {c, SortBy[cells, First]}];
     SortBy[out, #["at"] &]];
 (* "GraphicsSize" -> w shows graphics w logical pixels wide *)
 sized[e_, w_ ? NumericQ] /; MatchQ[e, _Graphics | _Graphics3D | _Graph | _GeoGraphics] := Show[e, ImageSize -> w];
@@ -150,7 +156,10 @@ sessionDraw[screen_, t_, {t0_, t1_}, o_] := Module[{R = ov[o, "Screen"], s, c, p
         If[dim > 0, CanvasRectangle[R, Black, Opacity -> dim], {}],
         CanvasRectangle[R + {-0.5, -0.5, 1, 1}, Black, "Stroke" -> 1, Opacity -> 0.25]}]]];
 (* the screen alone: chrome, cells and the era's extras (the 3.0 BasicInput palette) *)
-sessionScreen[cs_, era_, t_, o_] := CanvasScreen[ov[o, "Screen"], Function[{lw, lh}, {era["Chrome"][lw, lh, ov[o, "Title"]], notebookDraw[era["Content"][lw, lh], era, cs, t],
+sessionScreen[cs_, era_, t_, o_] := CanvasScreen[ov[o, "Screen"], Function[{lw, lh}, {era["Chrome"][lw, lh, ov[o, "Title"]],
+    With[{r = era["Content"][lw, lh], bar = ov[o, "ChatBar"]}, If[bar === None, notebookDraw[r, era, cs, t],
+        {notebookDraw[r - {0, 0, 0, 64}, era, cs, t], CanvasRectangle[{r[[1]], r[[2]] + r[[4]] - 64, r[[3]], 64}, era["Page"]],
+         chatBarDraw[{r[[1]] + 24, r[[2]] + r[[4]] - 54, r[[3]] - 30}, bar, t]}]],
     If[ov[o, "Extras"] === Automatic && era["Extras"] =!= None, era["Extras"][lw, lh, t], {}]}], "Pixel" -> era["Pixel"], "Depth" -> era["Depth"]];
 
 (* a picture on a one-bit display, dithered once: a new image every frame would also be kept by the front end *)
@@ -159,7 +168,7 @@ dithered[img_, size_] := dithered[img, size] = OrderedDither[img, size];
 (* the cells, top to bottom, scrolled so the newest stays in view and gliding when one arrives *)
 cellFont[c_, era_] := Switch[c["kind"], "In", era["Input"], "Out", era["Output"], "Title", era["Title"], _, era["Text"]];
 labelH[c_, era_] := If[TrueQ[era["LabelsAbove"]] && MatchQ[c["kind"], "In" | "Out" | "Pic"], 1.5 era["Label"]["Size"], 0];
-cellHeight[c_, era_, w_] := labelH[c, era] + Switch[c["kind"], "Pic", c["size"][[2]] + 6,
+cellHeight[c_, era_, w_] := labelH[c, era] + Switch[c["kind"], "Pic", c["size"][[2]] + 6, "ChatInput", 46, "ChatOutput", 64 + 24 Length[c["code"]] + 16,
     _, With[{f = cellFont[c, era]}, 1.3 f["Size"] Length[CanvasWrap[c["text"], f, w, "Break" -> If[MatchQ[c["kind"], "In" | "Out"], "Code", "Words"]]] + 4]];
 notebookDraw[{rx_, ry_, rw_, rh_}, era_, cs_, t_] := Module[{vis = Select[cs, t >= #["at"] &], w = rw - era["Left"] - 30, hs, scrollFor, scroll, y, gap = era["Gap"]},
     hs = cellHeight[#, era, w] & /@ vis;
@@ -181,6 +190,8 @@ cellDraw[c_, {x0_, y_}, w_, h_, era_, t_, top_] := Module[{f = cellFont[c, era],
         CanvasText[lab, {x0 - 8, yy + If[c["kind"] === "Pic", era["Label"]["Size"] + 4, 1.05 f["Size"]]}, era["Label"], era["LabelColor"], Alignment -> Right]]],
      bracket[{x0 + w + 16, y - 2}, h Easing["OutExpo"][Clip[(t - c["at"]) / 0.12, {0, 1}]], era],
      Switch[c["kind"],
+        "ChatInput", chatInputDraw[c, {x0, y}, w, t],
+        "ChatOutput", chatOutputDraw[c, {x0, y}, w, h, era, t],
         "Pic", With[{img = If[KeyExistsQ[c, "frames"], c["frames"][[1 + Floor[Clip[(t - c["at"]) / c["dur"], {0, 1}] (Length[c["frames"]] - 1)]]], c["image"]]},
             CanvasImage[If[era["Depth"] === "Bit", dithered[img, Round[c["size"]]], img], Join[{x0, yy}, c["size"]], Opacity -> Easing["OutCubic"][Clip[(t - c["at"]) / 0.12, {0, 1}]]]],
         _, lines = CanvasWrap[c["text"], f, w, "Break" -> If[MatchQ[c["kind"], "In" | "Out"], "Code", "Words"]];
@@ -189,6 +200,39 @@ cellDraw[c_, {x0_, y_}, w_, h_, era_, t_, top_] := Module[{f = cellFont[c, era],
         {MapIndexed[With[{p = {x0, yy + f["Size"] (1.05 + 1.3 (#2[[1]] - 1))}}, If[p[[2]] - f["Size"] < top, {}, codeLine[#1, p, f, c["kind"], era]]] &, shown],
          If[c["kind"] === "In" && t - c["at"] < c["type"] + 0.25 && EvenQ[Floor[8 t]],
             CanvasRectangle[{x0 + CanvasTextWidth[Last[shown, ""], f] + 1, yy + 1.3 f["Size"] Max[0, Length[shown] - 1] + 2, 1.1, 1.15 f["Size"]}, ink], {}]}]}];
+
+(* the chat notebooks of 13.3: a speech-bubble icon beside each cell, the question typed into a framed
+   input, the answer streamed word by word into a pale pane with a code block *)
+speechBubble[{x_, y_}, fill_, stroke_] := {CanvasRectangle[{x, y, 22, 16}, fill, "Radius" -> 3], CanvasPolygon[{{x + 5, y + 15}, {x + 5, y + 22}, {x + 11, y + 15}}, fill],
+    CanvasRectangle[{x, y, 22, 16}, stroke, "Radius" -> 3, "Stroke" -> 1.2]};
+chatInputDraw[c_, {x_, y_}, w_, t_] := With[{shown = TypedText[c["text"], localU[t, c["at"], c["at"] + c["type"]]], f = CanvasFont["Source Sans 3", 18]},
+    {speechBubble[{x - 48, y + 9}, RGBColor["#7DD2FF"], RGBColor["#4992B9"]],
+     CanvasRectangle[{x, y + 1, w - 8, 38}, White, "Radius" -> 2], CanvasRectangle[{x, y + 1, w - 8, 38}, RGBColor["#A3C9F1"], "Radius" -> 2, "Stroke" -> 2],
+     CanvasText[shown, {x + 14, y + 26}, f, RGBColor["#080808"]],
+     If[StringLength[shown] < StringLength[c["text"]] || EvenQ[Floor[8 t]], CanvasRectangle[{x + 15 + CanvasTextWidth[shown, f], y + 11, 1.5, 20}, RGBColor["#080808"]], {}]}];
+chatOutputDraw[c_, {x_, y_}, w_, h_, era_, t_] := Module[{u = Easing["OutCubic"][localU[t, c["at"], c["at"] + 0.2]], ws = StringSplit[c["text"]], n, cx = x + 16,
+        f = CanvasFont["Source Sans 3", 17.5], cf = <|era["Input"], "Size" -> 15|>, k, left},
+    n = Floor[localU[t, c["at"], c["at"] + 0.45] Length[ws]];
+    k = localU[t, c["at"] + 0.45, c["at"] + 0.8]; left = Floor[k StringLength[StringRiffle[c["code"], "\n"]]];
+    CanvasOpacity[u, {speechBubble[{x - 48, y + 9}, RGBColor["#E6E8EE"], RGBColor["#9AA0AC"]],
+        CanvasRectangle[{x, y, w - 8, h - 8}, RGBColor["#F3F4F8"], "Radius" -> 3], CanvasRectangle[{x, y, w - 8, h - 8}, RGBColor["#DADDE4"], "Radius" -> 3, "Stroke" -> 1],
+        CanvasText["\[VerticalEllipsis]", {x + w - 22, y + 20}, CanvasFont["Arimo", 14, 700], RGBColor["#888888"]],
+        Table[With[{wd = ws[[i]] <> " "}, {CanvasText[wd, {cx, y + 28}, f, If[StringDelete[ws[[i]], PunctuationCharacter] === c["link"], RGBColor["#35569C"], RGBColor["#111111"]]],
+            cx += CanvasTextWidth[wd, f]}[[1]]], {i, n}],
+        If[k > 0, {CanvasRectangle[{x + 16, y + 42, w - 48, 24 Length[c["code"]] + 14}, White], CanvasRectangle[{x + 16, y + 42, w - 48, 24 Length[c["code"]] + 14}, RGBColor["#E0E0E0"], "Stroke" -> 1],
+            MapIndexed[With[{ln = #1, i = #2[[1]]}, With[{m = Max[0, Min[StringLength[ln], left - Total[StringLength /@ Take[c["code"], i - 1]] - (i - 1)]]},
+                If[m > 0, codeLine[StringTake[ln, m], {x + 30, y + 67 + 24 (i - 1)}, cf, "In", era], {}]]] &, c["code"]]}, {}]}]];
+
+(* the 15.0 chat bar under the notebook: a request typed in, then sent *)
+chatBarDraw[{x_, y_, w_}, {t0_, txt_, dur_, sent_}, t_] := With[{shown = TypedText[txt, localU[t, t0, t0 + dur]], f = CanvasFont["Source Sans 3", 16],
+        placeholder = t < t0 || t >= sent},
+    {CanvasRectangle[{x, y, w - 40, 40}, White, "Radius" -> 10], CanvasRectangle[{x, y, w - 40, 40}, RGBColor["#76C3EB"], "Radius" -> 10, "Stroke" -> 1.5],
+     CanvasRectangle[{x + 12, y + 12, 18, 13}, RGBColor["#3F9BD5"], "Radius" -> 3, "Stroke" -> 1.3], CanvasLine[{{x + 16, y + 25}, {x + 16, y + 30}, {x + 21, y + 25}}, RGBColor["#3F9BD5"], "Thickness" -> 1.3],
+     CanvasText[If[placeholder, "What would you like to do?", shown], {x + 40, y + 26}, f, If[placeholder, RGBColor["#9A9A9A"], RGBColor["#111111"]]],
+     If[! placeholder && EvenQ[Floor[8 t]], CanvasRectangle[{x + 41 + CanvasTextWidth[shown, f], y + 11, 1.4, 18}, RGBColor["#111111"]], {}],
+     CanvasText["\[RightArrow]", {x + w - 62, y + 27}, CanvasFont["Arimo", 18, 700], RGBColor["#007DCA"], Alignment -> Center],
+     CanvasText["\[Times]", {x + w - 22, y + 16}, CanvasFont["Arimo", 11], RGBColor["#8A8A8A"], Alignment -> Center],
+     CanvasText["\[Ellipsis]", {x + w - 22, y + 34}, CanvasFont["Arimo", 12, 700], RGBColor["#8A8A8A"], Alignment -> Center]}];
 
 (* one line of a cell; since 6.0 input is syntax-coloured: strings grey, symbols the system does not
    know (the user's own) blue *)

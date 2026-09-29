@@ -10,14 +10,16 @@ PackageExported[{Spikey, AutomatonTape, WordWall}]
 (*Spikey*)
 
 Options[Spikey] = Join[{Position -> {1790, 930}, "Radius" -> 46, "Form" -> "Stellated", "Style" -> "Red", "Pulse" -> None,
-    "BeatsPerUnit" -> 4, "Dance" -> 1, "Spin" -> 1.8, "Enter" -> "Pop", "EnterTime" -> 0.3}, $LayerOptions];
+    "BeatsPerUnit" -> 4, "Dance" -> 1, "Spin" -> 1.8, "Face" -> False, "Raise" -> 0, "Blink" -> False, "Enter" -> "Pop", "EnterTime" -> 0.3}, $LayerOptions];
 
 (* Spikey[{t0, t1}] is the Wolfram mascot, dancing: it spins, sways each beat ("BeatsPerUnit" beats per
    timeline unit), hops, and squashes on each onset of "Pulse" (a Track, e.g. the kick).  Its "Form"
    follows the versions -- "Stellated" (the 1.0 stellated icosahedron), "Spiked" (a spiked
    dodecahedron, 2-9), "Hexecontahedron" (10+) -- and its "Style" the displays: "1Bit", "Gray",
    "Classic" (lilac) or "Red"; either may be a function of time, so one Spikey lives through the
-   eras.  Geometry comes from PolyhedronData. *)
+   eras.  "Face" -> True gives it eyes, a smile, arms and legs; "Raise" (0-1) lifts its right hand
+   and "Blink" -> True shuts its eyes.  Position, "Radius", "Dance", "Raise" and "Blink" may be
+   functions of time too: Spikey can walk, grow and wave.  Geometry comes from PolyhedronData. *)
 atT[f_Function, t_] := f[t];
 atT[x_, _] := x;
 Spikey[{t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[Spikey]]},
@@ -34,15 +36,31 @@ spikeyShade["Gray", lam_] := Which[lam > 0.7, White, lam > 0.45, GrayLevel[0.72]
 spikeyShade["Classic", lam_] := Blend[{Blend[{RGBColor["#3C3C9A"], RGBColor["#F2B0C8"]}, lam], White}, 0.6 lam^4];
 spikeyShade[_, lam_] := Blend[{Blend[{RGBColor["#5A0600"], RGBColor["#DD1100"]}, Clip[1.4 lam, {0, 1}]], RGBColor["#FF9A80"]}, lam^6];
 
-spikeyDraw[t_, {t0_, t1_}, o_] := Module[{p = layerPoint[ov[o, Position]], r, kick, beat, d = ov[o, "Dance"], ay, ax, rot, light = Normalize[{-0.5, 0.7, 0.9}], style = atT[ov[o, "Style"], t], polys},
-    r = ov[o, "Radius"] envelope[t, {t0, t1}, o]["Scale"];
+spikeyDraw[t_, {t0_, t1_}, o_] := Module[{p = layerPoint[atT[ov[o, Position], t]], r, kick, beat, d = atT[ov[o, "Dance"], t], ay, ax, rot, light = Normalize[{-0.5, 0.7, 0.9}], style = atT[ov[o, "Style"], t], polys},
+    r = atT[ov[o, "Radius"], t] envelope[t, {t0, t1}, o]["Scale"];
     kick = If[ov[o, "Pulse"] === None, 0, d TrackPulse[ov[o, "Pulse"], 14][t]];
     beat = ov[o, "BeatsPerUnit"] t; ay = ov[o, "Spin"] t; ax = 0.45 + 0.15 Sin[1.3 t];
     rot[{x_, y_, z_}] := With[{x1 = x Cos[ay] + z Sin[ay], z1 = z Cos[ay] - x Sin[ay]}, {x1, y Cos[ax] - z1 Sin[ax], y Sin[ax] + z1 Cos[ax]}];
     polys = SortBy[Select[{#, Normalize[Cross[#[[2]] - #[[1]], #[[3]] - #[[1]]]]} & /@ Map[rot, spikeyFaces[atT[ov[o, "Form"], t], kick], {2}], #[[2, 3]] > -0.05 &], Mean[#[[1, All, 3]]] &];
-    If[r <= 0.5, {}, CanvasTransform[CanvasTranslate[{p[[1]], p[[2]] - 0.12 r d Abs[Sin[Pi beat]]}] . CanvasRotate[0.22 d Sin[Pi beat]] . CanvasScale[{1 + 0.08 kick, 1 - 0.1 kick}],
-        Map[With[{lam = Clip[0.25 + 0.75 Max[0, #[[2]] . light], {0, 1}], pts = {r #[[1]], -r #[[2]]} & /@ #[[1]]}, With[{c = spikeyShade[style, lam]},
-            {CanvasPolygon[pts, c], CanvasPolygon[pts, If[MemberQ[{"1Bit", "Gray"}, style], Black, Blend[{c, Black}, 0.35]], "Stroke" -> If[style === "1Bit", 1.2, 0.8]]}]] &, polys]]]];
+    If[r <= 0.5, {}, {
+        If[TrueQ[ov[o, "Face"]], spikeyLimbs[p, r, t, atT[ov[o, "Raise"], t]], {}],
+        CanvasTransform[CanvasTranslate[{p[[1]], p[[2]] - 0.12 r d Abs[Sin[Pi beat]]}] . CanvasRotate[0.22 d Sin[Pi beat]] . CanvasScale[{1 + 0.08 kick, 1 - 0.1 kick}],
+            Map[With[{lam = Clip[0.25 + 0.75 Max[0, #[[2]] . light], {0, 1}], pts = {r #[[1]], -r #[[2]]} & /@ #[[1]]}, With[{c = spikeyShade[style, lam]},
+                {CanvasPolygon[pts, c], CanvasPolygon[pts, If[MemberQ[{"1Bit", "Gray"}, style], Black, Blend[{c, Black}, 0.35]], "Stroke" -> If[style === "1Bit", 1.2, 0.8]]}]] &, polys]],
+        If[TrueQ[ov[o, "Face"]], spikeyFace[p, r, TrueQ[atT[ov[o, "Blink"], t]]], {}]}]];
+
+(* legs stepping, the left arm relaxed, the right arm rising as "Raise" goes to 1 *)
+spikeyLimbs[{cx_, cy_}, r_, t_, raise_] := With[{ink = RGBColor["#8A0A00"], w = 0.09 r, step = 0.08 r Sin[4 Pi t], hx = cx + r (0.95 + 0.25 raise), hy = cy + r (0.5 - 1.25 raise)},
+    {CanvasLine[{{cx - 0.25 r, cy + 0.6 r}, {cx - 0.3 r, cy + 1.05 r + step}}, ink, "Thickness" -> w], CanvasLine[{{cx + 0.25 r, cy + 0.6 r}, {cx + 0.3 r, cy + 1.05 r - step}}, ink, "Thickness" -> w],
+     CanvasLine[BezierFunction[{{cx - 0.7 r, cy + 0.1 r}, {cx - 1.05 r, cy + 0.35 r}, {cx - r, cy + 0.65 r}}] /@ Subdivide[0., 1., 12], ink, "Thickness" -> w],
+     CanvasLine[BezierFunction[{{cx + 0.7 r, cy + 0.05 r}, {cx + 1.1 r, cy - 0.1 r raise}, {hx, hy}}] /@ Subdivide[0., 1., 12], ink, "Thickness" -> w],
+     CanvasDisk[{hx, hy}, 0.11 r, ink]}];
+(* two eyes (shut in a blink), a smile and blushing cheeks *)
+spikeyFace[{cx_, cy_}, r_, blink_] := With[{ey = cy - 0.08 r, ex = 0.28 r, line = RGBColor["#3A0400"]},
+    {Table[{CanvasTransform[CanvasTranslate[{cx + s ex, ey}] . CanvasScale[{1, If[blink, 0.13, 1.15]}], {CanvasDisk[{0, 0}, 0.2 r, White], CanvasDisk[{0, 0}, 0.2 r, line, "Stroke" -> 0.03 r]}],
+        If[blink, {}, {CanvasDisk[{cx + s ex + 0.06 r, ey + 0.03 r}, 0.1 r, RGBColor["#111111"]], CanvasDisk[{cx + s ex + 0.1 r, ey - 0.02 r}, 0.035 r, White]}],
+        CanvasTransform[CanvasTranslate[{cx + 0.5 s r, cy + 0.2 r}] . CanvasScale[{1, 0.6}], CanvasDisk[{0, 0}, 0.1 r, RGBColor[1, 0.47, 0.47], Opacity -> 0.55]]}, {s, {-1, 1}}],
+     CanvasLine[Table[{cx, cy + 0.2 r} + 0.2 r {Cos[a], Sin[a]}, {a, 0.15 Pi, 0.85 Pi, 0.05 Pi}], line, "Thickness" -> 0.05 r]}];
 
 
 (* ::Section:: *)
@@ -86,7 +104,7 @@ tapeDraw[rule_, rows_, track_, t_, span_, o_] := Module[{c = ov[o, "CellSize"], 
 (* ::Section:: *)
 (*WordWall*)
 
-Options[WordWall] = Join[{"Margin" -> {36, 30}, "Presence" -> 0, Background -> None, "Color" -> RGBColor["#B9B3A7"], "StrongColor" -> RGBColor["#2A2825"],
+Options[WordWall] = Join[{"Margin" -> {36, 30}, "Presence" -> 0, Background -> None, "Camera" -> None, "Emphasis" -> None, "Color" -> RGBColor["#B9B3A7"], "StrongColor" -> RGBColor["#2A2825"],
     "FlashColor" -> RGBColor["#DD1100"], "From" -> None, "FlightTime" -> 0.35, "FlightCount" -> 90, FontWeight -> 600, "Enter" -> "Cut", "Exit" -> "Cut"}, $LayerOptions];
 
 (* WordWall[{{"word", weight, t}, ...}, {t0, t1}] lays every word out alphabetically in justified lines,
@@ -96,9 +114,15 @@ Options[WordWall] = Join[{"Margin" -> {36, 30}, "Presence" -> 0, Background -> N
    words are rasterized once per half unit, so a wall of thousands of words stays fast.  With "From" -> {x, y}
    the most prominent arriving words (up to "FlightCount" at a time) fly in an arc from that point
    to their place over "FlightTime", as if coming out of an output.  Give Background -> the colour
-   beneath the wall (or a function of time) so the cached layer is opaque: much cheaper to draw. *)
+   beneath the wall (or a function of time) so the cached layer is opaque: much cheaper to draw.
+   "Camera" -> f moves the page: f[t] is a canvas transform (CanvasTranslate, CanvasScale, ...) or None,
+   for zooming onto words or letting the page fall away.  "Emphasis" -> f picks words out: f[t] is
+   {test, strength} or None; the page dims by strength and the words for which test[word] is True
+   stand out at full strength.  wall["Places"] says where each word sits: the canvas point at the
+   middle of its letters, for pointing a camera at it. *)
 WordWall[words_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[WordWall]]},
-    With[{placed = wallPlace[words, o]}, makeLayer["WordWall", {t0, t1}, Function[t, wallDraw[placed, t, atTime[o, t]]]]]];
+    With[{placed = wallPlace[words, o]}, makeLayer["WordWall", {t0, t1}, Function[t, wallDraw[placed, t, atTime[o, t]]],
+        <|"Places" -> Association[#[[1]] -> {#[[5]] + #[[4]] / 2, #[[6]] - 0.3 #[[3]]} & /@ placed]|>]]];
 
 wallSize[w_, k_] := k (1 + 11 Clip[(Log10[Max[w, 10^-9]] + 7.2) / 6.8, {0, 1}]^3.1);
 wallLayout[words_, k_, o_] := Module[{f = CanvasFont[defaultFont["Sans"], 1, weightNum[ov[o, FontWeight]]], mx, my, W, out = {}, line = {}, x, y, maxW, flush},
@@ -112,9 +136,10 @@ wallLayout[words_, k_, o_] := Module[{f = CanvasFont[defaultFont["Sans"], 1, wei
         {w, SortBy[words, {ToLowerCase[StringDelete[#[[1]], "$"]] &, #[[1]] &}]}];
     flush[False]; {out, y + my}];
 (* the largest base size that fits the canvas *)
-wallPlace[words_, o_] := Module[{lo = 2., hi = 12.},
+wallPlace[words_, o_] := wallPlace[words, ov[o, "Margin"], ov[o, FontWeight], $CanvasSize];
+wallPlace[words_, margin_, weight_, size_] := wallPlace[words, margin, weight, size] = With[{o = {"Margin" -> margin, FontWeight -> weight}}, Module[{lo = 2., hi = 12.},
     Do[With[{m = (lo + hi) / 2}, If[wallLayout[words, m, o][[2]] > $CanvasSize[[2]], hi = m, lo = m]], {18}];
-    First @ wallLayout[words, lo, o]];
+    First @ wallLayout[words, lo, o]]];
 wordDraw[{name_, at_, size_, width_, x_, y_}, t_, presence_, o_] := Module[{age = t - at, pop, heat, base, s},
     pop = If[age === Infinity, 1, Easing["OutBack", 2.2][localU[age, 0, 0.18]]]; heat = If[age === Infinity, 0, Exp[-1.6 age]];
     base = If[presence > 0.5, ov[o, "StrongColor"], ov[o, "Color"]];
@@ -129,11 +154,24 @@ coarseColors[o_] := Replace[o, (r : Rule | RuleDelayed)[k_, c_ ? ColorQ] :> r[k,
 (* Background -> colour (or a function of time) makes the settled layer opaque, the colour of what the
    wall sits on: a front end keeps a fresh copy of a transparent image every time it draws one, so a
    transparent full-frame layer would cost a frame's worth of memory per frame *)
-wallDraw[placed_, t_, o_] := With[{pr = Round[If[NumericQ[ov[o, "Presence"]], ov[o, "Presence"], ov[o, "Presence"][t]], 0.001], cutoff = Floor[2 (t - 4)] / 2.,
-        lo = coarseColors[Join[{Background -> Replace[ov[o, Background], f : Except[None | _ ? ColorQ] :> f[t]]}, o]]},
-    {If[AnyTrue[placed, #[[2]] <= cutoff &], CanvasImage[wallLayer[placed, cutoff, pr, lo, $CanvasSize], {0, 0, $CanvasSize[[1]], $CanvasSize[[2]]}], {}],
-     wordDraw[#, t, pr, o] & /@ Select[placed, cutoff < #[[2]] <= t &],
+wallDraw[placed_, t_, o_] := With[{cam = Replace[ov[o, "Camera"], f : Except[None] :> f[t]], emph = Replace[ov[o, "Emphasis"], f : Except[None] :> f[t]],
+        bg = Replace[ov[o, Background], f : Except[None | _ ? ColorQ] :> f[t]]},
+    {Which[cam === None || cam == IdentityMatrix[3], wallPage[placed, t, o, bg],
+        (* near its resting size the page is moved as it is; closer, the words in view are drawn as type, so they stay sharp *)
+        Norm[cam[[;; 2, 1]]] <= 1.3, {If[bg === None, {}, CanvasRectangle[{0, 0, $CanvasSize[[1]], $CanvasSize[[2]]}, bg]], CanvasTransform[cam, wallPage[placed, t, o, bg]]},
+        True, {If[bg === None, {}, CanvasRectangle[{0, 0, $CanvasSize[[1]], $CanvasSize[[2]]}, bg]],
+            CanvasTransform[cam, With[{pr = presenceAt[o, t]}, wordDraw[#, t, pr, o] & /@ Select[placed, #[[2]] <= t && inView[cam, #] &]]]}],
+     If[emph === None || emph[[2]] <= 0, {}, {
+        CanvasRectangle[{0, 0, $CanvasSize[[1]], $CanvasSize[[2]]}, Replace[bg, None -> Black], Opacity -> 0.6 emph[[2]]],
+        CanvasOpacity[emph[[2]], CanvasTransform[Replace[cam, None -> IdentityMatrix[3]], wordDraw[#, Infinity, 1, o] & /@ Select[placed, #[[2]] <= t && TrueQ[emph[[1]][#[[1]]]] &]]]}],
      If[ov[o, "From"] === None, {}, flightDraw[placed, t, o]]}];
+inView[m_, {_, _, size_, width_, x_, y_}] := With[{a = m . {x, y - size, 1.}, b = m . {x + width, y + 0.3 size, 1.}},
+    a[[1]] < $CanvasSize[[1]] && b[[1]] > 0 && a[[2]] < $CanvasSize[[2]] && b[[2]] > 0];
+presenceAt[o_, t_] := Round[If[NumericQ[ov[o, "Presence"]], ov[o, "Presence"], ov[o, "Presence"][t]], 0.001];
+(* the page at rest: settled words from the cache, arriving ones drawn as they pop in *)
+wallPage[placed_, t_, o_, bg_] := With[{pr = presenceAt[o, t], cutoff = Floor[2 (t - 4)] / 2., lo = coarseColors[Join[{Background -> bg}, o]]},
+    {If[AnyTrue[placed, #[[2]] <= cutoff &], CanvasImage[wallLayer[placed, cutoff, pr, lo, $CanvasSize], {0, 0, $CanvasSize[[1]], $CanvasSize[[2]]}], {}],
+     wordDraw[#, t, pr, o] & /@ Select[placed, cutoff < #[[2]] <= t &]}];
 (* the biggest words still on their way fly from "From" to their place *)
 flightDraw[placed_, t_, o_] := With[{from = layerPoint[ov[o, "From"]], ft = ov[o, "FlightTime"]},
     Map[With[{u = localU[t, #[[2]] - ft, #[[2]]]}, With[{e = Easing["InOutCubic"][u]},

@@ -21,6 +21,7 @@ RelatedGuides: [WAnim]
   - <code>{*t*, "Out", *output*}</code>: text is set in the era's output font, an [Image]() as is, and any other expression as the front end displays it (graphics in every era; other expressions as [OutputForm]() text before typesetting arrived in 1996).
   - <code>{*t*, "Out", *u* |-> *expr*, *dur*}</code> is an animated output: *expr* at *u* going from 0 to 1 over *dur*, rendered once as "Frames" pictures (a moving slider, a rotating surface); <code>{*t*, "Out", *f*, *dur*, *frames*}</code> sets its own count.
   - Before typesetting, a graphics output is followed by its line, such as -Graphics3D-, as the early versions printed.
+  - <code>{*t*, "ChatInput", "*question*"}</code> is a chat notebook's question, typed; <code>{*t*, "ChatOutput", "*prose*", {"*code line*", …}, "*symbol*"}</code> is the answer, the prose streaming in before the code, *symbol* linked.
   - <code>{*t*, "Title", "*text*"}</code> and <code>{*t*, "Text", "*text*"}</code> are the notebook's own prose.
 - In and Out numbers count up automatically. On a one-bit display pictures are reduced with [OrderedDither](); in dark eras expressions are displayed in dark mode.
 - With "Evaluate" -> True every input also gets its computed output, "OutputDelay" after it has been typed.
@@ -28,6 +29,7 @@ RelatedGuides: [WAnim]
 - "Era" is the look: a name from <code>[NotebookEra]()[]</code> or a [NotebookEra]() association. Since 6.0 inputs are syntax-coloured.
 - "Enter" -> "Burst" grows the window out of its middle; "Enter" -> "Wipe" with "From" -> *previous* wipes the new era down over the last frame of the *previous* session, as one window living through its eras.
 - "Pulse" -> *track* punches the window on the track's onsets; "PushIn" is a slow zoom across the span; "Dim" -> {$t_a$, $t_b$} shrinks and darkens it between the two times; "Exit" -> "FlyAway" flies it at the viewer over "ExitTime"; "Hide" -> {{$t_a$, $t_b$}, …} takes it off screen for an interlude and bursts it back after.
+- "ChatBar" -> {$t_0$, "*request*", *dur*, $t_s$} puts a chat bar under the notebook, typing *request* from $t_0$ over *dur* and sending it at $t_s$.
 - "GraphicsSize" -> *w* shows graphics outputs *w* logical pixels wide.
 
 | Option | Default | Description |
@@ -45,6 +47,7 @@ RelatedGuides: [WAnim]
 | "Hide" | {} | spans the window is off screen |
 | "GraphicsSize" | Automatic | width of graphics outputs |
 | "Extras" | Automatic | the era's extras (None hides them) |
+| "ChatBar" | None | a chat request typed under the notebook |
 | "Pulse" | None | a Track to punch to |
 | "PushIn" | 0.03 | zoom across the span |
 
@@ -110,3 +113,15 @@ With[{a = NotebookSession[{{0, "In", "1 + 1"}}, {0, 1}, "Era" -> "Win1991", "Eva
 ```
 
 <!-- => Windows 95 chrome over the top half, Windows 3.1 below -->
+
+### ChatInput
+
+A chat notebook asking, answering, and running the answer:
+
+```wl
+NotebookSession[{{0, "ChatInput", "What are the ten most common words in Alice in Wonderland?", 0.5},
+    {0.75, "ChatOutput", "You can count them with WordCounts:", {"Take[WordCounts[ExampleData[{\"Text\", \"AliceInWonderland\"}]], 10]"}, "WordCounts"},
+    {2, "In", "Take[WordCounts[ExampleData[{\"Text\", \"AliceInWonderland\"}]], 10]", 0.3}}, {0, 4}, "Era" -> "BigSur2020", "Title" -> "Chat.nb", "Evaluate" -> True]["Graphics", 3.5, ImageSize -> 480]
+```
+
+<!-- => a Big Sur chat notebook: question, answer with code, and the counts -->

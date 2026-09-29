@@ -36,13 +36,16 @@ ov[o_List, name_] := FirstCase[o, (Rule | RuleDelayed)[name, v_] :> v, Missing["
 
 (* a tool's options at time t: any colour option (FontColor, "Color", "HeadColor", ...) may be a
    function of time -- ink that turns to bone as the film goes dark -- and is evaluated here *)
-atTime[o_List, t_] := Replace[o, (r : Rule | RuleDelayed)[k_, f : (_Function | _InterpolatingFunction)] /; StringContainsQ[ToString[k], "Color" | "Ink"] :> r[k, f[t]], {1}];
+atTime[o_List, t_] := Replace[Flatten[o], (r : Rule | RuleDelayed)[k_, f : (_Function | _InterpolatingFunction)] /; StringContainsQ[ToString[k], "Color" | "Ink"] :> r[k, f[t]], {1}];
 
 makeLayer[name_String, {t0_, t1_}, draw_, extra_Association : <||>] :=
     TimelineLayer[<|"Name" -> name, "Span" -> {t0, t1}, "Draw" -> draw, extra|>];
 
 layerQ[a_] := AssociationQ[a] && KeyExistsQ[a, "Span"] && KeyExistsQ[a, "Draw"];
 TimelineLayer[a_ ? layerQ][key : "Span" | "Draw" | "Name"] := a[key];
+(* what a creation tool knows about its layer, e.g. where a WordWall put its words *)
+TimelineLayer[a_ ? layerQ]["Properties"] := Complement[Keys[a], {"Draw", "Screen", "Foley"}];
+TimelineLayer[a_ ? layerQ][key_String] /; KeyExistsQ[a, key] && ! MemberQ[{"Draw", "Screen", "Foley"}, key] := a[key];
 TimelineLayer[a_ ? layerQ][t_ ? NumericQ] := If[a["Span"][[1]] <= t < a["Span"][[2]], a["Draw"][t], {}];
 (* a layer on its own: its frame at time t on a canvas (default 1920 x 1080, background from the
    Background option), as Graphics or a rasterized Image; Graphics options such as ImageSize go through *)
