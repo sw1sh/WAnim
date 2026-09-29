@@ -123,7 +123,8 @@ tl_Timeline["Dynamic", opts : OptionsPattern[timelinePlayer]] := With[{
                 Dynamic[Row[{NumberForm[t, {4, 2}], " / ", dur}]]
             }, Spacer[6]]
         }],
-        Deinitialization :> If[stream =!= None, Quiet[AudioStop[stream]; RemoveAudioStream[stream]]]
+        Deinitialization :> If[stream =!= None, Quiet[AudioStop[stream]; RemoveAudioStream[stream]]],
+        SaveDefinitions -> True, Initialization :> Needs["WolframInstitute`WAnim`"]
     ]
 ]
 
@@ -222,7 +223,8 @@ tl_Timeline["Video", opts : OptionsPattern[timelineVideo]] := tl["Video", FileNa
 Timeline /: MakeBoxes[tl : Timeline[data_ ? timelineQ], StandardForm] := BoxForm`ArrangeSummaryBox[
     Timeline, tl,
     (* the icon plays the timeline, looping, a few frames a second *)
-    Dynamic[Refresh[Show[tl["Graphics", Clock[{0, tl["Duration"]}, tl["Seconds"]]], ImageSize -> 96], UpdateInterval -> 0.25], SynchronousUpdating -> False],
+    DynamicModule[{}, Dynamic[Refresh[Show[tl["Graphics", Clock[{0, tl["Duration"]}, tl["Seconds"]]], ImageSize -> 96], UpdateInterval -> 0.25], SynchronousUpdating -> False],
+        SaveDefinitions -> True, Initialization :> Needs["WolframInstitute`WAnim`"]],
     {
         {BoxForm`SummaryItem[{"Duration: ", data["Duration"]}], BoxForm`SummaryItem[{"Layers: ", Length[data["Layers"]]}]},
         {BoxForm`SummaryItem[{"Size: ", data["Size"]}], BoxForm`SummaryItem[{"Soundtrack: ", If[data["Soundtrack"] === None, None, Head[data["Soundtrack"]]]}]}

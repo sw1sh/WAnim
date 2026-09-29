@@ -178,9 +178,10 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]
                 {{"MouseDown", 1} :> (If[AbsoluteTime[] - lastClick < 0.3, soloStream[id, stream, n], If[$Playing, TrackPause[], TrackPlay[]]]; lastClick = AbsoluteTime[]),
                  {"MouseDown", 2} :> If[enabledQ[id], (Quiet @ AudioStop[stream]; unregisterStream[id]), registerStream[id, stream, n]]}]
         }, Spacings -> 0.5, Alignment -> Left], Background -> GrayLevel[0.1], FrameMargins -> 10],
-        (* start the clock + audio together on first appearance.  NO SaveDefinitions: the edit's
-           reparse needs the LIVE grammar. *)
-        Initialization :> (registerStream[id, stream, n]; If[solo, soloStream[id, stream, n]]; If[! $Playing, TrackPlay[]]),
+        (* start the clock + audio together on first appearance.  Saving definitions leaves out the
+           package's (ReadProtected) symbols, so an edit's reparse still uses the LIVE grammar. *)
+        Initialization :> (Needs["WolframInstitute`WAnim`"]; registerStream[id, stream, n]; If[solo, soloStream[id, stream, n]]; If[! $Playing, TrackPlay[]]),
+        SaveDefinitions -> True,
         Deinitialization :> (unregisterStream[id]; Quiet[AudioStop[stream]; RemoveAudioStream[stream]])]]
 
 (* ---------- extractable trace of the dynamic play (for debugging headless) ---------- *)

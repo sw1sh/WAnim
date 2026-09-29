@@ -989,10 +989,11 @@ livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
         (* join the global transport: register this stream (plays at the clock position if the
            transport is running); a Solo-marked track silences the rest on appearance; autoplay
            starts the transport if nothing is playing yet *)
-        Initialization :> (registerStream[id, stream, n]; If[solo, soloStream[id, stream, n]]; If[autoplay && ! $Playing, TrackPlay[]]),
-        Deinitialization :> (unregisterStream[id]; Quiet[AudioStop[stream]; RemoveAudioStream[stream]])
-        (* NO SaveDefinitions: it snapshots & re-injects the SHARED $Streams registry per player,
-           clobbering live cross-player state (disable/solo/frame) on every (re)display. *)
+        Initialization :> (Needs["WolframInstitute`WAnim`"]; registerStream[id, stream, n]; If[solo, soloStream[id, stream, n]]; If[autoplay && ! $Playing, TrackPlay[]]),
+        Deinitialization :> (unregisterStream[id]; Quiet[AudioStop[stream]; RemoveAudioStream[stream]]),
+        (* the package's symbols are ReadProtected, so saving definitions never snapshots the SHARED
+           $Streams registry (which would clobber live disable/solo state on every display) *)
+        SaveDefinitions -> True
     ]
 ]
 
