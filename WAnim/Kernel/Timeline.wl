@@ -222,9 +222,8 @@ tl_Timeline["Video", opts : OptionsPattern[timelineVideo]] := tl["Video", FileNa
 
 Timeline /: MakeBoxes[tl : Timeline[data_ ? timelineQ], StandardForm] := BoxForm`ArrangeSummaryBox[
     Timeline, tl,
-    (* the icon plays the timeline, looping, a few frames a second *)
-    DynamicModule[{}, Dynamic[Refresh[Show[tl["Graphics", Clock[{0, tl["Duration"]}, tl["Seconds"]]], ImageSize -> 96], UpdateInterval -> 0.25], SynchronousUpdating -> False],
-        SaveDefinitions -> True, Initialization :> Needs["WolframInstitute`WAnim`"]],
+    (* the icon plays the timeline, looping: a few small frames, so the box stays small and needs no kernel *)
+    summaryIcon[Function[t, tl["Graphics", t]], {0, tl["Duration"]}],
     {
         {BoxForm`SummaryItem[{"Duration: ", data["Duration"]}], BoxForm`SummaryItem[{"Layers: ", Length[data["Layers"]]}]},
         {BoxForm`SummaryItem[{"Size: ", data["Size"]}], BoxForm`SummaryItem[{"Soundtrack: ", If[data["Soundtrack"] === None, None, Head[data["Soundtrack"]]]}]}

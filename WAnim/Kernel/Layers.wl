@@ -9,7 +9,7 @@ PackageExported[{TimelineLayer, Backdrop, $LayerOptions}]
 (* ::Section:: *)
 (*PackageScoped*)
 
-PackageScoped[{ov, atTime, keystrokes, weightNum, makeLayer, layerFont, layerPoint, envelope, localU, typedCount, defaultFont}]
+PackageScoped[{summaryIcon, ov, atTime, keystrokes, weightNum, makeLayer, layerFont, layerPoint, envelope, localU, typedCount, defaultFont}]
 
 
 (* ::Section:: *)
@@ -55,13 +55,14 @@ TimelineLayer[a_ ? layerQ]["Image", t_, opts___] := Rasterize[TimelineLayer[a]["
 (* a layer moved in time: layer["Shift", dt] *)
 TimelineLayer[a_ ? layerQ]["Shift", dt_] := TimelineLayer[<|a, "Span" -> a["Span"] + dt, "Draw" -> With[{f = a["Draw"]}, Function[t, f[t - dt]]]|>];
 
+(* a summary box's icon: eight small frames across the span, looping as an AnimatedImage *)
+summaryIcon[frame_, {t0_, t1_}] := AnimatedImage[Table[Rasterize[Show[frame[t], ImageSize -> 96], "Image", ImageResolution -> 144],
+    {t, t0 + (t1 - t0) Range[0, 7] / 8 + 10^-6}], FrameRate -> 4, AnimationRepetitions -> Infinity, ImageSize -> 96];
 TimelineLayer /: MakeBoxes[l : TimelineLayer[a_ ? layerQ], StandardForm] := BoxForm`ArrangeSummaryBox[
     TimelineLayer, l,
-    (* the icon plays the layer over its span, looping, a few frames a second *)
-    With[{span = a["Span"] /. {-Infinity -> 0, Infinity -> 1}, draw = a["Draw"]},
-        DynamicModule[{}, Dynamic[Refresh[Graphics[CanvasBlock[{1920, 1080}, draw[Clock[span, Max[2, span[[2]] - span[[1]]]]]], PlotRange -> {{0, 1920}, {0, 1080}},
-            ImageSize -> 96, Background -> GrayLevel[0.9], PlotRangePadding -> None, ImagePadding -> None], UpdateInterval -> 0.2], SynchronousUpdating -> False],
-            SaveDefinitions -> True, Initialization :> Needs["WolframInstitute`WAnim`"]]],
+    (* the icon plays the layer over its span, looping: a few small frames, so the box stays small and needs no kernel *)
+    With[{draw = a["Draw"]}, summaryIcon[Function[t, Graphics[CanvasBlock[{1920, 1080}, draw[t]], PlotRange -> {{0, 1920}, {0, 1080}},
+        Background -> GrayLevel[0.9], PlotRangePadding -> None, ImagePadding -> None]], a["Span"] /. {-Infinity -> 0, Infinity -> 1}]],
     {{BoxForm`SummaryItem[{"Name: ", a["Name"]}]}, {BoxForm`SummaryItem[{"Span: ", a["Span"]}]}},
     {}, StandardForm, "Interpretable" -> Automatic];
 
