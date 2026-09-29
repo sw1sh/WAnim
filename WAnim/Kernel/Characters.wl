@@ -9,44 +9,85 @@ PackageExported[{Spikey, AutomatonTape, WordWall}]
 (* ::Section:: *)
 (*Spikey*)
 
-Options[Spikey] = Join[{Position -> {1790, 930}, "Radius" -> 46, "Form" -> "Stellated", "Style" -> "Red", "Pulse" -> None,
+Options[Spikey] = Join[{Position -> {1790, 930}, "Radius" -> 46, "Version" -> 15, "Form" -> Automatic, "Style" -> Automatic, "Pulse" -> None,
     "BeatsPerUnit" -> 4, "Dance" -> 1, "Spin" -> 1.8, "Face" -> False, "Raise" -> 0, "Blink" -> False, "Enter" -> "Pop", "EnterTime" -> 0.3}, $LayerOptions];
 
 (* Spikey[{t0, t1}] is the Wolfram mascot, dancing: it spins, sways each beat ("BeatsPerUnit" beats per
-   timeline unit), hops, and squashes on each onset of "Pulse" (a Track, e.g. the kick).  Its "Form"
-   follows the versions -- "Stellated" (the 1.0 stellated icosahedron), "Spiked" (a spiked
-   dodecahedron, 2-9), "Hexecontahedron" (10+) -- and its "Style" the displays: "1Bit", "Gray",
-   "Classic" (lilac) or "Red"; either may be a function of time, so one Spikey lives through the
-   eras.  "Face" -> True gives it eyes, a smile, arms and legs; "Raise" (0-1) lifts its right hand
-   and "Blink" -> True shuts its eyes.  Position, "Radius", "Dance", "Raise" and "Blink" may be
-   functions of time too: Spikey can walk, grow and wave.  Geometry comes from PolyhedronData. *)
+   timeline unit), hops, and squashes on each onset of "Pulse" (a Track, e.g. the kick).  It looks as it
+   did in its "Version": the stellated icosahedron of 1.0 in its four colours; from 2 to 12 the concave
+   "hyperbolic dodecahedron", lilac in 2, glassy violet in 3, rainbow in 4, gold in 5, then the reds and
+   oranges of 6 to 11 and the grey of 12; from 13 the flat red Wolfram Spikey of PolyhedronData.  "Form"
+   ("Stellated", "Hyperbolic", "Wolfram") overrides the shape; "Style" -> "1Bit" or "Gray" draws it as a
+   one-bit or greyscale display would.  "Version" and "Style" may be functions of time, so one Spikey
+   lives through the eras.  "Face" -> True gives it eyes, a smile, arms and legs; "Raise" (0-1) lifts
+   its right hand and "Blink" -> True shuts its eyes.  Position, "Radius", "Dance", "Raise" and "Blink"
+   may be functions of time too: Spikey can walk, grow and wave. *)
 atT[f_Function, t_] := f[t];
 atT[x_, _] := x;
 Spikey[{t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[Spikey]]},
     makeLayer["Spikey", {t0, t1}, Function[t, spikeyDraw[t, {t0, t1}, atTime[o, t]]]]];
 
-polyUnit[name_] := polyUnit[name] = With[{v = N[PolyhedronData[name, "VertexCoordinates"]]}, {v / Max[Norm /@ v], PolyhedronData[name, "FaceIndices"]}];
-spikeyFaces["Hexecontahedron", spike_] := With[{p = polyUnit["RhombicHexecontahedron"]},
-    Map[p[[1]][[#]] (1 + If[Norm[p[[1]][[#]]] > 0.99, 0.25 spike, 0]) &, p[[2]], {2}] /. x_List /; Length[x] == 3 && VectorQ[x, NumericQ] :> x];
-spikeyFaces[form_, spike_] := With[{p = polyUnit[If[form === "Stellated", "Icosahedron", "Dodecahedron"]], h = If[form === "Stellated", 1.9, 1.75] + 0.35 spike},
-    Flatten[Table[With[{pts = p[[1]][[f]], c = Mean[p[[1]][[f]]]},
-        Table[{pts[[k]], pts[[Mod[k, Length[pts]] + 1]], h Norm[c] Normalize[c]}, {k, Length[pts]}]], {f, p[[2]]}], 1]];
-spikeyShade["1Bit", lam_] := Which[lam > 0.66, White, lam > 0.4, GrayLevel[0.54], True, Black];
-spikeyShade["Gray", lam_] := Which[lam > 0.7, White, lam > 0.45, GrayLevel[0.72], lam > 0.25, GrayLevel[0.41], True, Black];
-spikeyShade["Classic", lam_] := Blend[{Blend[{RGBColor["#3C3C9A"], RGBColor["#F2B0C8"]}, lam], White}, 0.6 lam^4];
-spikeyShade[_, lam_] := Blend[{Blend[{RGBColor["#5A0600"], RGBColor["#DD1100"]}, Clip[1.4 lam, {0, 1}]], RGBColor["#FF9A80"]}, lam^6];
+(* the shapes, as triangles {a, b, c} with a tag (the face they came from), spikes reaching radius 1.4 *)
+spikeyForm[v_] := Which[v < 2, "Stellated", v < 13, "Hyperbolic", True, "Wolfram"];
+spikeyMesh[form_] := spikeyMesh[form] = With[{m = spikeyMesh0[form]}, With[{s = 1.4 / Max[Norm /@ Flatten[m[[1]], 1]]}, {s m[[1]], m[[2]]}]];
+spikeyMesh0["Stellated"] := With[{v = N[PolyhedronData["Icosahedron", "VertexCoordinates"]], fs = PolyhedronData["Icosahedron", "FaceIndices"]},
+    With[{u = v / Norm[v[[1]]]}, Transpose[Flatten[Table[With[{pts = u[[fs[[f]]]], c = Mean[u[[fs[[f]]]]]},
+        Table[{{pts[[k]], pts[[Mod[k, 3] + 1]], 1.9 Norm[c] Normalize[c]}, f}, {k, 3}]], {f, Length[fs]}], 1]]]];
+(* each pentagon of a dodecahedron sucked in towards the centre, its corners left as spikes: a flat
+   point q goes to radius 0.4 + 0.6 (1 - d)^2.1 along its direction, d its distance to the nearest
+   corner (1 at the pentagon's centre); neighbouring faces agree along their edges *)
+spikeyMesh0["Hyperbolic"] := Module[{v = N[PolyhedronData["Dodecahedron", "VertexCoordinates"]], fs = PolyhedronData["Dodecahedron", "FaceIndices"], n = 6, tris = {}},
+    v = Normalize /@ v;
+    Do[With[{vs = v[[fs[[f]]]], c = Mean[v[[fs[[f]]]]]}, With[{L = Norm[vs[[1]] - c],
+            lift = Function[q, Normalize[q] (0.4 + 0.6 (1 - Min[Norm[q - #] & /@ vs] / Norm[vs[[1]] - Mean[vs]])^2.1)]},
+        Do[With[{a = vs[[k]] - c, b = vs[[Mod[k, 5] + 1]] - c}, With[{P = Function[{i, j}, lift[c + (i a + j b) / n]]},
+            Do[AppendTo[tris, {{P[i, j], P[i + 1, j], P[i, j + 1]}, f}];
+                If[i + j <= n - 2, AppendTo[tris, {{P[i + 1, j], P[i + 1, j + 1], P[i, j + 1]}, f}]], {i, 0, n - 1}, {j, 0, n - 1 - i}]]], {k, 5}]]], {f, Length[fs]}];
+    Transpose[tris]];
+spikeyMesh0["Wolfram"] := With[{v = N[PolyhedronData["WolframSpikey", "VertexCoordinates"]], fs = PolyhedronData["WolframSpikey", "FaceIndices"]},
+    {v[[#]] & /@ fs, Range[Length[fs]]}];
 
-spikeyDraw[t_, {t0_, t1_}, o_] := Module[{p = layerPoint[atT[ov[o, Position], t]], r, kick, beat, d = atT[ov[o, "Dance"], t], ay, ax, rot, light = Normalize[{-0.5, 0.7, 0.9}], style = atT[ov[o, "Style"], t], polys},
+(* each version's colours: dark, mid and light by how much light a facet catches, an inner colour the
+   hollows turn towards (by how deep they are), and whether the facets' mesh lines show *)
+spikeyLook[v_] := Lookup[<|
+    2 -> {{"#4B2C9A", "#9A74E0", "#F2C4EE"}, "#6FB4F0", 0.5, False}, 3 -> {{"#26215E", "#6C63C4", "#D9CEF8"}, "#9FD0F5", 0.45, True},
+    4 -> "Rainbow", 5 -> {{"#8A3C00", "#E8820E", "#FFD24A"}, "#B85C00", 0.3, True}, 6 -> {{"#7A1600", "#D94A1E", "#F7A070"}, "#FFE0C0", 0.5, False},
+    7 -> {{"#6A0020", "#D02648", "#F090B0"}, "#A8A8F0", 0.8, False}, 8 -> {{"#7A0000", "#E0301E", "#FF9A84"}, "#FFE0D8", 0.4, True},
+    9 -> {{"#8A0A1A", "#E0404A", "#F6A0A0"}, "#FFF0F0", 0.5, False}, 10 -> {{"#9A3A00", "#F28A14", "#FFC83C"}, "#FFF4C0", 0.6, False},
+    11 -> {{"#6A0000", "#D02414", "#F46A48"}, "#FFC0A0", 0.3, True}, 12 -> {{"#8A8A8A", "#B4B4B4", "#E6E6E6"}, "#FAFAFA", 0.5, False}|>,
+    Clip[Floor[v], {1, 13}], {{"#7A0800", "#DD1100", "#FF6A4A"}, "#FF9A80", 0, False}];
+$stellatedColors = RGBColor /@ {"#F4655B", "#F7D96B", "#9C8FE6", "#2FB8D6"};
+spikeyShade["1Bit", lam_, _, _, _] := Which[lam > 0.66, White, lam > 0.4, GrayLevel[0.54], True, Black];
+spikeyShade["Gray", lam_, _, _, _] := Which[lam > 0.7, White, lam > 0.45, GrayLevel[0.72], lam > 0.25, GrayLevel[0.41], True, Black];
+spikeyShade[v_ /; v < 2, lam_, tag_, _, _] := Blend[{Blend[{Black, $stellatedColors[[Mod[tag, 4] + 1]]}, 0.55 + 0.45 lam], White}, 0.3 lam^8];
+spikeyShade[v_, lam_, tag_, depth_, n_] := With[{look = spikeyLook[v]}, If[look === "Rainbow",
+    Blend[{Blend[{Black, Hue[Mod[ArcTan[n[[1]], n[[2]]] / (2 Pi) + 0.3 depth, 1], 0.8, 1]}, 0.5 + 0.5 lam], White}, 0.3 lam^8],
+    Blend[{Blend[RGBColor /@ look[[1]], lam], RGBColor[look[[2]]]}, look[[3]] Clip[(1.1 - depth) / 0.6, {0, 1}]]]];
+
+spikeyDraw[t_, {t0_, t1_}, o_] := Module[{p = layerPoint[atT[ov[o, Position], t]], r, kick, beat, d = atT[ov[o, "Dance"], t], ay, ax, R, light = Normalize[{-0.5, 0.7, 0.9}],
+        style = atT[ov[o, "Style"], t], v = atT[ov[o, "Version"], t], form, mesh, tris, e1, e2, nrm, keep, look, mesh3},
     r = atT[ov[o, "Radius"], t] envelope[t, {t0, t1}, o]["Scale"];
     kick = If[ov[o, "Pulse"] === None, 0, d TrackPulse[ov[o, "Pulse"], 14][t]];
     beat = ov[o, "BeatsPerUnit"] t; ay = ov[o, "Spin"] t; ax = 0.45 + 0.15 Sin[1.3 t];
-    rot[{x_, y_, z_}] := With[{x1 = x Cos[ay] + z Sin[ay], z1 = z Cos[ay] - x Sin[ay]}, {x1, y Cos[ax] - z1 Sin[ax], y Sin[ax] + z1 Cos[ax]}];
-    polys = SortBy[Select[{#, Normalize[Cross[#[[2]] - #[[1]], #[[3]] - #[[1]]]]} & /@ Map[rot, spikeyFaces[atT[ov[o, "Form"], t], kick], {2}], #[[2, 3]] > -0.05 &], Mean[#[[1, All, 3]]] &];
+    R = {{1, 0, 0}, {0, Cos[ax], -Sin[ax]}, {0, Sin[ax], Cos[ax]}} . {{Cos[ay], 0, Sin[ay]}, {0, 1, 0}, {-Sin[ay], 0, Cos[ay]}};
+    form = Replace[atT[ov[o, "Form"], t], Automatic -> spikeyForm[v]];
+    mesh = spikeyMesh[form];
+    (* the kick pushes the spikes out further than the body *)
+    tris = Map[# (1 + 0.18 kick Clip[(Norm[#] - 0.6) / 0.8, {0, 1}]) &, mesh[[1]], {2}] . Transpose[R];
+    e1 = tris[[All, 2]] - tris[[All, 1]]; e2 = tris[[All, 3]] - tris[[All, 1]];
+    nrm = Normalize /@ Transpose[{e1[[All, 2]] e2[[All, 3]] - e1[[All, 3]] e2[[All, 2]], e1[[All, 3]] e2[[All, 1]] - e1[[All, 1]] e2[[All, 3]], e1[[All, 1]] e2[[All, 2]] - e1[[All, 2]] e2[[All, 1]]}];
+    keep = Pick[Range[Length[tris]], Thread[nrm[[All, 3]] > -0.02]];
+    keep = SortBy[keep, Mean[tris[[#, All, 3]]] &];
+    look = If[form === "Hyperbolic" && MemberQ[{"1Bit", "Gray"}, style] =!= True, spikeyLook[v], None];
     If[r <= 0.5, {}, {
         If[TrueQ[ov[o, "Face"]], spikeyLimbs[p, r, t, atT[ov[o, "Raise"], t]], {}],
         CanvasTransform[CanvasTranslate[{p[[1]], p[[2]] - 0.12 r d Abs[Sin[Pi beat]]}] . CanvasRotate[0.22 d Sin[Pi beat]] . CanvasScale[{1 + 0.08 kick, 1 - 0.1 kick}],
-            Map[With[{lam = Clip[0.25 + 0.75 Max[0, #[[2]] . light], {0, 1}], pts = {r #[[1]], -r #[[2]]} & /@ #[[1]]}, With[{c = spikeyShade[style, lam]},
-                {CanvasPolygon[pts, c], CanvasPolygon[pts, If[MemberQ[{"1Bit", "Gray"}, style], Black, Blend[{c, Black}, 0.35]], "Stroke" -> If[style === "1Bit", 1.2, 0.8]]}]] &, polys]],
+            Map[With[{lam = Clip[0.25 + 0.75 Max[0, nrm[[#]] . light], {0, 1}], pts = {r #[[1]], -r #[[2]]} & /@ tris[[#]]}, With[{c = spikeyShade[Replace[style, Automatic -> v], lam, mesh[[2, #]],
+                    Mean[Norm /@ mesh[[1, #]]], nrm[[#]]]},
+                Which[
+                    MemberQ[{"1Bit", "Gray"}, style], {CanvasPolygon[pts, c], CanvasPolygon[pts, Black, "Stroke" -> If[style === "1Bit", 1.2, 0.8]]},
+                    form === "Hyperbolic", CanvasPolygon[pts, c, "Edge" -> If[ListQ[look] && TrueQ[look[[4]]], Blend[{c, Black}, 0.18], c]],
+                    True, CanvasPolygon[pts, c, "Edge" -> Blend[{c, Black}, 0.35]]]]] &, keep]],
         If[TrueQ[ov[o, "Face"]], spikeyFace[p, r, TrueQ[atT[ov[o, "Blink"], t]]], {}]}]];
 
 (* legs stepping, the left arm relaxed, the right arm rising as "Raise" goes to 1 *)

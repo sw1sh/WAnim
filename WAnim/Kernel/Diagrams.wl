@@ -55,7 +55,7 @@ treeDraw[nodes_, t_, {t0_, t1_}, o_] := Module[{f = layerFont[o, "Mono"], hf, en
 (*TileGrid*)
 
 Options[TileGrid] = Join[{Position -> {96, 250}, "Columns" -> 4, "TileSize" -> {400, 330}, "Gap" -> {36, 60}, "Interval" -> 1/4, "Pulse" -> None,
-    "Frames" -> 24, "Period" -> 2, FontFamily -> "Source Code Pro", FontSize -> 24, FontColor -> RGBColor["#0E0F11"], "NoteColor" -> RGBColor["#DD1100"],
+    "Frames" -> Automatic, "Period" -> 2, FontFamily -> "Source Code Pro", FontSize -> 24, FontColor -> RGBColor["#0E0F11"], "NoteColor" -> RGBColor["#DD1100"],
     "Enter" -> "Pop", "EnterTime" -> 0.12, "Exit" -> "Fade"}, $LayerOptions];
 
 (* TileGrid[{{label, content, note}, ...}, {t0, t1}] deals out white cards, one per "Interval", in rows
@@ -68,7 +68,7 @@ TileGrid[tiles_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opt
         makeLayer["TileGrid", {t0, t1}, Function[t, tileGridDraw[tiles, pics, t, {t0, t1}, atTime[o, t]]]]]];
 
 (* each tile's content as a list of frames, rasterized once at the card's size *)
-tilePictures[f_Function, o_] := Table[tilePicture[f[u], o], {u, Most[Subdivide[0., 1., ov[o, "Frames"]]]}];
+tilePictures[f_Function, o_] := Table[tilePicture[f[u], o], {u, Most[Subdivide[0., 1., Replace[ov[o, "Frames"], Automatic :> Ceiling[40 ov[o, "Period"]]]]]}];
 tilePictures[e_, o_] := {tilePicture[e, o]};
 tilePicture[img_Image, o_] := img;
 tilePicture[e_, o_] := Rasterize[Show[e, ImageSize -> ov[o, "TileSize"] - 20], "Image", ImageResolution -> 72, Background -> White] /; MatchQ[e, _Graphics | _Graphics3D];

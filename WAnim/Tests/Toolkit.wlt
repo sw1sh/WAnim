@@ -24,7 +24,7 @@ VerificationTest[NotebookEra["BigSur2020", "Page" -> Black]["Page"], Black, Test
 VerificationTest[AllTrue[NotebookEra[], FreeQ[NotebookSession[{{0, "In", "1 + 1"}}, {0, 1}, "Era" -> #, "Evaluate" -> True]["Graphics", 0.9], _Missing | $Failed] &], True, TestID -> "NotebookEra-all-draw"]
 VerificationTest[Round[QuantityMagnitude[Duration[Timeline[{Backdrop[Black]}, "Duration" -> 1, "SecondsPerUnit" -> 2, "Soundtrack" -> Track["bd*4"]]["Audio"]], "Seconds"], 0.01], 2., TestID -> "Timeline-tempo-from-SecondsPerUnit"]
 VerificationTest[Head[NotebookSession[{{0, "In", "1 + 1"}}, {0, 1}, "Evaluate" -> True]["Graphics", 0.9]], Graphics, TestID -> "NotebookSession-evaluates"]
-VerificationTest[Head[Spikey[{0, 1}, "Form" -> "Hexecontahedron"]["Graphics", 0.5]], Graphics, TestID -> "Spikey-form"]
+VerificationTest[Head[Spikey[{0, 1}, "Version" -> 4]["Graphics", 0.5]], Graphics, TestID -> "Spikey-version"]
 VerificationTest[Head[TreeDiagram[Hold[{x -> 1, f[y]}], {0, 2}]["Graphics", 1.5]], Graphics, TestID -> "TreeDiagram-draws"]
 VerificationTest[Head[TileGrid[{{"Plot", Plot[x, {x, 0, 1}], "1.0"}}, {0, 2}]["Graphics", 1]], Graphics, TestID -> "TileGrid-draws"]
 VerificationTest[Head[WordScroll[{"Plot", "ListPlot"}, {0, 2}]["Graphics", 1]], Graphics, TestID -> "WordScroll-draws"]

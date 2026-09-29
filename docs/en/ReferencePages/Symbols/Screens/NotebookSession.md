@@ -43,7 +43,7 @@ RelatedGuides: [WAnim]
 | "Enter" | "Burst" | "Burst", "Wipe", "Fade" or "Cut" |
 | "From" | None | the session a "Wipe" starts from |
 | "Dim" | None | a span over which the window recedes |
-| "Frames" | 24 | pictures in an animated output |
+| "Frames" | Automatic | pictures in an animated output (40 a unit, at least 24) |
 | "Hide" | {} | spans the window is off screen |
 | "GraphicsSize" | Automatic | width of graphics outputs |
 | "Extras" | Automatic | the era's extras (None hides them) |

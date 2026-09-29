@@ -65,7 +65,7 @@ terminalDraw[lines_, t_, {t0_, t1_}, o_] := Module[{W = $CanvasSize[[1]], H = $C
 (*NotebookSession*)
 
 Options[NotebookSession] = Join[{"Era" -> "Mac1988", "Screen" -> {88, 176, 1100, 780}, "Title" -> "Untitled-1", "Evaluate" -> False,
-    "TypeTime" -> 0.25, "OutputDelay" -> 0.3, "Enter" -> "Burst", "EnterTime" -> 0.22, "Pulse" -> None, "PushIn" -> 0.03, "Shadow" -> True, "Frames" -> 24, "From" -> None, "Dim" -> None, "Hide" -> {}, "GraphicsSize" -> Automatic, "Extras" -> Automatic, "ChatBar" -> None}, $LayerOptions];
+    "TypeTime" -> 0.25, "OutputDelay" -> 0.3, "Enter" -> "Burst", "EnterTime" -> 0.22, "Pulse" -> None, "PushIn" -> 0.03, "Shadow" -> True, "Frames" -> Automatic, "From" -> None, "Dim" -> None, "Hide" -> {}, "GraphicsSize" -> Automatic, "Extras" -> Automatic, "ChatBar" -> None}, $LayerOptions];
 
 (* NotebookSession[{cell, ...}, {t0, t1}] is a notebook window of its era, typing and evaluating on the
    clock.  Cells:
@@ -90,7 +90,7 @@ NotebookSession[cells_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = fr
 (* typing each input, return on its last key, a blip as each output appears *)
 sessionFoley[cs_] := Join @@ Map[Switch[#["kind"],
     "In", Append[keystrokes[#["at"], #["type"], StringLength[#["text"]]], {#["at"] + #["type"] + 1/16, "Tick", 1}],
-    "ChatInput", Append[keystrokes[#["at"], #["type"], StringLength[#["text"]]], {#["at"] + #["type"] + 1/16, "Tick", 1}],
+    "ChatInput" | "FreeForm", Append[keystrokes[#["at"], #["type"], StringLength[#["text"]]], {#["at"] + #["type"] + 1/16, "Tick", 1}],
     "ChatOutput", {{#["at"], "Blip", 1}},
     "Out" | "Pic", If[TrueQ[#["input"]], {}, {{#["at"], "Blip", 1}}],
     _, {}] &, cs];
@@ -102,18 +102,45 @@ fromSnapshot[o_, t0_] := Replace[o, ("From" -> l_TimelineLayer) :> ("From" -> <|
 (* number the cells, add evaluated outputs, turn expressions into pictures once *)
 sessionCells[cells_, era_, o_] := Module[{n = 0, out = {}},
     Do[Switch[c[[2]],
-        "In" /; ! StringQ[c[[3]]], n++;   (* a typeset input, e.g. HoldForm[Integrate[...]]: it appears whole *)
-            AppendTo[out, Join[outCell[c[[1]], n, "", era, o], <|"kind" -> "Pic", "input" -> True|>, displayed[c[[3]], era, o]]];
+        "In" /; ! StringQ[c[[3]]], n++;   (* a typeset input, e.g. HoldForm[Integrate[...]]: it appears whole, strings in their quotes *)
+            AppendTo[out, Join[outCell[c[[1]], n, "", era, o], <|"kind" -> "Pic", "input" -> True|>, displayed[Style[c[[3]], ShowStringCharacters -> True, FontFamily -> era["Input"]["Family"], FontWeight -> If[era["Input"]["Weight"] >= 600, Bold, Plain], FontSize -> era["Input"]["Size"]], era, o]]];
             If[TrueQ[ov[o, "Evaluate"]], out = Join[out, Flatten[{outCell[c[[1]] + ov[o, "OutputDelay"], n, ReleaseHold[c[[3]]], era, o]}]]],
         "In", n++; With[{tt = If[Length[c] > 3, c[[4]], ov[o, "TypeTime"]]},
-            AppendTo[out, <|"kind" -> "In", "at" -> c[[1]], "n" -> n, "text" -> c[[3]], "type" -> tt|>];
+            AppendTo[out, <|"kind" -> "In", "at" -> c[[1]], "n" -> n, "text" -> c[[3]], "type" -> tt, "colors" -> symbolColors[c[[3]], era]|>];
             If[TrueQ[ov[o, "Evaluate"]], out = Join[out, Flatten[{outCell[c[[1]] + tt + ov[o, "OutputDelay"], n, ToExpression[c[[3]]], era, o]}]]]],
         "Out", out = Join[out, Flatten[{If[Length[c] > 3, animCell[c[[1]], n, c[[3]], c[[4]], era, Join[If[Length[c] > 4, {"Frames" -> c[[5]]}, {}], o]], outCell[c[[1]], n, c[[3]], era, o]]}]],
+        "FreeForm", n++; AppendTo[out, <|"kind" -> "FreeForm", "at" -> c[[1]], "n" -> n, "text" -> c[[3]], "code" -> c[[4]],
+            "type" -> If[Length[c] > 4, c[[5]], ov[o, "TypeTime"]], "colors" -> symbolColors[c[[4]], era]|>],
+        "Replace", With[{i = Last[Flatten[Position[out, a_ /; MatchQ[a["kind"], "Out" | "Pic"] && a["n"] == n && ! TrueQ[a["input"]], {1}, Heads -> False]], None]},
+            If[i =!= None, out[[i]] = Append[out[[i]], "until" -> c[[1]]]];
+            out = Join[out, Flatten[{outCell[c[[1]], n, c[[3]], era, o]}]]],
         "Title" | "Text", AppendTo[out, <|"kind" -> c[[2]], "at" -> c[[1]], "n" -> n, "text" -> c[[3]]|>],
         "ChatInput", AppendTo[out, <|"kind" -> "ChatInput", "at" -> c[[1]], "n" -> n, "text" -> c[[3]], "type" -> If[Length[c] > 3, c[[4]], 2 ov[o, "TypeTime"]]|>],
         "ChatOutput", AppendTo[out, <|"kind" -> "ChatOutput", "at" -> c[[1]], "n" -> n, "text" -> c[[3]], "code" -> If[Length[c] > 3, c[[4]], {}],
-            "link" -> If[Length[c] > 4, c[[5]], None]|>]], {c, SortBy[cells, First]}];
+            "link" -> If[Length[c] > 4, c[[5]], None], "colors" -> symbolColors[StringRiffle[If[Length[c] > 3, c[[4]], {}], "\n"], era]|>]], {c, SortBy[cells, First]}];
     SortBy[out, #["at"] &]];
+(* an output as the version of its era drew it: before 10, surfaces white under the coloured lights
+   of the classic lighting and curves in the old default colours (black before 6, then dark blue);
+   from 10 to 14 the ColorData[97] colours; a Manipulate before 10 with the controls of 6.0 *)
+$defaultColors15 = {RGBColor[0.24, 0.6, 0.8], RGBColor[0.95, 0.627, 0.1425], RGBColor[0.455, 0.7, 0.21], RGBColor[0.922526, 0.385626, 0.209179]};
+asOfVersion[e_, v_ /; v >= 15] := e;
+asOfVersion[m : HoldPattern[Manipulate[body_, {{var_Symbol, init_}, min_, max_}, ___]], v_ /; v < 10] := classicManipulate[
+    asOfVersion[ReleaseHold[Hold[body] /. HoldPattern[var] -> init], v], SymbolName[Unevaluated[var]], (init - min) / (max - min)];
+asOfVersion[e_, v_] := With[{cols = Which[v < 6, ConstantArray[Black, 4], v < 10, Hue[#, 0.6, 0.6] & /@ {0.67, 0.9061, 0.1421, 0.378}, True, ColorData[97] /@ Range[4]]},
+    e /. {g_Graphics3D /; v < 10 :> Show[g /. Directive[___, RGBColor[0.880722, 0.611041, 0.142051], ___] -> Directive[GrayLevel[1], Specularity[GrayLevel[1], 20]],
+            Lighting -> "Classic", AxesStyle -> Black, BoxStyle -> Black],
+        g : (_Graphics | _Graphics3D) :> MapAt[ReplaceAll[Thread[$defaultColors15 -> cols]], g, 1]}];
+(* the Manipulate of 6.0: a grey rounded panel, the variable's name, a white groove with an aqua knob,
+   the + that opens its animation controls, and the picture in a white framed pane below *)
+classicManipulate[body_, name_, u_] := Module[{w = 380, knob},
+    knob[x_] := Table[{Blend[{RGBColor["#2B5CB8"], RGBColor["#5C8FE0"], RGBColor["#DDEBFF"]}, k], Disk[{x - 1.5 k, 1.5 k}, 8 (1 - 0.8 k)]}, {k, 0, 1, 0.125}];
+    Framed[Column[{
+        Row[{Style[name, FontFamily -> "Arial", 13], Spacer[8],
+            Graphics[{EdgeForm[GrayLevel[0.6]], White, Rectangle[{0, -2.5}, {w - 90, 2.5}, RoundingRadius -> 2.5], EdgeForm[RGBColor["#1D3F80"]], knob[u (w - 90)]},
+                PlotRange -> {{-9, w - 81}, {-9, 9}}, ImageSize -> {w - 72, 18}, ImagePadding -> 1], Spacer[6],
+            Framed[Style["+", FontFamily -> "Arial", Bold, 12, GrayLevel[0.35]], FrameStyle -> GrayLevel[0.6], Background -> GrayLevel[0.97], FrameMargins -> {{4, 4}, {0, 0}}, RoundingRadius -> 2]}],
+        Framed[body, FrameStyle -> GrayLevel[0.78], Background -> White, FrameMargins -> 4]}, Spacings -> 0.8],
+        FrameStyle -> GrayLevel[0.65], Background -> GrayLevel[0.95], RoundingRadius -> 5, FrameMargins -> 10]];
 (* "GraphicsSize" -> w shows graphics w logical pixels wide *)
 sized[e_, w_ ? NumericQ] /; MatchQ[e, _Graphics | _Graphics3D | _Graph | _GeoGraphics] := Show[e, ImageSize -> w];
 sized[e_, _] := e;
@@ -126,12 +153,13 @@ outCell[at_, n_, e_, era_, o_] /; ! richEraQ[era] && graphicsQ[e] := {Join[outCe
     outCell[at + 0.1, n, "-" <> ToString[Head[e]] <> "-", era, o]};
 outCell[at_, n_, e_, era_, o_] /; richEraQ[era] || graphicsQ[e] := Join[outCell[at, n, "", era, o], <|"kind" -> "Pic"|>, displayed[e, era, o]];
 outCell[at_, n_, e_, era_, o_] := outCell[at, n, ToString[e, OutputForm], era, o];
-animCell[at_, n_, f_, dur_, era_, o_] := With[{fr = displayed[f[#], era, o] & /@ Subdivide[0., 1., ov[o, "Frames"] - 1]},
+(* "Frames" -> Automatic: 40 pictures a unit, 20 a second at the film's two seconds a bar, at least 24 *)
+animCell[at_, n_, f_, dur_, era_, o_] := With[{fr = displayed[f[#], era, o] & /@ Subdivide[0., 1., Replace[ov[o, "Frames"], Automatic :> Max[24, Ceiling[40 dur]]] - 1]},
     <|"kind" -> "Pic", "at" -> at, "n" -> n, "frames" -> fr[[All, "image"]], "size" -> fr[[1, "size"]], "dur" -> dur|>];
 (* an expression as the front end shows it, in the era's light or dark mode, at the display's own
    resolution: a logical pixel is "Pixel" screen pixels on a full-depth display, one on the old ones *)
 displayed[e_, era_, o_] := With[{k = If[era["Depth"] === "Full", era["Pixel"], 1]},
-    With[{img = Rasterize[Style[sized[e, ov[o, "GraphicsSize"]], LightDark -> era["LightDark"]], "Image", ImageResolution -> 72 k, Background -> era["Page"]]},
+    With[{img = Rasterize[Style[sized[asOfVersion[e, era["Version"]], ov[o, "GraphicsSize"]], LightDark -> era["LightDark"]], "Image", ImageResolution -> 72 k, Background -> era["Page"]]},
         <|"image" -> img, "size" -> ImageDimensions[img] / k|>]];
 
 (* the window: burst or wipe in, pulse, push in, dim, fly away *)
@@ -168,9 +196,9 @@ dithered[img_, size_] := dithered[img, size] = OrderedDither[img, size];
 (* the cells, top to bottom, scrolled so the newest stays in view and gliding when one arrives *)
 cellFont[c_, era_] := Switch[c["kind"], "In", era["Input"], "Out", era["Output"], "Title", era["Title"], _, era["Text"]];
 labelH[c_, era_] := If[TrueQ[era["LabelsAbove"]] && MatchQ[c["kind"], "In" | "Out" | "Pic"], 1.5 era["Label"]["Size"], 0];
-cellHeight[c_, era_, w_] := labelH[c, era] + Switch[c["kind"], "Pic", c["size"][[2]] + 6, "ChatInput", 46, "ChatOutput", 64 + 24 Length[c["code"]] + 16,
+cellHeight[c_, era_, w_] := labelH[c, era] + Switch[c["kind"], "Pic", c["size"][[2]] + 6, "ChatInput", 46, "ChatOutput", 64 + 24 Length[c["code"]] + 16, "FreeForm", 92,
     _, With[{f = cellFont[c, era]}, 1.3 f["Size"] Length[CanvasWrap[c["text"], f, w, "Break" -> If[MatchQ[c["kind"], "In" | "Out"], "Code", "Words"]]] + 4]];
-notebookDraw[{rx_, ry_, rw_, rh_}, era_, cs_, t_] := Module[{vis = Select[cs, t >= #["at"] &], w = rw - era["Left"] - 30, hs, scrollFor, scroll, y, gap = era["Gap"]},
+notebookDraw[{rx_, ry_, rw_, rh_}, era_, cs_, t_] := Module[{vis = Select[cs, #["at"] <= t < Lookup[#, "until", Infinity] &], w = rw - era["Left"] - 30, hs, scrollFor, scroll, y, gap = era["Gap"]},
     hs = cellHeight[#, era, w] & /@ vis;
     scrollFor[n_] := Max[0, Total[Take[hs, n]] + gap (n + 3) - rh];
     scroll = If[Length[vis] < 2, scrollFor[Length[vis]], scrollFor[Length[vis] - 1] +
@@ -182,7 +210,7 @@ notebookDraw[{rx_, ry_, rw_, rh_}, era_, cs_, t_] := Module[{vis = Select[cs, t 
 (* the cell bracket: a thin square hook in the classic eras, a lighter one with a small foot since 6.0 *)
 bracket[{bx_, y_}, hh_, era_] := CanvasLine[If[era["BracketKind"] === "Modern", {{bx - 3, y}, {bx, y}, {bx, y + hh}, {bx - 3, y + hh}},
     {{bx - 4, y}, {bx, y}, {bx, y + hh}, {bx - 4, y + hh}}], era["Bracket"], "Thickness" -> era["BracketWidth"]];
-cellLabel[c_, era_] := Switch[c["kind"], "In", "In[" <> ToString[c["n"]] <> "]:=", _ /; TrueQ[c["input"]], "In[" <> ToString[c["n"]] <> "]:=", "Out" | "Pic", "Out[" <> ToString[c["n"]] <> "]=", _, None];
+cellLabel[c_, era_] := Switch[c["kind"], "In" | "FreeForm", "In[" <> ToString[c["n"]] <> "]:=", _ /; TrueQ[c["input"]], "In[" <> ToString[c["n"]] <> "]:=", "Out" | "Pic", "Out[" <> ToString[c["n"]] <> "]=", _, None];
 
 (* top: the page top; text is not clipped by the page's inset, so lines scrolled above it are dropped *)
 cellDraw[c_, {x0_, y_}, w_, h_, era_, t_, top_] := Module[{f = cellFont[c, era], ink = era["Ink"], lab = cellLabel[c, era], lines, shown, yy = y + labelH[c, era]},
@@ -191,13 +219,15 @@ cellDraw[c_, {x0_, y_}, w_, h_, era_, t_, top_] := Module[{f = cellFont[c, era],
      bracket[{x0 + w + 16, y - 2}, h Easing["OutExpo"][Clip[(t - c["at"]) / 0.12, {0, 1}]], era],
      Switch[c["kind"],
         "ChatInput", chatInputDraw[c, {x0, y}, w, t],
+        "FreeForm", freeFormDraw[c, {x0 + 26, yy}, w - 26, era, t],
         "ChatOutput", chatOutputDraw[c, {x0, y}, w, h, era, t],
         "Pic", With[{img = If[KeyExistsQ[c, "frames"], c["frames"][[1 + Floor[Clip[(t - c["at"]) / c["dur"], {0, 1}] (Length[c["frames"]] - 1)]]], c["image"]]},
             CanvasImage[If[era["Depth"] === "Bit", dithered[img, Round[c["size"]]], img], Join[{x0, yy}, c["size"]], Opacity -> Easing["OutCubic"][Clip[(t - c["at"]) / 0.12, {0, 1}]]]],
         _, lines = CanvasWrap[c["text"], f, w, "Break" -> If[MatchQ[c["kind"], "In" | "Out"], "Code", "Words"]];
         shown = If[c["kind"] =!= "In", lines, Module[{n = Floor[Clip[(t - c["at"]) / c["type"], {0, 1}] StringLength[c["text"]]]},
             Flatten[Reap[Do[If[n > 0, Sow[StringTake[ln, Min[n, StringLength[ln]]]]; n -= StringLength[ln]], {ln, lines}]][[2]]]]];
-        {MapIndexed[With[{p = {x0, yy + f["Size"] (1.05 + 1.3 (#2[[1]] - 1))}}, If[p[[2]] - f["Size"] < top, {}, codeLine[#1, p, f, c["kind"], era]]] &, shown],
+        {MapIndexed[With[{p = {x0, yy + f["Size"] (1.05 + 1.3 (#2[[1]] - 1))}}, If[p[[2]] - f["Size"] < top, {}, codeLine[#1, p, f, c["kind"], era, Lookup[c, "colors", <||>],
+            OddQ[Total[quoteCount /@ Take[lines, #2[[1]] - 1]]]]]] &, shown],
          If[c["kind"] === "In" && t - c["at"] < c["type"] + 0.25 && EvenQ[Floor[8 t]],
             CanvasRectangle[{x0 + CanvasTextWidth[Last[shown, ""], f] + 1, yy + 1.3 f["Size"] Max[0, Length[shown] - 1] + 2, 1.1, 1.15 f["Size"]}, ink], {}]}]}];
 
@@ -221,7 +251,7 @@ chatOutputDraw[c_, {x_, y_}, w_, h_, era_, t_] := Module[{u = Easing["OutCubic"]
             cx += CanvasTextWidth[wd, f]}[[1]]], {i, n}],
         If[k > 0, {CanvasRectangle[{x + 16, y + 42, w - 48, 24 Length[c["code"]] + 14}, White], CanvasRectangle[{x + 16, y + 42, w - 48, 24 Length[c["code"]] + 14}, RGBColor["#E0E0E0"], "Stroke" -> 1],
             MapIndexed[With[{ln = #1, i = #2[[1]]}, With[{m = Max[0, Min[StringLength[ln], left - Total[StringLength /@ Take[c["code"], i - 1]] - (i - 1)]]},
-                If[m > 0, codeLine[StringTake[ln, m], {x + 30, y + 67 + 24 (i - 1)}, cf, "In", era], {}]]] &, c["code"]]}, {}]}]];
+                If[m > 0, codeLine[StringTake[ln, m], {x + 30, y + 67 + 24 (i - 1)}, cf, "In", era, c["colors"], OddQ[Total[quoteCount /@ Take[c["code"], i - 1]]]], {}]]] &, c["code"]]}, {}]}]];
 
 (* the 15.0 chat bar under the notebook: a request typed in, then sent *)
 chatBarDraw[{x_, y_, w_}, {t0_, txt_, dur_, sent_}, t_] := With[{shown = TypedText[txt, localU[t, t0, t0 + dur]], f = CanvasFont["Source Sans 3", 16],
@@ -234,13 +264,47 @@ chatBarDraw[{x_, y_, w_}, {t0_, txt_, dur_, sent_}, t_] := With[{shown = TypedTe
      CanvasText["\[Times]", {x + w - 22, y + 16}, CanvasFont["Arimo", 11], RGBColor["#8A8A8A"], Alignment -> Center],
      CanvasText["\[Ellipsis]", {x + w - 22, y + 34}, CanvasFont["Arimo", 12, 700], RGBColor["#8A8A8A"], Alignment -> Center]}];
 
-(* one line of a cell; since 6.0 input is syntax-coloured: strings grey, symbols the system does not
-   know (the user's own) blue *)
-codeLine[s_, p_, f_, kind_, era_] := Which[
+(* one line of a cell; since 6.0 input is syntax-coloured as the front end colours it: strings grey
+   (also where a string wraps onto the next line: inString says the line starts inside one), local
+   variables green, symbols the kernel knows nothing about blue, everything else -- the system's words,
+   the user's defined ones, slots like #name -- in ink.  colors is the cell's symbol -> colour map *)
+codeLine[s_, p_, f_, kind_, era_, colors_ : <||>, inString_ : False] := Which[
     kind === "Title", CanvasText[s, p, f, Replace[era["TitleColor"], Automatic -> era["Ink"]]],
     kind === "Out", CanvasText[s, p, f, Replace[era["OutputInk"], Automatic -> era["Ink"]]],
     kind =!= "In" || era["Syntax"] === None, CanvasText[s, p, f, era["Ink"]],
-    True, Module[{x = p[[1]]}, Map[With[{c = tokenColor[#, era]}, {CanvasText[#, {x, p[[2]]}, f, c], x += CanvasTextWidth[#, f]}[[1]]] &,
-        StringSplit[s, tok : (("\"" ~~ Shortest[___] ~~ ("\"" | EndOfString)) | (("$" | LetterCharacter) ~~ (WordCharacter | "$") ...)) :> tok]]]];
-tokenColor[tok_, era_] := Which[StringStartsQ[tok, "\""], era["Syntax"]["String"],
-    StringMatchQ[tok, ("$" | LetterCharacter) ~~ ___] && Names["System`" <> tok] === {}, era["Syntax"]["User"], True, era["Ink"]];
+    True, Module[{x = p[[1]], head = "", rest = s},
+        If[inString, With[{k = StringPosition[s, RegularExpression["(?<!\\\\)\""], 1]}, If[k === {}, head = s; rest = "", head = StringTake[s, k[[1, 1]]]; rest = StringDrop[s, k[[1, 1]]]]]];
+        Map[{CanvasText[#[[1]], {x, p[[2]]}, f, #[[2]]], x += CanvasTextWidth[#[[1]], f]}[[1]] &,
+            Join[If[head === "", {}, {{head, era["Syntax"]["String"]}}], {#, tokenColor[#, era, colors]} & /@
+                StringSplit[rest, tok : (("\"" ~~ Shortest[___] ~~ ("\"" | EndOfString)) | ("#" ~~ (WordCharacter | "$") ...) | (("$" | LetterCharacter) ~~ (WordCharacter | "$") ...)) :> tok]]]]];
+tokenColor[tok_String, era_, colors_] := Which[StringStartsQ[tok, "\""], era["Syntax"]["String"], StringStartsQ[tok, "#"], era["Ink"],
+    True, Lookup[colors, tok, era["Ink"]]];
+quoteCount[s_String] := StringCount[s, RegularExpression["(?<!\\\\)\""]];
+
+(* the colours of an input's symbols, worked out once: iterators ({x, 0, 1}), scoped variables
+   (Module[{s = 0}, ...]), pattern names (x_) and function variables (u |-> ...) are local; a symbol
+   is known when it is the system's, a package's, or given a value in this session *)
+symbolColors[code_String, era_] := If[era["Syntax"] === None, <||>, Module[{bare = StringReplace[code, "\"" ~~ Shortest[___] ~~ ("\"" | EndOfString) -> "\" \""], id, locals, syms},
+    id = ("$" | LetterCharacter) ~~ (WordCharacter | "$") ...;
+    syms = DeleteDuplicates[StringCases[bare, RegularExpression["(?<![#\\w$`])[$A-Za-z][$\\w]*"]]];
+    locals = DeleteDuplicates @ Join[
+        StringCases[bare, "{" ~~ WhitespaceCharacter ... ~~ v : id ~~ WhitespaceCharacter ... ~~ "," :> v],
+        StringCases[bare, ("{" | ",") ~~ WhitespaceCharacter ... ~~ v : id ~~ WhitespaceCharacter ... ~~ "=" ~~ Except["=" | "!"] :> v],
+        StringCases[bare, v : id ~~ "_" :> v], StringCases[bare, v : id ~~ WhitespaceCharacter ... ~~ "|->" :> v],
+        StringCases[bare, "Function[" ~~ v : id ~~ "," :> v]];
+    locals = Select[locals, Names["System`" <> #] === {} && ! knownQ[#] &];
+    Association[# -> Which[MemberQ[locals, #], era["Syntax"]["Local"], Names["System`" <> #] =!= {} || knownQ[#], era["Ink"], True, era["Syntax"]["User"]] & /@ syms]]];
+knownQ[name_String] := With[{n = Quiet[Names[name]]}, n =!= {} && ToExpression[First[n], InputForm,
+    Function[x, ! StringStartsQ[Context[x], "Global`"] || OwnValues[x] =!= {} || DownValues[x] =!= {} || SubValues[x] =!= {} || UpValues[x] =!= {}, HoldAllComplete]]];
+
+(* 8.0's free-form input: an orange = marker, the English typed into its box, then how it was
+   understood: an arrow, the head it chose, and the code *)
+freeFormDraw[c_, {x_, y_}, w_, era_, t_] := With[{shown = TypedText[c["text"], localU[t, c["at"], c["at"] + c["type"]]], f = CanvasFont["Arimo", 15, 700],
+        u = localU[t, c["at"] + c["type"] + 0.15, c["at"] + c["type"] + 0.3], orange = RGBColor["#F76504"]},
+    {CanvasRectangle[{x - 26, y + 4, 17, 17}, orange, "Radius" -> 4], CanvasText["=", {x - 17.5, y + 17.5}, CanvasFont["Arimo", 15, 700], White, Alignment -> Center],
+     CanvasRectangle[{x - 2, y + 1, Min[w - 20, 380], 25}, White, "Radius" -> 5], CanvasRectangle[{x - 2, y + 1, Min[w - 20, 380], 25}, RGBColor["#CFCFCF"], "Radius" -> 5, "Stroke" -> 1],
+     CanvasText[shown, {x + 7, y + 19}, f, RGBColor["#222222"]],
+     If[u > 0, CanvasOpacity[u, {CanvasLine[{{x + 4, y + 33}, {x + 4, y + 41}, {x + 13, y + 41}}, orange, "Thickness" -> 1.6],
+        CanvasLine[{{x + 10, y + 38}, {x + 13.5, y + 41}, {x + 10, y + 44}}, orange, "Thickness" -> 1.6],
+        CanvasText[First[StringSplit[c["code"], "["]], {x + 18, y + 45}, CanvasFont["Arimo", 13], orange],
+        codeLine[c["code"], {x + 2, y + 74}, era["Input"], "In", era, c["colors"]]}], {}]}];

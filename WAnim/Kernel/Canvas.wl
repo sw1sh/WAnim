@@ -78,9 +78,10 @@ CanvasRectangle[{x_, y_, w_, h_}, c_, opts : OptionsPattern[]] := With[{a = Opti
         s === None, {EdgeForm[], FaceForm[paint[c, a]], Polygon[cxf /@ {{x, y}, {x + w, y}, {x + w, y + h}, {x, y + h}}]},
         True, {paint[c, a], thick[s], Line[cxf /@ {{x, y}, {x + w, y}, {x + w, y + h}, {x, y + h}, {x, y}}]}
     ]];
-Options[CanvasPolygon] = {Opacity -> 1, "Stroke" -> None};
-CanvasPolygon[pts_, c_, opts : OptionsPattern[]] := With[{a = OptionValue[Opacity], s = OptionValue["Stroke"]},
-    If[s === None, {EdgeForm[], FaceForm[paint[c, a]], Polygon[cxf /@ pts]},
+(* "Edge" -> colour outlines the face thinly in the same primitive: the seams of a mesh disappear, or show as lines *)
+Options[CanvasPolygon] = {Opacity -> 1, "Stroke" -> None, "Edge" -> None};
+CanvasPolygon[pts_, c_, opts : OptionsPattern[]] := With[{a = OptionValue[Opacity], s = OptionValue["Stroke"], e = OptionValue["Edge"]},
+    If[s === None, {If[e === None, EdgeForm[], EdgeForm[Directive[paint[e, a], AbsoluteThickness[0.6]]]], FaceForm[paint[c, a]], Polygon[cxf /@ pts]},
         {paint[c, a], thick[s], JoinForm["Round"], Line[cxf /@ Append[pts, First[pts]]]}]];
 Options[CanvasLine] = {Opacity -> 1, "Thickness" -> 1};
 CanvasLine[pts_, c_, opts : OptionsPattern[]] := {paint[c, OptionValue[Opacity]], thick[OptionValue["Thickness"]], CapForm["Round"], Line[cxf /@ pts]};

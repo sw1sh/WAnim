@@ -27,7 +27,7 @@ RelatedGuides: [WAnim]
 | "TileSize" | {400, 330} | size of a card |
 | "Gap" | {36, 60} | space between cards, across and down |
 | "Interval" | 1/4 | time between cards |
-| "Frames" | 24 | pictures in an animated content |
+| "Frames" | Automatic | pictures in an animated content (40 a unit of "Period") |
 | "Period" | 2 | time for one loop of an animated content |
 | "Pulse" | None | a Track to punch to |
 | "NoteColor" | red | colour of the notes |
