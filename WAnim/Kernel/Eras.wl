@@ -160,29 +160,45 @@ mac9Content[lw_, lh_] := With[{cx = 19, cy = 54, cw = lw - 40, ch = lh - 71}, {c
 (* ::Subsection:: *)
 (*Windows XP, 2004*)
 
-xpChrome[lw_, lh_, title_] := Module[{tb = lh - 28, wx = 10, wy = 8, ww = lw - 20, wh, tbh = 26, my, cx, cy, cw, ch, vx, hy},
-    wh = tb - 16; my = wy + tbh; cx = wx + 4; cy = my + 20; cw = ww - 8; ch = wh - tbh - 24; vx = cx + cw - 17; hy = cy + ch - 17;
-    {vgrad[{0, 0, lw, lh}, {{0, RGBColor["#2F6FD6"]}, {0.55, RGBColor["#8CC0F2"]}, {1, RGBColor["#BFE0FA"]}}],
-     {RGBColor["#4E9A2F"], EdgeForm[], FilledCurve[{BezierCurve[cxf /@ {{0, 0.72 lh}, {0.3 lw, 0.52 lh}, {0.6 lw, 0.62 lh}, {lw, 0.7 lh}}], Line[cxf /@ {{lw, 0.7 lh}, {lw, lh}, {0, lh}, {0, 0.72 lh}}]}]},
-     vgrad[{0, tb, lw, 28}, {{0, RGBColor["#3F8CF3"]}, {0.15, RGBColor["#245EDB"]}, {1, RGBColor["#1941A5"]}}],
-     CanvasRectangle[{0, tb, 100, 28}, RGBColor["#3E9D3A"], "Radius" -> 10], CanvasRectangle[{0, tb, 50, 28}, RGBColor["#3E9D3A"]],
-     CanvasText["start", {30, tb + 19.5}, CanvasFont["Arimo", 16, 700, True], White],
-     eraBox[{lw - 80, tb, 80, 28}, RGBColor["#0F8CE8"]], T["10:23 AM", {lw - 40, tb + 18}, 11, 400, White, Center],
-     CanvasRectangle[{wx, wy, ww, wh}, RGBColor["#0450D8"], "Radius" -> 8], CanvasRectangle[{wx, wy + 10, ww, wh - 10}, RGBColor["#0450D8"]],
-     vgrad[{wx + 6, wy, ww - 12, tbh}, {{0, RGBColor["#0A5FE8"]}, {0.1, RGBColor["#3D95FF"]}, {0.3, RGBColor["#0B5BE6"]}, {1, RGBColor["#0450D8"]}}],
-     eraBox[{wx + 9, wy + 6, 13, 15}, White, RGBColor["#2B4E86"]], eraBox[{wx + 11, wy + 10, 9, 1}, RGBColor["#2B4E86"]], eraBox[{wx + 11, wy + 13, 9, 1}, RGBColor["#2B4E86"]],
-     T[title, {wx + 29, wy + 19}, 12, 700, RGBColor[0, 0, 0, 0.6]], T[title, {wx + 28, wy + 18}, 12, 700, White],
-     Table[{CanvasRectangle[{bx, wy + 4, 19, 19}, If[bx == wx + ww - 25, RGBColor["#E0512B"], RGBColor["#2B78F0"]], "Radius" -> 3],
-        CanvasRectangle[{bx + 0.5, wy + 4.5, 18, 18}, White, "Radius" -> 3, "Stroke" -> 1]}, {bx, {wx + ww - 25, wx + ww - 47, wx + ww - 69}}],
-     CanvasLine[{{wx + ww - 20, wy + 9}, {wx + ww - 11, wy + 18}}, White, "Thickness" -> 2], CanvasLine[{{wx + ww - 11, wy + 9}, {wx + ww - 20, wy + 18}}, White, "Thickness" -> 2],
-     CanvasRectangle[{wx + ww - 42, wy + 9, 9, 8}, White, "Stroke" -> 2], CanvasRectangle[{wx + ww - 64, wy + 16, 8, 2}, White],
+(* Luna: the Bliss hill under a deep sky, the glossy blue taskbar with its green start button and
+   the four-colour flag, the tray, and the window's blue frame, glossy title bar and buttons *)
+xpChrome[lw_, lh_, title_] := Module[{tb = lh - 30, wx = 10, wy = 8, ww = lw - 20, wh, tbh = 28, my, cx, cy, cw, ch, vx, hy, hill, flag, gloss},
+    wh = tb - 14; my = wy + tbh; cx = wx + 4; cy = my + 20; cw = ww - 8; ch = wh - tbh - 24; vx = cx + cw - 17; hy = cy + ch - 17;
+    hill[h_] := FilledCurve[{BezierCurve[cxf /@ {{0, h lh}, {0.28 lw, (h - 0.2) lh}, {0.62 lw, (h - 0.06) lh}, {lw, (h - 0.03) lh}}], Line[cxf /@ {{lw, (h - 0.03) lh}, {lw, lh}, {0, lh}, {0, h lh}}]}];
+    flag[{x_, y_}, s_] := MapThread[CanvasRectangle[{x + #1[[1]] (s + 1), y + #1[[2]] (s + 1) - 0.25 #1[[1]] s, s, s}, RGBColor[#2], "Radius" -> 1] &,
+        {{{0, 0}, {1, 0}, {0, 1}, {1, 1}}, {"#F35325", "#81BC06", "#05A6F0", "#FFBA08"}}];
+    gloss[{x_, y_, w_, h_}, c_, r_] := {CanvasRectangle[{x, y, w, h}, c, "Radius" -> r], CanvasRectangle[{x + 1, y + 1, w - 2, h / 2 - 1}, White, "Radius" -> r, Opacity -> 0.28],
+        CanvasRectangle[{x + 0.5, y + 0.5, w - 1, h - 1}, White, "Radius" -> r, "Stroke" -> 1, Opacity -> 0.9]};
+    {vgrad[{0, 0, lw, lh}, {{0, RGBColor["#1D57C9"]}, {0.35, RGBColor["#4B8EE6"]}, {0.62, RGBColor["#9CCBF5"]}, {1, RGBColor["#C9E4FA"]}}],
+     Table[CanvasTransform[CanvasTranslate[c[[1]]] . CanvasScale[{2.6, 1}], CanvasDisk[{0, 0}, c[[2]], White, Opacity -> 0.35]],
+        {c, {{{0.2 lw, 0.16 lh}, 0.05 lw}, {{0.27 lw, 0.14 lh}, 0.035 lw}, {{0.7 lw, 0.22 lh}, 0.06 lw}, {{0.8 lw, 0.19 lh}, 0.04 lw}}}],
+     {RGBColor["#6DBE3C"], EdgeForm[], hill[0.68]}, {RGBColor["#3F9A25"], EdgeForm[], hill[0.8]},
+     vgrad[{0, tb, lw, 30}, {{0, RGBColor["#3F8CF3"]}, {0.08, RGBColor["#2B6FE6"]}, {0.5, RGBColor["#245EDB"]}, {1, RGBColor["#1941A5"]}}],
+     CanvasRectangle[{0, tb, lw, 1}, RGBColor["#6CA2F5"]],
+     CanvasRectangle[{0, tb, 104, 30}, RGBColor["#3A9C38"], "Radius" -> 13], CanvasRectangle[{0, tb, 60, 30}, RGBColor["#3A9C38"]],
+     CanvasRectangle[{0, tb + 1, 100, 13}, White, "Radius" -> 8, Opacity -> 0.22],
+     flag[{10, tb + 7}, 7],
+     CanvasText["start", {31, tb + 21.5}, CanvasFont["Arimo", 17, 700, True], RGBColor[0, 0, 0, 0.45]], CanvasText["start", {30, tb + 20.5}, CanvasFont["Arimo", 17, 700, True], White],
+     vgrad[{lw - 96, tb, 96, 30}, {{0, RGBColor["#1C9BF0"]}, {1, RGBColor["#0D79D8"]}}], CanvasRectangle[{lw - 96, tb, 1, 30}, RGBColor["#0B4FB4"]],
+     CanvasPolygon[{{lw - 86, tb + 13}, {lw - 83, tb + 13}, {lw - 79, tb + 9}, {lw - 79, tb + 21}, {lw - 83, tb + 17}, {lw - 86, tb + 17}}, White],
+     T["10:23 AM", {lw - 44, tb + 19.5}, 11, 400, White, Center],
+     (* the window: a blue frame, rounded on top, with a glossy title bar *)
+     CanvasRectangle[{wx - 1, wy - 1, ww + 2, wh + 2}, RGBColor["#0831D9"], "Radius" -> 9],
+     CanvasRectangle[{wx, wy, ww, wh}, RGBColor["#0B5CE6"], "Radius" -> 8], CanvasRectangle[{wx, wy + 10, ww, wh - 10}, RGBColor["#0B5CE6"]],
+     vgrad[{wx + 4, wy + 1, ww - 8, tbh}, {{0, RGBColor["#0058EE"]}, {0.08, RGBColor["#3A93FF"]}, {0.2, RGBColor["#288EFF"]}, {0.45, RGBColor["#0761F0"]}, {0.9, RGBColor["#0550E0"]}, {1, RGBColor["#0442C6"]}}],
+     CanvasPolygon[Table[{wx + 16, wy + 15} + If[EvenQ[k], 7, 3] {Sin[k Pi / 6], -Cos[k Pi / 6]}, {k, 0, 11}], RGBColor["#E23C1E"]],
+     CanvasPolygon[Table[{wx + 16, wy + 15} + If[EvenQ[k], 7, 3] {Sin[k Pi / 6], -Cos[k Pi / 6]}, {k, 0, 11}], RGBColor["#7A1300"], "Stroke" -> 0.7],
+     T[title, {wx + 30, wy + 20}, 12.5, 700, RGBColor[0, 0, 0.2, 0.55]], T[title, {wx + 29, wy + 19}, 12.5, 700, White],
+     gloss[{wx + ww - 27, wy + 5, 21, 21}, RGBColor["#E0512B"], 3], gloss[{wx + ww - 50, wy + 5, 21, 21}, RGBColor["#2B78F0"], 3], gloss[{wx + ww - 73, wy + 5, 21, 21}, RGBColor["#2B78F0"], 3],
+     CanvasLine[{{wx + ww - 21, wy + 10.5}, {wx + ww - 12, wy + 19.5}}, White, "Thickness" -> 2.2], CanvasLine[{{wx + ww - 12, wy + 10.5}, {wx + ww - 21, wy + 19.5}}, White, "Thickness" -> 2.2],
+     CanvasRectangle[{wx + ww - 44.5, wy + 10.5, 10, 9}, White, "Stroke" -> 2], CanvasRectangle[{wx + ww - 67, wy + 17.5, 9, 2.5}, White],
      eraBox[{wx + 4, my, ww - 8, 20}, RGBColor["#ECE9D8"]], menus[winMenus[], {wx + 12, my + 14}, 11.5, 400, 14],
      eraBox[{cx, cy, cw, ch}, White, RGBColor["#7F9DB9"]],
      eraBox[{vx, cy + 1, 16, ch - 18}, RGBColor["#F4F3EE"]], CanvasRectangle[{vx + 1, cy + 20, 14, 46}, RGBColor["#B8CBF8"], "Radius" -> 3],
      CanvasRectangle[{vx + 1, cy + 2, 14, 16}, RGBColor["#C3D3FD"], "Radius" -> 3], eraTri[{vx + 8, cy + 10}, 3, "up", RGBColor["#4D6185"]],
      CanvasRectangle[{vx + 1, cy + ch - 35, 14, 16}, RGBColor["#C3D3FD"], "Radius" -> 3], eraTri[{vx + 8, cy + ch - 27}, 3, "down", RGBColor["#4D6185"]],
      eraBox[{cx + 1, hy, cw - 2, 16}, RGBColor["#F4F3EE"]], eraBox[{cx + 3, hy + 2, 42, 12}, White, RGBColor["#7F9DB9"]], T["100%", {cx + 7, hy + 11.5}, 10]}];
-xpContent[lw_, lh_] := With[{wh = lh - 28 - 16, cy = 8 + 26 + 20}, {15, cy + 1, lw - 20 - 8 - 19, wh - 26 - 24 - 19}];
+xpContent[lw_, lh_] := With[{wh = lh - 30 - 14, cy = 8 + 28 + 20}, {15, cy + 1, lw - 20 - 8 - 19, wh - 28 - 24 - 19}];
 
 
 (* ::Subsection:: *)

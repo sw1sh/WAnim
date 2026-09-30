@@ -175,7 +175,7 @@ tl_Timeline["Video", file_String, opts : OptionsPattern[timelineVideo]] := Modul
     (* in parallel when kernels can be had; otherwise (none launched, none licensed) here, in order *)
     If[ TrueQ @ OptionValue[timelineVideo, {opts}, "Parallel"] && (Length[Kernels[]] > 0 || Length[Quiet[LaunchKernels[]]] > 0 || Length[Quiet[LaunchKernels[$ProcessorCount]]] > 0),
         With[{root = ParentDirectory[PacletObject["WolframInstitute/WAnim"]["Location"]]},
-            ParallelEvaluate[PacletDirectoryLoad[root]; Needs["WolframInstitute`WAnim`"]]];
+            ParallelEvaluate[Block[{Print}, PacletDirectoryLoad[root]; Quiet @ Needs["WolframInstitute`WAnim`"]]; Null]];
         With[{init = Unevaluated @@ {OptionValue[timelineVideo, {opts}, "KernelInitialization"]}},
             ParallelEvaluate[ReleaseHold[Hold[init]]]
         ];

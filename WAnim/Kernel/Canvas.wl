@@ -190,10 +190,14 @@ CanvasWrap[s_String, f_Association, w_, opts : OptionsPattern[]] := Flatten @ Ma
 wrapPara[para_, f_, w_, "Words"] := Module[{lines = {}, cur = ""},
     Do[With[{t = If[cur === "", wd, cur <> " " <> wd]}, If[CanvasTextWidth[t, f] > w && cur =!= "", AppendTo[lines, cur]; cur = wd, cur = t]], {wd, StringSplit[para]}];
     Append[lines, cur]];
+(* code breaks after a space, a comma or an opening bracket, as the front end breaks it; a piece
+   still wider than the line is cut where it must be *)
 wrapPara[para_, f_, w_, "Code"] := Module[{out = {}, cur = ""},
     Do[If[CanvasTextWidth[StringTrim[cur <> p, WhitespaceCharacter .. ~~ EndOfString], f] > w && cur =!= "",
-            AppendTo[out, StringTrim[cur, WhitespaceCharacter .. ~~ EndOfString]]; cur = StringTrim[p, StartOfString ~~ WhitespaceCharacter ..], cur = cur <> p],
-        {p, StringCases[para, RegularExpression["[^ ,]+[ ,]*|[ ,]+"]]}];
+            AppendTo[out, StringTrim[cur, WhitespaceCharacter .. ~~ EndOfString]]; cur = StringTrim[p, StartOfString ~~ WhitespaceCharacter ..], cur = cur <> p];
+        While[CanvasTextWidth[cur, f] > w && StringLength[cur] > 1,
+            With[{k = Max[1, LengthWhile[Range[StringLength[cur]], CanvasTextWidth[StringTake[cur, #], f] <= w &]]}, AppendTo[out, StringTake[cur, k]]; cur = StringDrop[cur, k]]],
+        {p, StringCases[para, RegularExpression["[^ ,\\[]+[ ,\\[]*|[ ,\\[]+"]]}];
     Append[out, cur]];
 
 
