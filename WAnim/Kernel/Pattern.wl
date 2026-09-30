@@ -955,7 +955,7 @@ livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
            starts the transport if nothing is playing yet *)
         Initialization :> (Needs["WolframInstitute`WAnim`"]; registerStream[id, stream, n]; If[solo, soloStream[id, stream, n]]; If[autoplay && ! $Playing, TrackPlay[]]),
         Deinitialization :> (unregisterStream[id]; Quiet[AudioStop[stream]; RemoveAudioStream[stream]]),
-        (* the package's symbols are ReadProtected, so saving definitions never snapshots the SHARED
+        (* the package's contexts are internal ones, so saving definitions never snapshots the SHARED
            $Streams registry (which would clobber live disable/solo state on every display) *)
         SaveDefinitions -> True
     ]

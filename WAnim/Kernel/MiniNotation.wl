@@ -179,7 +179,7 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]
                  {"MouseDown", 2} :> If[enabledQ[id], (Quiet @ AudioStop[stream]; unregisterStream[id]), registerStream[id, stream, n]]}]
         }, Spacings -> 0.5, Alignment -> Left], Background -> GrayLevel[0.1], FrameMargins -> 10],
         (* start the clock + audio together on first appearance.  Saving definitions leaves out the
-           package's (ReadProtected) symbols, so an edit's reparse still uses the LIVE grammar. *)
+           package's internal symbols, so an edit's reparse still uses the LIVE grammar. *)
         Initialization :> (Needs["WolframInstitute`WAnim`"]; registerStream[id, stream, n]; If[solo, soloStream[id, stream, n]]; If[! $Playing, TrackPlay[]]),
         SaveDefinitions -> True,
         Deinitialization :> (unregisterStream[id]; Quiet[AudioStop[stream]; RemoveAudioStream[stream]])]]

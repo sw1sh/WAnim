@@ -40,8 +40,10 @@ EndPackage[]
 $ContextPath = DeleteCases[$ContextPath, "WolframInstitute`WAnim`PackageScope`"];
 
 (* Every live output is saved with SaveDefinitions -> True and reloads WAnim when opened, so it keeps
-   working in a fresh session.  The package's own symbols are ReadProtected: a saved output then
-   carries only the notebook's definitions it uses, never the package's internals (nor its shared
-   state, like the registry of playing streams, which a snapshot would overwrite on every display). *)
-Scan[Quiet @ ToExpression[#, InputForm, Function[x, With[{p = MemberQ[Attributes[x], Protected]}, Unprotect[x]; SetAttributes[x, ReadProtected]; If[p, Protect[x]]], HoldAllComplete]] &,
-    Select[Names["WolframInstitute`WAnim`*"] ~Join~ Names["WolframInstitute`WAnim`*`*"], ! StringContainsQ[#, "`Strudel`"] &]];
+   working in a fresh session.  The package's contexts count as internal ones, which SaveDefinitions
+   leaves out: a saved output carries only the notebook's definitions it uses, never the package's
+   internals (nor its shared state, like the registry of playing streams, which a snapshot would
+   overwrite on every display). *)
+Unprotect[Language`$InternalContexts];
+Language`$InternalContexts = DeleteDuplicates @ Join[Language`$InternalContexts, # <> "*" & /@ Contexts["WolframInstitute`WAnim`*"]];
+Protect[Language`$InternalContexts];
