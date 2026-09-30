@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/Instrument
 Keywords: [instrument, synthesizer, drums, kick, pad, lead, bell, voice, foley, studio]
-SeeAlso: [Mixer, Track, EventTrack, Synth, Timeline]
+SeeAlso: [Mixer, Track, EventTrack, AnimatedGraphics]
 RelatedGuides: [WAnim]
 ---
 
@@ -19,7 +19,7 @@ RelatedGuides: [WAnim]
 
 - Drums and effects: "Kick", "SoftKick", "Clap", "Hat", "OpenHat", "Crash", "Riser" (swells over its note), "Roll" (an accelerating snare roll over its note), "Impact".
 - Pitched: "Pluck", "Arp", "Pad", "Bass", "LongBass", "Stab", "Lead" (detuned sawtooths through swept filters), "Bell" (two-operator FM), "Voice" (a sawtooth through three formant filters gliding between vowels).
-- Foley: "Tick" (a key press) and "Blip" (a cell evaluating); a [Timeline]() with "Foley" -> True plays them for everything it types.
+- Foley: "Tick" (a key press) and "Blip" (a cell evaluating); an [AnimatedGraphics]() with "Foley" -> True plays them for everything it types.
 - Notes are MIDI numbers or names; an [EventTrack]() event {*onset*, *duration*, *value*, *velocity*} sets its velocity (default 1).
 - A [Track]() of instruments is mixed through drums, music and bass buses with a shared reverb and ping-pong delay, and mastered; [Mixer]() sets the sidechain, an automated low-pass and the master.
 - Each instrument has its own routing and sends, like a patch on a mixing desk.

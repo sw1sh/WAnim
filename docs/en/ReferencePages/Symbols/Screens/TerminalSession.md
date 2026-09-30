@@ -1,9 +1,9 @@
 ---
 Template: Symbol
-Name: Terminal
+Name: TerminalSession
 Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
-URI: WolframInstitute/WAnim/ref/Terminal
+URI: WolframInstitute/WAnim/ref/TerminalSession
 Keywords: [terminal, phosphor, CRT, retro, green screen, SMP, session, scanlines]
 SeeAlso: [NotebookSession, Typewriter, CanvasScreen]
 RelatedGuides: [WAnim]
@@ -11,7 +11,7 @@ RelatedGuides: [WAnim]
 
 ## Usage
 
-<code>[Terminal]()[{*line*_1, *line*_2, …}, {$t_0$, $t_1$}]</code> is a green-phosphor terminal that powers on at $t_0$, shows the lines at their times, and powers off by $t_1$.
+<code>[TerminalSession]()[{*line*_1, *line*_2, …}, {$t_0$, $t_1$}]</code> is a green-phosphor terminal that powers on at $t_0$, shows the lines at their times, and powers off by $t_1$.
 
 ## Details & Options
 
@@ -40,7 +40,7 @@ RelatedGuides: [WAnim]
 An SMP session from 1979 with its output:
 
 ```wl
-Terminal[{{0.1, "#I[1]::  Ex[(a + b)^3]"}, {0.6, "#O[1]:   a^3 + 3 a^2 b + 3 a b^2 + b^3", "Output"}}, {0, 4}]["Graphics", 2, ImageSize -> 480]
+TerminalSession[{{0.1, "#I[1]::  Ex[(a + b)^3]"}, {0.6, "#O[1]:   a^3 + 3 a^2 b + 3 a b^2 + b^3", "Output"}}, {0, 4}][2, ImageSize -> 480]
 ```
 
 <!-- => a green terminal with the input and its expansion -->
@@ -50,7 +50,7 @@ Terminal[{{0.1, "#I[1]::  Ex[(a + b)^3]"}, {0.6, "#O[1]:   a^3 + 3 a^2 b + 3 a b
 A character plot printed row by row and a caption at the bottom:
 
 ```wl
-Terminal[{{0.1, "#I[2]::  Graph[Sin[1/x],x,0.02,0.2]"}, {0.5, {"  **     **", "0.5 ****_______", "  ** **    **"}, "Print"}, {1, "NOVEMBER 1979. CALTECH.", "Caption"}}, {0, 4}]["Graphics", 2, ImageSize -> 480]
+TerminalSession[{{0.1, "#I[2]::  Graph[Sin[1/x],x,0.02,0.2]"}, {0.5, {"  **     **", "0.5 ****_______", "  ** **    **"}, "Print"}, {1, "NOVEMBER 1979. CALTECH.", "Caption"}}, {0, 4}][2, ImageSize -> 480]
 ```
 
 <!-- => the input, three small plot rows and a caption near the bottom -->
@@ -60,7 +60,7 @@ Terminal[{{0.1, "#I[2]::  Graph[Sin[1/x],x,0.02,0.2]"}, {0.5, {"  **     **", "0
 Powering off at the end of the span:
 
 ```wl
-Terminal[{{0.1, "#I[1]::  Ex[(a + b)^3]"}}, {0, 2}]["Graphics", 1.85, ImageSize -> 480]
+TerminalSession[{{0.1, "#I[1]::  Ex[(a + b)^3]"}}, {0, 2}][1.85, ImageSize -> 480]
 ```
 
 <!-- => the glass collapsed to a thin bright line -->
@@ -72,7 +72,7 @@ Terminal[{{0.1, "#I[1]::  Ex[(a + b)^3]"}}, {0, 2}]["Graphics", 1.85, ImageSize 
 A plain screen without glow or scanlines:
 
 ```wl
-Terminal[{{0.1, "READY."}}, {0, 2}, "Glow" -> False, "Scanlines" -> False, FontColor -> RGBColor["#FFB000"]]["Graphics", 1, ImageSize -> 480]
+TerminalSession[{{0.1, "READY."}}, {0, 2}, "Glow" -> False, "Scanlines" -> False, FontColor -> RGBColor["#FFB000"]][1, ImageSize -> 480]
 ```
 
 <!-- => an amber terminal with a clean READY. -->

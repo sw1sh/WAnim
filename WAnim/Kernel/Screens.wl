@@ -3,37 +3,37 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{Terminal, NotebookSession, NotebookEra}]
+PackageExported[{TerminalSession, NotebookSession, NotebookEra}]
 
 
 (* ::Section:: *)
 (*Screens: a terminal and a notebook, each of its era*)
 
 (* ::Subsection:: *)
-(*Terminal*)
+(*TerminalSession*)
 
-Options[Terminal] = Join[{FontFamily -> "VT323", FontSize -> 46, FontColor -> RGBColor["#6BFF8E"], "Screen" -> Automatic,
-    "Bezel" -> RGBColor["#0B0C0B"], "Background" -> RGBColor["#081309"], "Glow" -> True, "Scanlines" -> True,
-    "LineHeight" -> 52, "OutputGap" -> 10, "TypeTime" -> 0.4, "PrintInterval" -> 0.05, "PrintSize" -> 27,
+Options[TerminalSession] = elementOptions[{FontFamily -> "VT323", FontSize -> 46, FontColor -> RGBColor["#6BFF8E"], "Screen" -> Automatic,
+    "Bezel" -> RGBColor["#0B0C0B"], Background -> RGBColor["#081309"], "Glow" -> True, "Scanlines" -> True,
+    "LineHeight" -> 52, "OutputGap" -> 10, "TypeTime" -> 0.4, "Interval" -> 0.05, "PrintSize" -> 27,
     "CaptionSizes" -> {44, 58, 58}, "CaptionColor" -> RGBColor["#E6FFEC"], "CaptionTime" -> 0.35,
-    "Enter" -> "PowerOn", "Exit" -> "PowerOff", "EnterTime" -> 0.18, "ExitTime" -> 0.28}, $LayerOptions];
+    "Enter" -> "PowerOn", "Exit" -> "PowerOff", "EnterTime" -> 0.18, "ExitTime" -> 0.28}];
 
-(* Terminal[{line, ...}, {t0, t1}] is a green-phosphor terminal that powers on at t0 (a line opening to
+(* TerminalSession[{line, ...}, {t0, t1}] is a green-phosphor terminal that powers on at t0 (a line opening to
    the full screen) and off at t1 (collapsing to a line, then a dot).  Each line is {t, content, kind}:
      "Input"    typed from t over "TypeTime"          (the default kind)
      "Output"   appears whole at t, slightly paler
-     "Print"    a list of rows printed one per "PrintInterval" in a smaller size ("PrintSize")
+     "Print"    a list of rows printed one per "Interval" in a smaller size ("PrintSize")
      "Caption"  typed at the bottom of the screen in large type, captions stacking upward
    Glow and scanlines can be switched off; "Screen" -> {x, y, w, h} places the glass. *)
-Terminal[lines_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[Terminal]]},
-    makeLayer["Terminal", {t0, t1}, Function[t, terminalDraw[lines, t, {t0, t1}, atTime[o, t]]],
+TerminalSession[lines_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = toolOptions[{opts}, TerminalSession]},
+    makeElement["TerminalSession", {t0, t1}, Function[t, terminalDraw[lines, t, {t0, t1}, drawOptions[{opts}, TerminalSession, t]]],
         <|"Foley" -> Join @@ Cases[lines, {at_, s_String, kind : ("Input" | "Caption") : "Input"} :>
             keystrokes[at, ov[o, If[kind === "Input", "TypeTime", "CaptionTime"]], StringLength[s]]]|>]];
 
 glowText[s_, {x_, y_}, f_, c_, glow_] := {If[glow, CanvasOpacity[0.18, Table[CanvasText[s, {x, y} + d, f, RGBColor["#39FF6A"]], {d, {{-2, 0}, {2, 0}, {0, -2}, {0, 2}}}]], {}],
     CanvasText[s, {x, y}, f, c]};
 
-terminalDraw[lines_, t_, {t0_, t1_}, o_] := Module[{W = $CanvasSize[[1]], H = $CanvasSize[[2]], sx, sy, sw, sh, x0, y, f = layerFont[o, "Terminal"],
+terminalDraw[lines_, t_, {t0_, t1_}, o_] := Module[{W = $canvasSize[[1]], H = $canvasSize[[2]], sx, sy, sw, sh, x0, y, f = layerFont[o, "Terminal"],
     ph = ov[o, FontColor], glow = TrueQ[ov[o, "Glow"]], on, off1, off2, caps, capY},
     {sx, sy, sw, sh} = Replace[ov[o, "Screen"], Automatic -> {150, 70, W - 300, H - 190}];
     x0 = sx + 90; y = sy + 90;
@@ -42,11 +42,11 @@ terminalDraw[lines_, t_, {t0_, t1_}, o_] := Module[{W = $CanvasSize[[1]], H = $C
     caps = Select[lines, Length[#] >= 3 && #[[3]] === "Caption" &];
     {CanvasRectangle[{0, 0, W, H}, ov[o, "Bezel"]],
      CanvasTransform[CanvasTranslate[{W / 2, sy + sh / 2}] . CanvasScale[{1 - 0.998 off2, Max[0.002, on (1 - 0.995 off1)]}] . CanvasTranslate[{-W / 2, -sy - sh / 2}], {
-        CanvasRectangle[{sx, sy, sw, sh}, ov[o, "Background"], "Radius" -> 38],
+        CanvasRectangle[{sx, sy, sw, sh}, ov[o, Background], "Radius" -> 38],
         Table[If[t < l[[1]], Nothing, Switch[If[Length[l] >= 3, l[[3]], "Input"],
             "Input", {glowText[TypedText[l[[2]], localU[t, l[[1]], l[[1]] + ov[o, "TypeTime"]]], {x0, y}, f, ph, glow], y += ov[o, "LineHeight"]}[[1]],
             "Output", {glowText[l[[2]], {x0, y}, f, Blend[{ph, White}, 0.3], glow], y += ov[o, "LineHeight"] + ov[o, "OutputGap"]}[[1]],
-            "Print", With[{ps = ov[o, "PrintSize"]}, {MapIndexed[If[t < l[[1]] + (#2[[1]] - 1) ov[o, "PrintInterval"], Nothing,
+            "Print", With[{ps = ov[o, "PrintSize"]}, {MapIndexed[If[t < l[[1]] + (#2[[1]] - 1) ov[o, "Interval"], Nothing,
                 CanvasText[#1, {x0 + 40, y + (#2[[1]] - 1) 0.78 ps}, CanvasFont[f["Family"], ps, 400], Blend[{ph, White}, 0.25]]] &, l[[2]]],
                 y += Length[l[[2]]] 0.78 ps + 20}[[1]]],
             _, Nothing]], {l, lines}],
@@ -64,8 +64,8 @@ terminalDraw[lines_, t_, {t0_, t1_}, o_] := Module[{W = $CanvasSize[[1]], H = $C
 (* ::Subsection:: *)
 (*NotebookSession*)
 
-Options[NotebookSession] = Join[{"Era" -> "Mac1988", "Screen" -> {88, 176, 1100, 780}, "Title" -> "Untitled-1", "Evaluate" -> False,
-    "TypeTime" -> 0.25, "OutputDelay" -> 0.3, "Enter" -> "Burst", "EnterTime" -> 0.22, "Pulse" -> None, "PushIn" -> 0.03, "Shadow" -> True, "Frames" -> Automatic, "From" -> None, "Dim" -> None, "Hide" -> {}, "GraphicsSize" -> Automatic, "Extras" -> Automatic, "ChatBar" -> None}, $LayerOptions];
+Options[NotebookSession] = elementOptions[{"Era" -> "Mac1988", "Screen" -> {88, 176, 1100, 780}, "Title" -> "Untitled-1", "Evaluate" -> False,
+    "TypeTime" -> 0.25, "OutputDelay" -> 0.3, "Enter" -> "Burst", "EnterTime" -> 0.22, "Pulse" -> None, "PushIn" -> 0.03, "Shadow" -> True, "Frames" -> Automatic, "From" -> None, "Dim" -> None, "Hide" -> {}, "GraphicsSize" -> Automatic, "Extras" -> Automatic, "ChatBar" -> None}];
 
 (* NotebookSession[{cell, ...}, {t0, t1}] is a notebook window of its era, typing and evaluating on the
    clock.  Cells:
@@ -82,11 +82,11 @@ Options[NotebookSession] = Join[{"Era" -> "Mac1988", "Screen" -> {88, 176, 1100,
    In/Out numbers count up automatically.  "Enter" -> "Burst" grows the window out of the middle;
    "Pulse" -> track punches it on the track's onsets; "PushIn" is the slow zoom across the span; "Hide" -> {{ta, tb}, ...} takes the window off
    screen for an interlude and bursts it back after. *)
-NotebookSession[cells_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = fromSnapshot[Join[{opts}, Options[NotebookSession]], t0]},
+NotebookSession[cells_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{e = sessionOptions[{opts}, t0]}, With[{o = toolOptions[e, NotebookSession]},
     With[{era = NotebookEra[ov[o, "Era"]]}, With[{cs = sessionCells[cells, era, o]},
         With[{screen = Function[t, sessionScreen[cs, era, Min[t, t1 - 10^-3], o]]},
-            makeLayer["NotebookSession", {t0, t1}, Function[t, sessionDraw[screen, t, {t0, t1}, atTime[o, t]]], <|"Screen" -> screen, "Foley" -> Join[sessionFoley[cs],
-                Replace[ov[o, "ChatBar"], {{tb_, txt_String, dur_, sent_} :> Append[keystrokes[tb, dur, StringLength[txt]], {sent, "Tick", 1}], _ -> {}}]]|>]]]]];
+            makeElement["NotebookSession", {t0, t1}, Function[t, sessionDraw[screen, t, {t0, t1}, drawOptions[e, NotebookSession, t]]], <|"Screen" -> screen, "Foley" -> Join[sessionFoley[cs],
+                Replace[ov[o, "ChatBar"], {{tb_, txt_String, dur_, sent_} :> Append[keystrokes[tb, dur, StringLength[txt]], {sent, "Tick", 1}], _ -> {}}]]|>]]]]]];
 (* typing each input, return on its last key, a blip as each output appears *)
 sessionFoley[cs_] := Join @@ Map[Switch[#["kind"],
     "In", Append[keystrokes[#["at"], #["type"], StringLength[#["text"]]], {#["at"] + #["type"] + 1/16, "Tick", 1}],
@@ -95,9 +95,11 @@ sessionFoley[cs_] := Join @@ Map[Switch[#["kind"],
     "Out" | "Pic", If[TrueQ[#["input"]], {}, {{#["at"], "Blip", 1}}],
     _, {}] &, cs];
 
-(* a wipe only needs the previous window's last picture, so keep that instead of the whole previous
-   session (which would carry its own predecessor, and so on down the film) *)
-fromSnapshot[o_, t0_] := Replace[o, ("From" -> l_TimelineLayer) :> ("From" -> <|"Screen" -> First[l]["Screen"][t0 - 10^-3]|>), {1}];
+(* "From" -> previous session wipes this era in over the last picture of the previous one ("Enter" ->
+   "Wipe" in a tenth of a cycle, unless told otherwise).  A wipe only needs that picture, so it is kept
+   instead of the whole previous session (which would carry its own predecessor, and so on down the film) *)
+sessionOptions[opts_List, t0_] := With[{o = Replace[opts, ("From" -> g_AnimatedGraphics) :> ("From" -> <|"Screen" -> g["Screen"][t0 - 10^-3]|>), {1}]},
+    If[MatchQ[ov[o, "From"], _Association] && MissingQ[ov[o, "Enter"]], Join[o, {"Enter" -> "Wipe", "EnterTime" -> Replace[ov[o, "EnterTime"], _Missing -> 0.1]}], o]];
 
 (* number the cells, add evaluated outputs, turn expressions into pictures once *)
 sessionCells[cells_, era_, o_] := Module[{n = 0, out = {}},

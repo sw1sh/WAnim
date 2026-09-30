@@ -3,47 +3,27 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{Stage, Tween, Morph, PartialPath}]
+PackageExported[{Easing, Tween, Morph, PartialPath}]
 
 
 (* ::Section:: *)
-(*Stage: ordinary graphics in math coordinates*)
+(*Easing*)
 
-Options[Stage] = Join[{PlotRange -> {{-64/9, 64/9}, {-4, 4}}, "Screen" -> Automatic, Background -> None,
-    FontFamily -> "Source Sans 3", FontSize -> 72, FontColor -> White, "Thickness" -> 4, "Enter" -> "Cut", "Exit" -> "Cut"}, $LayerOptions];
-
-(* Stage[f, {t0, t1}] draws f[t] -- ordinary graphics primitives in math coordinates, origin at the
-   centre of a 14.2 x 8 frame by default, as a Manim scene has them -- over the canvas ("Screen" ->
-   {x, y, w, h} puts it in a canvas rectangle).  f[t] may also be a Graphics3D, filling the stage.
-   PlotRange may be a function of time: a camera that pans and zooms; so may "Screen": a display
-   that moves and grows.
-   Sizes are in pixels of a 1080p frame and scale with it (Manim's font size 48 reads as about 72): FontSize -> n, Style[s, n],
-   AbsoluteThickness[n], AbsolutePointSize[n]; text is FontColor on FontFamily at FontSize, lines
-   "Thickness" pixels wide, unless the primitives say otherwise. *)
-Stage[f_, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[Stage]], g = If[Head[f] === Function, f, Function[t, f]]},
-    makeLayer["Stage", {t0, t1}, Function[t, stageDraw[g, t, t0, atTime[o, t]]]]];
-
-stageDraw[f_, t_, t0_, o_] := Module[{r = Replace[ov[o, "Screen"], {Automatic -> {0, 0, $CanvasSize[[1]], $CanvasSize[[2]]}, c : Except[_List] :> c[t]}], p0, p1, w, g = f[t] /. obj_AnimatedObject :> obj["Update", t - t0]["Graphics"], pr = Replace[ov[o, PlotRange], c : Except[_List] :> c[t]]},
-    p0 = cxf[{r[[1]], r[[2]] + r[[4]]}]; p1 = cxf[{r[[1]] + r[[3]], r[[2]]}]; w = r[[3]] cscaleX[];
-    Inset[If[Head[g] === Graphics3D,
-            Show[g, AspectRatio -> r[[4]] / r[[3]], ImagePadding -> None, Background -> Replace[ov[o, Background], None -> Lookup[Options[g], Background, None]]],
-            Graphics[{ov[o, FontColor], Thickness[ov[o, "Thickness"] / w], stagePrims[g, w, pr[[1, 2]] - pr[[1, 1]]]}, PlotRange -> pr, AspectRatio -> (pr[[2, 2]] - pr[[2, 1]]) / (pr[[1, 2]] - pr[[1, 1]]),
-                PlotRangePadding -> None, ImagePadding -> None, PlotRangeClipping -> True, Background -> ov[o, Background],
-                BaseStyle -> {FontFamily -> ov[o, FontFamily], FontSize -> Scaled[ov[o, FontSize] / w], FontColor -> ov[o, FontColor]}]],
-        p0, {Left, Bottom}, p1[[1]] - p0[[1]]]];
-(* pixel sizes -> fractions of the stage width, so a frame keeps its proportions at any size; an
-   inset Graphics (a Plot, AxisObject axes) gets the same treatment relative to its own width, with a
-   default text size for its tick labels *)
-stagePrims[g_, w_, prw_] := g /. Join[{
-    Inset[gr_Graphics, pos_, opos_, size : (_ ? NumericQ | {_ ? NumericQ, _}), rest___] :>
-        With[{px = w First[Flatten[{size}]] / prw}, Inset[Show[gr /. sizeRules[px], BaseStyle -> Join[{FontSize -> Scaled[36 / px]}, Flatten[{Lookup[Options[gr /. sizeRules[px]], BaseStyle, {}]}]]], pos, opos, size, rest]]},
-    sizeRules[w]];
-sizeRules[w_] := {
-    (FontSize -> n_ ? NumericQ) :> (FontSize -> Scaled[n / w]),
-    Style[x_, a___, n_ ? NumericQ, b___] :> Style[x, a, FontSize -> Scaled[n / w], b],
-    Directive[a___, n_ ? NumericQ, b___] :> Directive[a, FontSize -> Scaled[n / w], b],
-    AbsoluteThickness[n_ ? NumericQ] :> Thickness[n / w],
-    AbsolutePointSize[n_ ? NumericQ] :> PointSize[n / w]};
+(* The standard easing curves (Penner / easings.net), as pure functions on [0, 1] that clamp their
+   argument.  Usable anywhere a curve is wanted: Easing["OutCubic"][u], Tween[{a, b}, "OutCubic"], or
+   "Easing" -> "OutCubic" on an AnimationEffect.  Easing["OutBack", s] and Easing["OutElastic"] overshoot. *)
+Easing["Linear"] = clampU[#] &;
+Easing["InCubic"] = clampU[#]^3 &;
+Easing["OutCubic"] = 1 - (1 - clampU[#])^3 &;
+Easing["InOutCubic"] = With[{u = clampU[#]}, If[u < 0.5, 4 u^3, 1 - (-2 u + 2)^3 / 2]] &;
+Easing["InExpo"] = With[{u = clampU[#]}, If[u <= 0, 0., 2.^(10 u - 10)]] &;
+Easing["OutExpo"] = With[{u = clampU[#]}, If[u >= 1, 1., 1 - 2.^(-10 u)]] &;
+Easing["InOutExpo"] = With[{u = clampU[#]}, Which[u <= 0, 0., u >= 1, 1., u < 0.5, 2.^(20 u - 10) / 2, True, (2 - 2.^(-20 u + 10)) / 2]] &;
+Easing["OutBack", s_ : 1.7] := With[{u = clampU[#] - 1}, 1 + (s + 1) u^3 + s u^2] &;
+Easing["OutElastic"] = With[{u = clampU[#]}, If[u == 0 || u == 1, u, 2.^(-10 u) Sin[(u 10 - 0.75) 2 Pi / 3] + 1]] &;
+Easing["Smooth"] = With[{u = clampU[#]}, u^2 (3 - 2 u)] &;
+Easing["Names"] = {"Linear", "InCubic", "OutCubic", "InOutCubic", "InExpo", "OutExpo", "InOutExpo", "OutBack", "OutElastic", "Smooth"}
+clampU[u_] := Clip[u, {0, 1}]
 
 
 (* ::Section:: *)

@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/PartialPath
 Keywords: [partial, path, create, draw, outline, Manim Create]
-SeeAlso: [Morph, Tween, Stage]
+SeeAlso: [Morph, Tween]
 RelatedGuides: [WAnim]
 ---
 

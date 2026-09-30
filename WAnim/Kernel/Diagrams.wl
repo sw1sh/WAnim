@@ -9,17 +9,17 @@ PackageExported[{TreeDiagram, TileGrid, WordScroll}]
 (* ::Section:: *)
 (*TreeDiagram*)
 
-Options[TreeDiagram] = Join[{Position -> {1330, 250}, "Width" -> 500, "LevelHeight" -> 130, "LevelInterval" -> 1/4, "NodeInterval" -> 1/20,
+Options[TreeDiagram] = elementOptions[{Position -> {1330, 250}, "Width" -> 500, "LevelHeight" -> 130, "Interval" -> {1/4, 1/20},
     FontFamily -> "Source Code Pro", FontSize -> 38, FontWeight -> 400, FontColor -> RGBColor["#0E0F11"], "HeadColor" -> RGBColor["#DD1100"],
-    "EnterTime" -> 0.15, "ExitTime" -> 0.15}, $LayerOptions];
+    "EnterTime" -> 0.15, "ExitTime" -> 0.15}];
 
 (* TreeDiagram[expr, {t0, t1}] grows the expression's tree from the top: heads (in "HeadColor") above
-   their arguments, one level per "LevelInterval", each node popping in as its edge is drawn down to
-   it.  Position is the root; the leaves spread over "Width".  Hold the expression to keep it
+   their arguments, one level per "Interval" (or {level, node}: nodes of a level a node interval
+   apart), each node popping in as its edge is drawn down to it.  Position is the root; the leaves spread over "Width".  Hold the expression to keep it
    unevaluated: TreeDiagram[Hold[{x -> 1, f[y]}], {t0, t1}]. *)
-TreeDiagram[expr_, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[TreeDiagram]]},
+TreeDiagram[expr_, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = toolOptions[{opts}, TreeDiagram]},
     With[{nodes = treeLayout[Replace[expr, {h_Hold :> nested @@ h, e_ :> nested[e]}], o, t0]},
-        makeLayer["TreeDiagram", {t0, t1}, Function[t, treeDraw[nodes, t, {t0, t1}, atTime[o, t]]]]]];
+        makeElement["TreeDiagram", {t0, t1}, Function[t, treeDraw[nodes, t, {t0, t1}, drawOptions[{opts}, TreeDiagram, t]]]]]];
 
 (* an unevaluated expression as {"head", {child, ...}} with leaves {"atom", None} *)
 SetAttributes[nested, HoldAll];
@@ -32,7 +32,7 @@ treeLayout[tree_, o_, t0_] := Module[{nodes = {}, slot = 0, nLeaves, perLevel = 
     nLeaves = Max[1, Count[tree, {_String, None}, Infinity] + Boole[MatchQ[tree, {_, None}]]];
     walk[{s_, kids_}, depth_, parent_] := Module[{id = Length[nodes] + 1, k = Lookup[perLevel, depth, 0], ids, x},
         perLevel[depth] = k + 1;
-        AppendTo[nodes, <|"Text" -> s, "Head" -> kids =!= None, "Parent" -> parent, "At" -> t0 + depth ov[o, "LevelInterval"] + k ov[o, "NodeInterval"]|>];
+        AppendTo[nodes, <|"Text" -> s, "Head" -> kids =!= None, "Parent" -> parent, "At" -> t0 + depth First[Flatten[{ov[o, "Interval"]}]] + k Last[Flatten[{ov[o, "Interval"], 0}]]|>];
         ids = If[kids === None, {}, walk[#, depth + 1, id] & /@ kids];
         x = If[ids === {}, p[[1]] - w / 2 + w (slot++ + 1/2) / nLeaves, Mean[nodes[[ids, "Point", 1]]]];
         nodes[[id, "Point"]] = {x, p[[2]] + depth ov[o, "LevelHeight"]};
@@ -54,18 +54,18 @@ treeDraw[nodes_, t_, {t0_, t1_}, o_] := Module[{f = layerFont[o, "Mono"], hf, en
 (* ::Section:: *)
 (*TileGrid*)
 
-Options[TileGrid] = Join[{Position -> {96, 250}, "Columns" -> 4, "TileSize" -> {400, 330}, "Gap" -> {36, 60}, "Interval" -> 1/4, "Pulse" -> None,
+Options[TileGrid] = elementOptions[{Position -> {96, 250}, "Columns" -> 4, "TileSize" -> {400, 330}, "Gap" -> {36, 60}, "Interval" -> 1/4, "Pulse" -> None,
     "Frames" -> Automatic, "Period" -> 2, FontFamily -> "Source Code Pro", FontSize -> 24, FontColor -> RGBColor["#0E0F11"], "NoteColor" -> RGBColor["#DD1100"],
-    "Enter" -> "Pop", "EnterTime" -> 0.12, "Exit" -> "Fade"}, $LayerOptions];
+    "Enter" -> "Pop", "EnterTime" -> 0.12, "Exit" -> "Fade"}];
 
 (* TileGrid[{{label, content, note}, ...}, {t0, t1}] deals out white cards, one per "Interval", in rows
    of "Columns" from Position (the top-left corner), a label under each and a note at its right.
    content is anything the front end can show (a plot, an image) or a function u |-> expr, which
    plays as a loop over "Period" -- a surface turning.  "Pulse" -> track punches the newest card on
    the track's onsets. *)
-TileGrid[tiles_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[TileGrid]]},
+TileGrid[tiles_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = toolOptions[{opts}, TileGrid]},
     With[{pics = tilePictures[#[[2]], o] & /@ tiles},
-        makeLayer["TileGrid", {t0, t1}, Function[t, tileGridDraw[tiles, pics, t, {t0, t1}, atTime[o, t]]]]]];
+        makeElement["TileGrid", {t0, t1}, Function[t, tileGridDraw[tiles, pics, t, {t0, t1}, drawOptions[{opts}, TileGrid, t]]]]]];
 
 (* each tile's content as a list of frames, rasterized once at the card's size *)
 tilePictures[f_Function, o_] := Table[tilePicture[f[u], o], {u, Most[Subdivide[0., 1., Replace[ov[o, "Frames"], Automatic :> Ceiling[40 ov[o, "Period"]]]]]}];
@@ -94,15 +94,15 @@ tileGridDraw[tiles_, pics_, t_, {t0_, t1_}, o_] := Module[{p = layerPoint[ov[o, 
 (* ::Section:: *)
 (*WordScroll*)
 
-Options[WordScroll] = Join[{"Columns" -> {60, 400, 740, 1080, 1420, 1760}, "Speed" -> 260, "LineHeight" -> 30, "Start" -> 1150,
-    FontFamily -> "Source Code Pro", FontSize -> 17, FontWeight -> 400, FontColor -> RGBColor["#0E0F11"], "Opacity" -> {0.1, 0.16}}, $LayerOptions];
+Options[WordScroll] = elementOptions[{"Columns" -> {60, 400, 740, 1080, 1420, 1760}, "Speed" -> 260, "LineHeight" -> 30, "Start" -> 1150,
+    FontFamily -> "Source Code Pro", FontSize -> 17, FontWeight -> 400, FontColor -> RGBColor["#0E0F11"], Opacity -> {0.1, 0.16}}];
 
 (* WordScroll[{word, ...}, {t0, t1}] rolls words up the frame in columns like credits, faintly: a
    backdrop of a whole family of names.  "Speed" is pixels per unit; each word's faintness is fixed
-   by its name within the "Opacity" range. *)
-WordScroll[words_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[WordScroll]]},
-    makeLayer["WordScroll", {t0, t1}, Function[t, wordScrollDraw[words, t, {t0, t1}, atTime[o, t]]]]];
-wordScrollDraw[words_, t_, {t0_, t1_}, o_] := Module[{cols = ov[o, "Columns"], f = layerFont[o, "Mono"], scroll = (t - t0) ov[o, "Speed"], env = envelope[t, {t0, t1}, o], op = ov[o, "Opacity"]},
+   by its name within the Opacity range. *)
+WordScroll[words_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = toolOptions[{opts}, WordScroll]},
+    makeElement["WordScroll", {t0, t1}, Function[t, wordScrollDraw[words, t, {t0, t1}, drawOptions[{opts}, WordScroll, t]]]]];
+wordScrollDraw[words_, t_, {t0_, t1_}, o_] := Module[{cols = ov[o, "Columns"], f = layerFont[o, "Mono"], scroll = (t - t0) ov[o, "Speed"], env = envelope[t, {t0, t1}, o], op = ov[o, Opacity]},
     CanvasOpacity[env["Alpha"], MapIndexed[With[{y = ov[o, "Start"] + Quotient[#2[[1]] - 1, Length[cols]] ov[o, "LineHeight"] - scroll},
-        If[-20 < y < $CanvasSize[[2]] + 20, CanvasText[#1, {cols[[Mod[#2[[1]] - 1, Length[cols]] + 1]], y}, f, ov[o, FontColor],
+        If[-20 < y < $canvasSize[[2]] + 20, CanvasText[#1, {cols[[Mod[#2[[1]] - 1, Length[cols]] + 1]], y}, f, ov[o, FontColor],
             Opacity -> op[[1]] + (op[[2]] - op[[1]]) Mod[Hash[#1], 1000] / 1000.], {}]] &, words]]];

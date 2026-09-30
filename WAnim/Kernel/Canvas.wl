@@ -4,44 +4,62 @@
 (*PackageExported*)
 
 PackageExported[{
-    CanvasBlock, CanvasTransform, CanvasOpacity, CanvasTranslate, CanvasScale, CanvasRotate, $CanvasSize,
-    CanvasRectangle, CanvasPolygon, CanvasLine, CanvasDisk, CanvasImage, CanvasGradient, CanvasClip,
-    CanvasFont, CanvasText, CanvasTextWidth, CanvasWrap, $CanvasFixedAdvance,
+    CanvasTransform, CanvasOpacity, CanvasTranslate, CanvasScale, CanvasRotate,
+    CanvasRectangle, CanvasPolygon, CanvasLine, CanvasDisk, CanvasImage, CanvasGradient, CanvasClip, CanvasScreen,
+    CanvasFont, CanvasText, CanvasTextWidth, CanvasWrap,
     TypedText, OrderedDither
 }]
 
-(* shared with Timeline.wl (CanvasScreen places a screen by its canvas rectangle) *)
-PackageScoped[{cxf, cscaleX}]
+(* the renderer draws canvas primitives on a canvas of its size *)
+PackageScoped[{$canvasSize, canvasResolve, canvasPrimitiveQ, cxf}]
 
 
 (* ::Section:: *)
 (*A canvas-2D drawing kit*)
 
-(* Pixel-exact 2D drawing the way an HTML canvas does it, emitting ordinary WL graphics primitives.
-   Coordinates are CANVAS coordinates -- x right, y DOWN, in pixels of a $CanvasSize frame (the
-   Timeline sets it while drawing a frame) -- so a scene written for a canvas ports line by line.
-   CanvasTransform / CanvasOpacity nest like ctx.save + translate / scale / rotate / globalAlpha:
+(* Pixel-exact 2D drawing the way an HTML canvas does it.  Coordinates are CANVAS coordinates -- x
+   right, y DOWN, in pixels of the frame an AnimatedGraphics draws on (its "CanvasSize", 1920 x 1080
+   by default) -- so a scene written for a canvas ports line by line.  The primitives are symbolic,
+   like Graphics primitives: CanvasRectangle[...] stays as it is until a frame is drawn, when the
+   renderer turns it into ordinary graphics in whatever coordinates the frame has (the canvas is laid
+   over its PlotRange, the way Scaled coordinates are).  CanvasTransform / CanvasOpacity nest like
+   ctx.save + translate / scale / rotate / globalAlpha:
 
      CanvasTransform[CanvasTranslate[{960, 540}] . CanvasScale[2], {CanvasRectangle[{-10, -10, 20, 20}, Red], ...}]
 
    Text is anchored on its ALPHABETIC BASELINE, measured with per-face advance tables built once
-   through the front end, and scales with the transform (plain Scale / GeometricTransformation
-   would move Text without resizing it). *)
+   through the front end, and scales with the transform. *)
 
-$CanvasSize = {1920, 1080};
+$canvasSize = {1920, 1080};
 $canvasXF = IdentityMatrix[3];
 $canvasAlpha = 1.;
 (* Font sizes and line widths are emitted as Scaled fractions of the enclosing graphic's width, so a
-   frame keeps its proportions at any ImageSize (a live player, a thumbnail); $canvasRef is that width
+   frame keeps its proportions at any ImageSize (a thumbnail, a video frame); $canvasRef is that width
    in WL units -- the canvas width, or a CanvasClip inset's own width inside one. *)
-$canvasRef := $CanvasSize[[1]];
+$canvasRef := $canvasSize[[1]];
 
-SetAttributes[{CanvasBlock, CanvasTransform, CanvasOpacity, CanvasClip}, HoldRest];
-(* a fresh canvas of the given size: own coordinates, identity transform, full opacity *)
-CanvasBlock[size : {_, _}, body_] := Block[{$CanvasSize = size, $canvasXF = IdentityMatrix[3], $canvasAlpha = 1., $canvasRef = size[[1]]}, body];
-CanvasTransform[m_ ? MatrixQ, body_] := Block[{$canvasXF = $canvasXF . m}, body];
-CanvasTransform[tf_TransformationFunction, body_] := CanvasTransform[TransformationMatrix[tf], body];
-CanvasOpacity[a_, body_] := Block[{$canvasAlpha = $canvasAlpha a}, body];
+$canvasPattern = Alternatives @@ (Blank /@ {CanvasTransform, CanvasOpacity, CanvasClip, CanvasScreen, CanvasRectangle, CanvasPolygon, CanvasLine, CanvasDisk, CanvasImage, CanvasGradient, CanvasText});
+canvasPrimitiveQ[e_] := ! FreeQ[e, $canvasPattern];
+
+(* canvasResolve[size, expr] turns every canvas primitive in expr into graphics primitives, drawn on a
+   fresh size canvas (identity transform, full opacity); anything else is left as it is *)
+SetAttributes[canvasResolve, HoldRest];
+canvasResolve[size : {_, _}, expr_] := Block[{$canvasSize = size, $canvasXF = IdentityMatrix[3], $canvasAlpha = 1., $canvasRef = size[[1]]}, rc[expr]];
+rc[l_List] := rc /@ l;
+rc[CanvasTransform[m_, body_]] := Block[{$canvasXF = $canvasXF . toMatrix[m]}, rc[body]];
+rc[CanvasOpacity[a_, body_]] := Block[{$canvasAlpha = $canvasAlpha a}, rc[body]];
+rc[CanvasClip[r_, body_]] := clipImpl[r, body];
+rc[CanvasScreen[args__]] := screenImpl[args];
+rc[CanvasRectangle[args__]] := rectImpl[args];
+rc[CanvasPolygon[args__]] := polygonImpl[args];
+rc[CanvasLine[args__]] := lineImpl[args];
+rc[CanvasDisk[args__]] := diskImpl[args];
+rc[CanvasImage[args__]] := imageImpl[args];
+rc[CanvasGradient[args__]] := gradientImpl[args];
+rc[CanvasText[args__]] := textImpl[args];
+rc[x_] := x;
+toMatrix[m_ ? MatrixQ] := m;
+toMatrix[tf_TransformationFunction] := TransformationMatrix[tf];
 
 CanvasTranslate[{dx_, dy_}] := {{1, 0, dx}, {0, 1, dy}, {0, 0, 1}};
 CanvasScale[s_ ? NumericQ] := CanvasScale[{s, s}];
@@ -50,7 +68,7 @@ CanvasScale[s_, {cx_, cy_}] := CanvasTranslate[{cx, cy}] . CanvasScale[s] . Canv
 CanvasRotate[a_] := {{Cos[a], -Sin[a], 0}, {Sin[a], Cos[a], 0}, {0, 0, 1}};   (* clockwise on screen, like ctx.rotate *)
 
 (* canvas point -> WL point *)
-cxf[{x_, y_}] := With[{p = $canvasXF . {x, y, 1.}}, {p[[1]], $CanvasSize[[2]] - p[[2]]}];
+cxf[{x_, y_}] := With[{p = $canvasXF . {x, y, 1.}}, {p[[1]], $canvasSize[[2]] - p[[2]]}];
 cscale[] := Sqrt[Abs[Det[$canvasXF[[;; 2, ;; 2]]]]];
 cscaleX[] := Norm[$canvasXF[[;; 2, 1]]]; cscaleY[] := Norm[$canvasXF[[;; 2, 2]]];
 cangle[] := ArcTan[$canvasXF[[1, 1]], $canvasXF[[2, 1]]];
@@ -70,7 +88,7 @@ paint[c_, a_ : 1] := With[{al = Clip[$canvasAlpha a, {0, 1}]}, If[al >= 1, toCol
 
 (* CanvasRectangle[{x, y, w, h}, colour]: filled, or outlined with "Stroke" -> width; "Radius" rounds the corners *)
 Options[CanvasRectangle] = {Opacity -> 1, "Stroke" -> None, "Radius" -> 0};
-CanvasRectangle[{x_, y_, w_, h_}, c_, opts : OptionsPattern[]] := With[{a = OptionValue[Opacity], s = OptionValue["Stroke"], r = OptionValue["Radius"]},
+rectImpl[{x_, y_, w_, h_}, c_, opts : OptionsPattern[CanvasRectangle]] := With[{a = OptionValue[CanvasRectangle, {opts}, Opacity], s = OptionValue[CanvasRectangle, {opts}, "Stroke"], r = OptionValue[CanvasRectangle, {opts}, "Radius"]},
     Which[
         r > 0,   (* exact when the transform is a translation / uniform scale *)
         With[{rect = Rectangle[cxf[{x, y + h}], cxf[{x + w, y}], RoundingRadius -> Min[r, w / 2, h / 2] cscale[]]},
@@ -80,27 +98,26 @@ CanvasRectangle[{x_, y_, w_, h_}, c_, opts : OptionsPattern[]] := With[{a = Opti
     ]];
 (* "Edge" -> colour outlines the face thinly in the same primitive: the seams of a mesh disappear, or show as lines *)
 Options[CanvasPolygon] = {Opacity -> 1, "Stroke" -> None, "Edge" -> None};
-CanvasPolygon[pts_, c_, opts : OptionsPattern[]] := With[{a = OptionValue[Opacity], s = OptionValue["Stroke"], e = OptionValue["Edge"]},
+polygonImpl[pts_, c_, opts : OptionsPattern[CanvasPolygon]] := With[{a = OptionValue[CanvasPolygon, {opts}, Opacity], s = OptionValue[CanvasPolygon, {opts}, "Stroke"], e = OptionValue[CanvasPolygon, {opts}, "Edge"]},
     If[s === None, {If[e === None, EdgeForm[], EdgeForm[Directive[paint[e, a], AbsoluteThickness[0.6]]]], FaceForm[paint[c, a]], Polygon[cxf /@ pts]},
         {paint[c, a], thick[s], JoinForm["Round"], Line[cxf /@ Append[pts, First[pts]]]}]];
 Options[CanvasLine] = {Opacity -> 1, "Thickness" -> 1};
-CanvasLine[pts_, c_, opts : OptionsPattern[]] := {paint[c, OptionValue[Opacity]], thick[OptionValue["Thickness"]], CapForm["Round"], Line[cxf /@ pts]};
+lineImpl[pts_, c_, opts : OptionsPattern[CanvasLine]] := {paint[c, OptionValue[CanvasLine, {opts}, Opacity]], thick[OptionValue[CanvasLine, {opts}, "Thickness"]], CapForm["Round"], Line[cxf /@ pts]};
 Options[CanvasDisk] = {Opacity -> 1, "Stroke" -> None};
-CanvasDisk[{x_, y_}, r_, c_, opts : OptionsPattern[]] := With[{p = cxf[{x, y}], rr = {r cscaleX[], r cscaleY[]}},
-    If[OptionValue["Stroke"] === None, {EdgeForm[], FaceForm[paint[c, OptionValue[Opacity]]], Disk[p, rr]},
-        {paint[c, OptionValue[Opacity]], thick[OptionValue["Stroke"]], Circle[p, rr]}]];
+diskImpl[{x_, y_}, r_, c_, opts : OptionsPattern[CanvasDisk]] := With[{p = cxf[{x, y}], rr = {r cscaleX[], r cscaleY[]}, a = OptionValue[CanvasDisk, {opts}, Opacity], s = OptionValue[CanvasDisk, {opts}, "Stroke"]},
+    If[s === None, {EdgeForm[], FaceForm[paint[c, a]], Disk[p, rr]}, {paint[c, a], thick[s], Circle[p, rr]}]];
 
 (* a colour fading across a rectangle: stops {{u, opacity}, ...} along "Horizontal" or "Vertical",
    drawn as thin strips (LinearGradientFilling has no per-stop opacity) *)
 Options[CanvasGradient] = {"Steps" -> 24};
-CanvasGradient[{x_, y_, w_, h_}, dir_, c_, stops_, opts : OptionsPattern[]] := With[{n = OptionValue["Steps"], f = Interpolation[stops, InterpolationOrder -> 1]},
+gradientImpl[{x_, y_, w_, h_}, dir_, c_, stops_, opts : OptionsPattern[CanvasGradient]] /; ! MatchQ[c, {{_ ? NumericQ, _} ..}] := With[{n = OptionValue[CanvasGradient, {opts}, "Steps"], f = Interpolation[stops, InterpolationOrder -> 1]},
     Table[With[{u0 = (i - 1) / n, a = f[(i - 1 / 2) / n]},
-        If[dir === "Horizontal", CanvasRectangle[{x + w u0, y, w / n + 0.6, h}, c, Opacity -> a], CanvasRectangle[{x, y + h u0, w, h / n + 0.6}, c, Opacity -> a]]],
+        If[dir === "Horizontal", rectImpl[{x + w u0, y, w / n + 0.6, h}, c, Opacity -> a], rectImpl[{x, y + h u0, w, h / n + 0.6}, c, Opacity -> a]]],
         {i, n}]];
 
 (* CanvasGradient[rect, dir, {{u, colour}, ...}] blends colours instead, exactly, as vertex-coloured
    bands; dir may also be "Diagonal" (top-left to bottom-right) *)
-CanvasGradient[{x_, y_, w_, h_}, dir_, stops : {{_ ? NumericQ, _ ? ColorQ | _String} ..}] := Module[
+gradientImpl[{x_, y_, w_, h_}, dir_, stops : {{_ ? NumericQ, _ ? ColorQ | _String} ..}] := Module[
     {st = {#1, toColor[#2]} & @@@ SortBy[stops, First], col, us, vs},
     col[u_] := Blend[st, Clip[u, {st[[1, 1]], st[[-1, 1]]}]];
     us = Union[{0, 1}, Select[st[[All, 1]], 0 < # < 1 &]];
@@ -114,17 +131,17 @@ CanvasGradient[{x_, y_, w_, h_}, dir_, stops : {{_ ? NumericQ, _ ? ColorQ | _Str
 quad[{x_, y_, w_, h_}, cs_] := {If[$canvasAlpha < 1, cop[], Nothing], EdgeForm[], Polygon[cxf /@ {{x, y}, {x + w + 0.4, y}, {x + w + 0.4, y + h + 0.4}, {x, y + h + 0.4}}, VertexColors -> cs]};
 
 (* draw only inside a canvas rectangle (ctx.clip): the body goes into an inset whose plot range is the rect *)
-CanvasClip[{x_, y_, w_, h_}, body_] := With[{p0 = cxf[{x, y + h}], p1 = cxf[{x + w, y}]},
-    Inset[Graphics[Block[{$canvasRef = p1[[1]] - p0[[1]]}, body], PlotRange -> Transpose[{p0, p1}], PlotRangePadding -> None, ImagePadding -> None, PlotRangeClipping -> True,
+clipImpl[{x_, y_, w_, h_}, body_] := With[{p0 = cxf[{x, y + h}], p1 = cxf[{x + w, y}]},
+    Inset[Graphics[Block[{$canvasRef = p1[[1]] - p0[[1]]}, rc[body]], PlotRange -> Transpose[{p0, p1}], PlotRangePadding -> None, ImagePadding -> None, PlotRangeClipping -> True,
         AspectRatio -> (p1[[2]] - p0[[2]]) / (p1[[1]] - p0[[1]])], p0, p0, p1[[1]] - p0[[1]]]];
 
 (* an image into a canvas rect; "Fit" -> "Contain" letterboxes it like CSS object-fit; rotation is honoured *)
 Options[CanvasImage] = {Opacity -> 1, "Fit" -> "Stretch"};
-CanvasImage[img_Image, {x_, y_, w_, h_}, opts : OptionsPattern[]] := If[OptionValue["Fit"] === "Contain",
+imageImpl[img_Image, {x_, y_, w_, h_}, opts : OptionsPattern[CanvasImage]] := With[{a = OptionValue[CanvasImage, {opts}, Opacity]}, If[OptionValue[CanvasImage, {opts}, "Fit"] === "Contain",
     With[{d = ImageDimensions[img]}, With[{s = Min[w / d[[1]], h / d[[2]]]},
-        CanvasImage[img, {x + (w - d[[1]] s) / 2, y + (h - d[[2]] s) / 2, d[[1]] s, d[[2]] s}, Opacity -> OptionValue[Opacity]]]],
+        imageImpl[img, {x + (w - d[[1]] s) / 2, y + (h - d[[2]] s) / 2, d[[1]] s, d[[2]] s}, Opacity -> a]]],
     With[{p = cxf[{x, y + h}], c = cxf[{x + w / 2, y + h / 2}], ang = cangle[]},
-        {cop[OptionValue[Opacity]], If[Abs[ang] < 10^-6, #, Rotate[#, -ang, c]] &[Inset[img, p, {Left, Bottom}, {w cscaleX[], h cscaleY[]}]]}]];
+        {cop[a], If[Abs[ang] < 10^-6, #, Rotate[#, -ang, c]] &[Inset[img, p, {Left, Bottom}, {w cscaleX[], h cscaleY[]}]]}]]];
 
 
 (* ::Section:: *)
@@ -152,9 +169,9 @@ faceMetrics[f_] := Lookup[$metrics, Key[faceKey[f]], measureFace[f]];
 
 (* Some faces are laid out differently by the front end than by a browser (VT323 ~18% wider):
    pin their advance per 1 px here and they are drawn glyph by glyph, centred in canvas cells. *)
-$CanvasFixedAdvance = <|"VT323" -> 0.4|>;
+$canvasFixedAdvance = <|"VT323" -> 0.4|>;
 $scaledFonts = True;
-charAdv[f_, c_] := If[KeyExistsQ[$CanvasFixedAdvance, f["Family"]], $CanvasFixedAdvance[f["Family"]],
+charAdv[f_, c_] := If[KeyExistsQ[$canvasFixedAdvance, f["Family"]], $canvasFixedAdvance[f["Family"]],
     Lookup[faceMetrics[f]["Adv"], c, $metrics[faceKey[f]]["Adv", c] = bbox[c, f][[1]] / 100.]];
 
 (* width in canvas px, like ctx.measureText (no kerning); "Tracking" adds letter spacing *)
@@ -172,8 +189,8 @@ textPrim[s_, {x_, y_}, f_, c_, align_, a_] := Module[{size = snapSize[f["Size"] 
 
 (* CanvasText[s, {x, y}, font, colour] draws s with its alphabetic baseline at canvas (x, y) *)
 Options[CanvasText] = {Alignment -> Left, Opacity -> 1, "Tracking" -> 0};
-CanvasText[s_String, {x_, y_}, f_Association, c_, opts : OptionsPattern[]] := Module[{al = OptionValue[Alignment], a = OptionValue[Opacity], tr = OptionValue["Tracking"],
-    fixed = KeyExistsQ[$CanvasFixedAdvance, f["Family"]], cx},
+textImpl[s_String, {x_, y_}, f_Association, c_, opts : OptionsPattern[CanvasText]] := Module[{al = OptionValue[CanvasText, {opts}, Alignment], a = OptionValue[CanvasText, {opts}, Opacity], tr = OptionValue[CanvasText, {opts}, "Tracking"],
+    fixed = KeyExistsQ[$canvasFixedAdvance, f["Family"]], cx},
     Which[
         s === "", {},
         tr == 0 && ! fixed, textPrim[s, {x, y}, f, c, al, a],
@@ -199,6 +216,41 @@ wrapPara[para_, f_, w_, "Code"] := Module[{out = {}, cur = ""},
             With[{k = Max[1, LengthWhile[Range[StringLength[cur]], CanvasTextWidth[StringTake[cur, #], f] <= w &]]}, AppendTo[out, StringTake[cur, k]]; cur = StringDrop[cur, k]]],
         {p, StringCases[para, RegularExpression["[^ ,\\[]+[ ,\\[]*|[ ,\\[]+"]]}];
     Append[out, cur]];
+
+
+(* ::Section:: *)
+(*Old screens: drawn at a low resolution, quantized, upscaled nearest-neighbour*)
+
+(* CanvasScreen[{x, y, w, h}, f] is a display placed in a canvas rectangle, drawn by f[lw, lh] -- canvas
+   primitives on the screen's own logical canvas, lw x lh = the rectangle / "Pixel" -- as an old
+   display would show it:
+     "Pixel" -> k       a logical pixel is k canvas pixels
+     "Depth" -> "Full"  vector, just magnified (crisp at any zoom)
+              | "Bit"   1-bit: luminance threshold (default 160/255), pictures should arrive pre-dithered
+              | "Gray4" four greys (NeXT MegaPixel levels 0, 104, 184, 255)
+              | "Color" rasterized at the low resolution, colour kept *)
+Options[CanvasScreen] = {"Pixel" -> 2, "Depth" -> "Full", Background -> White, "Threshold" -> 160 / 255};
+screenImpl[{x_, y_, w_, h_}, f_, opts : OptionsPattern[CanvasScreen]] := With[{k = OptionValue[CanvasScreen, {opts}, "Pixel"], depth = OptionValue[CanvasScreen, {opts}, "Depth"],
+        bg = OptionValue[CanvasScreen, {opts}, Background], p0 = cxf[{x, y + h}], p1 = cxf[{x + w, y}]},
+    With[{lw = Round[w / k], lh = Round[h / k], ow = p1[[1]] - p0[[1]], oh = p1[[2]] - p0[[2]]},
+        With[{prims = canvasResolve[{lw, lh}, f[lw, lh]]},
+            If[depth === "Full",
+                Inset[Graphics[prims, PlotRange -> {{0, lw}, {0, lh}}, ImageSize -> {ow, oh}, AspectRatio -> oh / ow, Background -> bg,
+                    PlotRangePadding -> None, ImagePadding -> None, PlotRangeClipping -> True], p0, {Left, Bottom}, {ow, oh}],
+                Inset[screenImage[prims, {lw, lh}, depth, bg, OptionValue[CanvasScreen, {opts}, "Threshold"], Ceiling[k]], p0, {Left, Bottom}, {ow, oh}]]]]];
+
+(* the screen's picture: rasterized at its logical resolution, quantized, and blown up (nearest
+   neighbour) to a fixed multiple of it -- independent of where and how big it is drawn, so an
+   unchanged screen is the very same image from frame to frame.  The last few are kept: a front end
+   keeps a copy of every distinct image it is sent, so a new image per frame would grow it *)
+screenImage[prims_, {lw_, lh_}, depth_, bg_, thr_, m_] := With[{key = Hash[{prims, lw, lh, depth, bg, thr, m}]},
+    Lookup[screenCache, key, With[{img = ImageResize[quantize[Rasterize[Graphics[prims, PlotRange -> {{0, lw}, {0, lh}}, ImageSize -> {lw, lh}, AspectRatio -> lh / lw,
+            Background -> bg, PlotRangePadding -> None, ImagePadding -> None], "Image", ImageResolution -> 72], depth, thr], {lw, lh} m, Resampling -> "Nearest"]},
+        screenCache = Take[Append[screenCache, key -> img], -Min[8, Length[screenCache] + 1]]; img]]];
+screenCache = <||>;
+quantize[img_, "Bit", thr_] := ColorConvert[Binarize[ColorConvert[img, "Grayscale"], thr], "RGB"]
+quantize[img_, "Gray4", _] := ColorConvert[ImageApply[Which[# < 52 / 255, 0, # < 144 / 255, 104 / 255, # < 220 / 255, 184 / 255, True, 1] &, ColorConvert[img, "Grayscale"]], "RGB"]
+quantize[img_, _, _] := img
 
 
 (* ::Section:: *)

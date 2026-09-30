@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/Morph
 Keywords: [morph, transform, shape, interpolate, Manim Transform]
-SeeAlso: [PartialPath, Tween, Stage]
+SeeAlso: [PartialPath, Tween]
 RelatedGuides: [WAnim]
 ---
 

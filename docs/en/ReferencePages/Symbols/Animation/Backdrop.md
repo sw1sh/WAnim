@@ -5,13 +5,13 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/Backdrop
 Keywords: [background, fill, backdrop, colour]
-SeeAlso: [Timeline, TimelineLayer, CanvasRectangle]
+SeeAlso: [AnimatedGraphics, CanvasRectangle]
 RelatedGuides: [WAnim]
 ---
 
 ## Usage
 
-<code>[Backdrop]()[*colour*]</code> is a layer filling the whole canvas with *colour* at all times.
+<code>[Backdrop]()[*colour*]</code> fills the whole canvas with *colour* at all times.
 
 <code>[Backdrop]()[*f*]</code> fills it with the colour *f*[*t*] at time *t*.
 
@@ -19,15 +19,15 @@ RelatedGuides: [WAnim]
 
 ## Details & Options
 
-- A colour given directly in a [Timeline]() layer list is a Backdrop.
 - Colours can be any colour directive or a hex string such as `"#F4F1EA"`.
+- Like every element it takes "Enter" and "Exit" ("Cut" by default, or "Fade" over "EnterTime" and "ExitTime") and an [Opacity](), which may be a function of time.
 
 ## Basic Examples
 
 A paper-coloured canvas:
 
 ```wl
-Backdrop[RGBColor["#F4F1EA"]]["Graphics", 0, ImageSize -> 240]
+Backdrop[RGBColor["#F4F1EA"]][0, ImageSize -> 240]
 ```
 
 <!-- => a plain warm off-white frame -->
@@ -37,17 +37,17 @@ Backdrop[RGBColor["#F4F1EA"]]["Graphics", 0, ImageSize -> 240]
 A colour that changes over time, from paper to ink:
 
 ```wl
-Table[Backdrop[Blend[{RGBColor["#F4F1EA"], RGBColor["#0E0F11"]}, #] &]["Graphics", t, ImageSize -> 100], {t, 0, 1, 0.25}]
+Table[Backdrop[Blend[{RGBColor["#F4F1EA"], RGBColor["#0E0F11"]}, #] &][t, ImageSize -> 100], {t, 0, 1, 0.25}]
 ```
 
 <!-- => five frames fading from off-white to near black -->
 
 ---
 
-In a timeline a colour is a backdrop:
+A red wash fading in over a second, at half strength:
 
 ```wl
-Timeline[{Red}, "Duration" -> 1]["Graphics", 0.5, ImageSize -> 160]
+AnimatedGraphics[{Backdrop[Black], Backdrop[Red, {0, 2}, "Enter" -> "Fade", "EnterTime" -> 1, Opacity -> 0.5]}][0.5, ImageSize -> 160]
 ```
 
-<!-- => a red frame -->
+<!-- => a dark red frame -->

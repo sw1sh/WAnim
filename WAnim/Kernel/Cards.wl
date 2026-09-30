@@ -3,7 +3,7 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{DictionaryCard, PhotoPrint, Counter, YearRuler}]
+PackageExported[{DictionaryCard, PhotoPrint, NumberCounter, YearRuler}]
 
 
 (* ::Section:: *)
@@ -12,15 +12,15 @@ PackageExported[{DictionaryCard, PhotoPrint, Counter, YearRuler}]
 (* ::Subsection:: *)
 (*DictionaryCard*)
 
-Options[DictionaryCard] = Join[{Position -> {1250, 330}, "Width" -> 590, "Usage" -> Automatic, "Note" -> Automatic, "Lines" -> 5,
-    FontColor -> RGBColor["#0E0F11"], "NoteColor" -> RGBColor["#6B675F"], "RuleColor" -> RGBColor["#DD1100"], "Enter" -> "Rise", "EnterTime" -> 0.3}, $LayerOptions];
+Options[DictionaryCard] = elementOptions[{Position -> {1250, 330}, "Width" -> 590, "Usage" -> Automatic, "Note" -> Automatic, "Lines" -> 5,
+    FontColor -> RGBColor["#0E0F11"], "NoteColor" -> RGBColor["#6B675F"], "RuleColor" -> RGBColor["#DD1100"], "Enter" -> "Rise", "EnterTime" -> 0.3}];
 
 (* DictionaryCard["Symbol", {t0, t1}] presents a Wolfram Language symbol like a dictionary entry: the
    headword, a part-of-speech line with the version and year that coined it, and its usage, all looked
    up with WolframLanguageData (override with "Usage" / "Note"). *)
-DictionaryCard[name_String, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[DictionaryCard]]},
+DictionaryCard[name_String, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = toolOptions[{opts}, DictionaryCard]},
     With[{usage = Replace[ov[o, "Usage"], Automatic :> symbolUsage[name]], note = Replace[ov[o, "Note"], Automatic :> symbolNote[name]]},
-        makeLayer["DictionaryCard", {t0, t1 + ov[o, "ExitTime"]}, Function[t, dictionaryDraw[name, usage, note, t, {t0, t1}, atTime[o, t]]]]]];
+        makeElement["DictionaryCard", {t0, t1 + ov[o, "ExitTime"]}, Function[t, dictionaryDraw[name, usage, note, t, {t0, t1}, drawOptions[{opts}, DictionaryCard, t]]]]]];
 
 symbolUsage[name_] := With[{u = Quiet @ TimeConstrained[WolframLanguageData[name, "PlaintextUsage"], 10, $Failed]},
     If[StringQ[u], First @ StringSplit[u, "\n"], ""]];
@@ -47,14 +47,14 @@ dictionaryDraw[name_, usage_, note_, t_, {t0_, t1_}, o_] := Module[{p = layerPoi
 (* ::Subsection:: *)
 (*PhotoPrint*)
 
-Options[PhotoPrint] = Join[{Position -> {1250, 150}, "Size" -> {590, 420}, "Tilt" -> -1.5, "Kicker" -> None, "KickerColor" -> RGBColor["#DD1100"],
-    "Paper" -> RGBColor["#FBFAF6"], "Enter" -> "Pop", "EnterTime" -> 0.25}, $LayerOptions];
+Options[PhotoPrint] = elementOptions[{Position -> {1250, 150}, "Size" -> {590, 420}, "Tilt" -> -1.5, "Kicker" -> None, "KickerColor" -> RGBColor["#DD1100"],
+    "Paper" -> RGBColor["#FBFAF6"], "Enter" -> "Pop", "EnterTime" -> 0.25}];
 
 (* PhotoPrint[image, "caption", {t0, t1}] pins a photo or scan like a print: a white border, a soft
    shadow, a small "Kicker" line (e.g. "FROM THE ARCHIVE · 1981") and an italic caption, tilted by
    "Tilt" degrees.  The image is fitted inside "Size" at Position (top-left). *)
-PhotoPrint[img0_Image, cap_String, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[PhotoPrint]], img = opaque[img0]},
-    makeLayer["PhotoPrint", {t0, t1 + ov[o, "ExitTime"]}, Function[t, printDraw[img, cap, t, {t0, t1}, atTime[o, t]]]]];
+PhotoPrint[img0_Image, cap_String, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = toolOptions[{opts}, PhotoPrint], img = opaque[img0]},
+    makeElement["PhotoPrint", {t0, t1 + ov[o, "ExitTime"]}, Function[t, printDraw[img, cap, t, {t0, t1}, drawOptions[{opts}, PhotoPrint, t]]]]];
 (* photos often carry an alpha channel they do not use; drawing a transparent image makes the front
    end keep a fresh copy every frame, so drop it when it is fully opaque *)
 opaque[img_] := If[ImageChannels[img] == 4 && Min[ImageData[AlphaChannel[img], "Byte"]] == 255, RemoveAlphaChannel[img], img];
@@ -72,17 +72,17 @@ printDraw[img_, cap_, t_, {t0_, t1_}, o_] := Module[{p = layerPoint[ov[o, Positi
 
 
 (* ::Subsection:: *)
-(*Counter*)
+(*NumberCounter*)
 
-Options[Counter] = Join[{Position -> Automatic, Alignment -> Right, FontSize -> 88, FontWeight -> 700, FontColor -> RGBColor["#1B1B1B"],
-    "Label" -> None, "LabelColor" -> RGBColor["#7C776E"], "ChangeColor" -> RGBColor["#DD1100"], "Format" -> Automatic, "Enter" -> "Fade", "EnterTime" -> 0.3}, $LayerOptions];
+Options[NumberCounter] = elementOptions[{Position -> Automatic, Alignment -> Right, FontSize -> 88, FontWeight -> 700, FontColor -> RGBColor["#1B1B1B"],
+    "Label" -> None, "LabelColor" -> RGBColor["#7C776E"], "ChangeColor" -> RGBColor["#DD1100"], "Format" -> Automatic, "Enter" -> "Fade", "EnterTime" -> 0.3}];
 
-(* Counter[f, {t0, t1}] shows the number f[t], flushed right at Position (default: the top-right
+(* NumberCounter[f, {t0, t1}] shows the number f[t], flushed right at Position (default: the top-right
    corner), turning "ChangeColor" while it is changing, with an optional tracked "Label" under it. *)
-Counter[f_, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[Counter]]},
-    makeLayer["Counter", {t0, t1}, Function[t, counterDraw[f, t, {t0, t1}, atTime[o, t]]]]];
+NumberCounter[f_, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = toolOptions[{opts}, NumberCounter]},
+    makeElement["NumberCounter", {t0, t1}, Function[t, counterDraw[f, t, {t0, t1}, drawOptions[{opts}, NumberCounter, t]]]]];
 
-counterDraw[f_, t_, {t0_, t1_}, o_] := Module[{p = Replace[ov[o, Position], Automatic :> {$CanvasSize[[1]] - 96, 118}], n = f[t], moving, al = ov[o, Alignment]},
+counterDraw[f_, t_, {t0_, t1_}, o_] := Module[{p = Replace[ov[o, Position], Automatic :> {$canvasSize[[1]] - 96, 118}], n = f[t], moving, al = ov[o, Alignment]},
     moving = n =!= f[t - 0.02];
     CanvasOpacity[envelope[t, {t0, t1}, o]["Alpha"], {
         CanvasText[Replace[ov[o, "Format"], Automatic -> (ToString[NumberForm[#, DigitBlock -> 3]] &)][n], layerPoint[p], layerFont[o],
@@ -94,18 +94,18 @@ counterDraw[f_, t_, {t0_, t1_}, o_] := Module[{p = Replace[ov[o, Position], Auto
 (* ::Subsection:: *)
 (*YearRuler*)
 
-Options[YearRuler] = Join[{"Range" -> {1978, 2027}, "Every" -> 5, "Marks" -> {}, Position -> Automatic, "Width" -> Automatic,
-    "Pulse" -> None, "LineColor" -> RGBColor["#9A958C"], "MarkColor" -> RGBColor["#DD1100"], FontColor -> RGBColor["#1B1B1B"], "Enter" -> "Fade", "EnterTime" -> 0.5}, $LayerOptions];
+Options[YearRuler] = elementOptions[{"Range" -> {1978, 2027}, "Every" -> 5, "Marks" -> {}, Position -> Automatic, "Width" -> Automatic,
+    "Pulse" -> None, "LineColor" -> RGBColor["#9A958C"], "MarkColor" -> RGBColor["#DD1100"], FontColor -> RGBColor["#1B1B1B"], "Enter" -> "Fade", "EnterTime" -> 0.5}];
 
 (* YearRuler[{{t, year}, ...}, {t0, t1}] is a timeline of years along the bottom of the frame whose
    marker jumps to each key's year at its time.  "Marks" -> {{year, "label"}, ...} places release ticks
    that appear once the marker passes them; "Pulse" -> track makes the marker beat. *)
-YearRuler[keys_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = Join[{opts}, Options[YearRuler]]},
-    makeLayer["YearRuler", {t0, t1}, Function[t, rulerDraw[keys, t, {t0, t1}, atTime[o, t]]]]];
+YearRuler[keys_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = toolOptions[{opts}, YearRuler]},
+    makeElement["YearRuler", {t0, t1}, Function[t, rulerDraw[keys, t, {t0, t1}, drawOptions[{opts}, YearRuler, t]]]]];
 
 markerYear[keys_, t_] := Fold[If[t < #2[[1]], #1, #1 + (#2[[2]] - #1) Easing["OutExpo"][localU[t, #2[[1]], #2[[1]] + 0.4]]] &, keys[[1, 2]], keys];
-rulerDraw[keys_, t_, {t0_, t1_}, o_] := Module[{W = $CanvasSize[[1]], y0, x0, x1, X, my, yr = ov[o, "Range"], lc = ov[o, "LineColor"], mc = ov[o, "MarkColor"]},
-    {x0, y0} = Replace[ov[o, Position], Automatic -> {96, $CanvasSize[[2]] - 54}];
+rulerDraw[keys_, t_, {t0_, t1_}, o_] := Module[{W = $canvasSize[[1]], y0, x0, x1, X, my, yr = ov[o, "Range"], lc = ov[o, "LineColor"], mc = ov[o, "MarkColor"]},
+    {x0, y0} = Replace[ov[o, Position], Automatic -> {96, $canvasSize[[2]] - 54}];
     x1 = x0 + Replace[ov[o, "Width"], Automatic -> W - 2 x0];
     X = x0 + (# - yr[[1]]) / (yr[[2]] - yr[[1]]) (x1 - x0) &;
     my = markerYear[keys, t];

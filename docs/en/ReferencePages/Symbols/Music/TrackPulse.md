@@ -17,7 +17,7 @@ RelatedGuides: [WAnim]
 
 - It locks motion to sound: the picture reads the same Track that is heard. [Spikey](), [NotebookSession]() and [YearRuler]() take it through their "Pulse" option.
 - The default *decay* is 18 per cycle.
-- A [Timeline]()'s unit is one cycle, so the pulse is read at the same times as the layers; the tempo is the timeline's "SecondsPerUnit".
+- An [AnimatedGraphics]()'s unit is one cycle, so the pulse is read at the same times as the layers; the tempo is the timeline's "SecondsPerUnit".
 
 ## Basic Examples
 

@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/Mixer
 Keywords: [mixer, sidechain, ducking, low-pass, filter, master, limiter, reverb, delay]
-SeeAlso: [Instrument, Track, Timeline]
+SeeAlso: [Instrument, Track, AnimatedGraphics]
 RelatedGuides: [WAnim]
 ---
 

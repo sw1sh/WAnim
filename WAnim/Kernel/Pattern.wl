@@ -3,7 +3,7 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, $DefaultWave, $DefaultVisual, LoadSamples, $DrumKit, Synth, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Punchcard, Beat, Struct, Pan, Delay, Room, Dec, Duck, InScale, $Scales, Bars, Solo, TrackPlay, TrackPause, TrackReset, TrackSeek, Fastcat, LiveCode, $LiveAtomHeads}]
+PackageExported[{EventTrack, TrackPulse, Steady, Silence, Fast, Slow, Layer, Alternate, Every, Euclidean, Degrade, Track, $CyclesPerSecond, $AudioLatency, LoadSamples, $DrumKit, Gain, Late, Early, Stagger, Superimpose, $SampleBank, Oscilloscope, PianoRoll, Punchcard, Beat, Struct, Pan, Delay, Room, Dec, Duck, InScale, $Scales, Bars, Solo, TrackPlay, TrackPause, TrackReset, TrackSeek, Fastcat, LiveCode, $LiveAtomHeads}]
 
 (* shared with MiniNotation.wl so the TraditionalForm can render the same live Visual *)
 PackageScoped[{GainVoice, valuePitches, hasOnset, voiceRendered, renderVisual, renderVisuals, visualsOf, visualOf, cyclesOf, buttonsQ, clockPhase, visPhase, seekStream, registerStream, unregisterStream, enabledQ, soloStream, soloFlagQ, frameIfDisabled, timecat, $Playing, $Streams}]
@@ -16,7 +16,7 @@ PackageScoped[{GainVoice, valuePitches, hasOnset, voiceRendered, renderVisual, r
    timespan it returns the timed events that fall in it.  This is the TidalCycles /
    Strudel "Pattern = query : TimeSpan -> [Event]" abstraction, transplanted to WL with
    native Rational time.  The SAME pattern is rendered two ways: to sound (MusicScore ->
-   Audio) and to vision (a piano roll / AnimatedObject effects).  See
+   Audio) and to vision (a piano roll / AnimatedGraphics effects).  See
    docs/wolfanim-music-design.md. *)
 
 
@@ -28,11 +28,10 @@ $CyclesPerSecond = 0.5625
    YOUR system: RAISE if the visual runs ahead of the sound, LOWER (toward 0) if it lags behind. *)
 $AudioLatency = 0.05
 
-(* default oscillator timbre for pitched notes (Sine/Triangle/Sawtooth/Square/Supersaw). *)
-$DefaultWave = "Sawtooth"
-
-(* default live Visual for patterns with none set: "PianoRoll" (labeled blocks), "Bar", "Oscilloscope". *)
-$DefaultVisual = "PianoRoll"
+(* the instrument a pitched Track plays on unless it is given one, and the visual a playing track
+   shows unless it is given one *)
+defaultInstrument = "Sawtooth";
+defaultVisual = "PianoRoll";
 
 (* ONE global transport: a shared clock + a registry of every live stream.  TrackPlay /
    TrackPause / TrackSeek[cyclePos] / TrackReset act on ALL patterns at once, and a newly-created
@@ -408,8 +407,7 @@ midiName[m_] := Quiet @ Check[ToString[MusicPitch[Round @ m]["Key"]] <> ToString
 labelOf[v_String] := v
 labelOf[v_] := With[{ps = valuePitches[v]}, If[ps === {}, ToString[v, InputForm], StringRiffle[midiName /@ ps, "+"]]]
 
-(* a voice is a bare pattern or a Synth / Gain wrapper; patternOf recovers the pattern *)
-patternOf[SynthVoice[_, p_]] := p
+(* a voice is a bare pattern or a Gain wrapper; patternOf recovers the pattern *)
 patternOf[GainVoice[_, v_]] := patternOf[v]
 patternOf[p_] := p
 
@@ -431,14 +429,12 @@ eventsToVoice[events_, nCycles_] := Module[{byOnset, items = {}, t = 0, dur, grp
 patternVoice[v_, nCycles_ : 1] := eventsToVoice[Select[patternOf[v]["Query", 0, nCycles], hasOnset], nCycles]
 
 patternScore[voices_List, nCycles_] := MusicScore[patternVoice[#, nCycles] & /@ voices, MusicTimeSignature[4, 4], MusicTempo -> patternTempo[]]
-patternScore[v : _Track | _SynthVoice | _GainVoice, nCycles_] := patternScore[{v}, nCycles]
+patternScore[v : _Track | _GainVoice, nCycles_] := patternScore[{v}, nCycles]
 patternScore[Track[voices_List, ___], nCycles_] := patternScore[voices, nCycles]
 
 
-(* ::Subsection:: Audio renderer: drum samples + oscillator synth + MusicScore, overlaid *)
+(* ::Subsection:: Audio renderer: drum samples and instrument notes, overlaid *)
 
-(* a voice carrying a wave gets oscillator synthesis; Gain scales its level *)
-Synth[wave_String][p_] := SynthVoice[wave, p]
 (* Gain on a Track stays a Track (so it still displays + chains visuals) and carries its gain as
    metadata; on any other voice it wraps in GainVoice.  Bijection: appends " // gain g" to source. *)
 Gain[g_][p : Track[q : (_Function | _Symbol), ___]] := With[{gained = setMeta[p, "Gain", g gainMeta[p]], s = patSource[p]},
@@ -447,7 +443,7 @@ Gain[g_][v_] := GainVoice[g, v]
 
 (* per-track FX chain (Strudel-style): stored in metadata, applied post-render by voiceRendered.
    All chain postfix and keep the source bijection:  Track["bd:3!4"] // Dec[.3] // Pan[-.5].
-   Pan[-1..1]; Delay[t, feedback]; Room[wet mix]; Dec[seconds] (note decay, synthesis-level);
+   Pan[-1..1]; Delay[t, feedback] (t in cycles); Room[wet mix]; Dec[d] (note decay, d in cycles);
    Duck[trigger, depth, attack] sidechains this track to another pattern's onsets (no source
    frag -- the trigger has no string form). *)
 metaChain[p_, frag_, pNew_] := With[{s = patSource[p]}, If[s === None, pNew, setMeta[pNew, "Source", s <> " // " <> frag]]]
@@ -520,23 +516,6 @@ mix[layers_] := With[{ls = DeleteCases[Flatten[{layers}], Nothing]},
 fitTo[Nothing, nCycles_] := silence[nCycles cycleSeconds[]]
 fitTo[a_, nCycles_] := fitDuration[a, nCycles cycleSeconds[]]
 
-(* per-note amplitude envelope (anti-click attack + release scaled to the note) *)
-env[a_, durSec_] := AudioFade[a, {0.004, Min[0.09, 0.5 durSec]}]
-oscNote[wave_, f_, durSec_] := env[Switch[wave,
-    "Supersaw", AudioOverlay[AudioGenerator[{"Sawtooth", f #}, durSec] & /@ {0.993, 1., 1.007}],
-    "Pluck" | "Bell" | "Riser" | "Impact", shaped[wave, f, durSec],
-    _, AudioGenerator[{wave, f}, durSec]], durSec]
-(* timbres shaped over the note's own length: a plucked string, a bell (inharmonic partials ringing
-   out), a riser (noise swelling and brightening to the end: the note is the build-up) and an impact
-   (a falling boom with a burst of noise) *)
-shaped["Pluck", f_, d_] := LowpassFilter[AudioGenerator[{"Sawtooth", f}, d], Min[8000, 6 f]] AudioGenerator[Exp[-9 #] &, d]
-shaped["Bell", f_, d_] := With[{len = Max[d, 1.2]}, AudioOverlay[{AudioGenerator[{"Sine", f}, len], AudioAmplify[AudioGenerator[{"Sine", 2.76 f}, len], 0.4],
-    AudioAmplify[AudioGenerator[{"Sine", 5.4 f}, len], 0.2]}] AudioGenerator[Exp[-3.5 #] &, len]]
-shaped["Riser", _, d_] := HighpassFilter[AudioGenerator["White", d], 400] AudioGenerator[(# / d)^3 &, d]
-(* the boom falls from f / 8 by 1.5 octaves a second: its phase is the integral of that frequency *)
-shaped["Impact", f_, d_] := With[{f0 = f / 8, k = 1.5 Log[2]}, AudioOverlay[{AudioGenerator[Sin[2 Pi f0 (1 - Exp[-k #]) / k] Exp[-2.5 #] &, d],
-    AudioGenerator["Pink", d] AudioGenerator[0.5 Exp[-7 #] &, d]}]]
-
 (* synthesized drum fallback so percussion tokens are audible with NO samples loaded -- the
    default before LoadSamples replaces them with real WAVs.  Memoized per token. *)
 perc[a_, rel_] := AudioFade[a, {0.002, rel}]
@@ -560,10 +539,10 @@ drumSound[v_] := Which[KeyExistsQ[$SampleBank, v], $SampleBank[v],
     StringQ[v] && KeyExistsQ[$SampleBank, sampleBase[v]], $SampleBank[sampleBase[v]],
     KeyExistsQ[$DrumKit, drumAlias[v]], $DrumKit[drumAlias[v]],
     True, synthDrum[ToString @ sampleBase[v]]]
-(* dec: shorten a sound to d seconds with a fade -- the Strudel .dec envelope *)
+(* dec: shorten a sound to d cycles with a fade -- the Strudel .dec envelope *)
 shorten[a_, None] := a
-shorten[a_, d_] := If[QuantityMagnitude[Duration[a], "Seconds"] <= d, a,
-    AudioFade[AudioTrim[a, Quantity[d + 0.02, "Seconds"]], {0, Min[0.05, 0.5 d]}]]
+shorten[a_, dc_] := With[{d = dc cycleSeconds[]}, If[QuantityMagnitude[Duration[a], "Seconds"] <= d, a,
+    AudioFade[AudioTrim[a, Quantity[d + 0.02, "Seconds"]], {0, Min[0.05, 0.5 d]}]]]
 (* drum/percussion events (a loaded sample, or any non-pitch token) placed at their onsets *)
 sampleLayer[events_, dec_ : None] := placeAll[{shorten[drumSound[#["Value"]], dec], at[#["Whole"][[1]]]} & /@
     Select[events, ! restQ[#["Value"]] && (sampleQ[#["Value"]] || valuePitches[#["Value"]] === {}) &]]
@@ -578,23 +557,10 @@ placeAll[clips_List] := Module[{sr = 44100, cs, n, buf},
     Audio[{buf}, SampleRate -> sr]];
 monoData[a_, sr_] := With[{r = If[QuantityMagnitude[AudioSampleRate[a]] == sr, a, AudioResample[a, sr]]},
     Developer`ToPackedArray[N[Mean[AudioData[r]]]]];
-(* pitched events -> MusicScore -> Audio (acoustic-ish) *)
-musicLayer[events_, nCycles_] := With[{pe = Select[events, ! sampleQ[#["Value"]] && NumericQ[valueMidi[#["Value"]]] &]},
-    If[pe === {}, Nothing, Audio[MusicScore[{eventsToVoice[pe, nCycles]}, MusicTimeSignature[4, 4], MusicTempo -> patternTempo[]]]]]
-(* pitched events -> oscillator synth -> Audio *)
-oscLayer[events_, wave_, dec_ : None] := placeAll[Flatten[Function[ev,
-    Function[m, {oscNote[wave, midiToFreq[m], If[dec === None, #, Min[#, dec]] &[eventDuration[ev] cycleSeconds[]]], at[ev["Whole"][[1]]]}] /@ valuePitches[ev["Value"]]
-] /@ Select[events, valuePitches[#["Value"]] =!= {} && ! sampleQ[#["Value"]] &], 1]]
-
 voiceAudio[GainVoice[g_, v_], nCycles_] := voiceAudio[v, nCycles]  (* gain applied post-normalize via gainMeta *)
-voiceAudio[SynthVoice[wave_, p_], nCycles_] := fitTo[oscLayer[Select[p["Query", 0, nCycles], hasOnset], wave, decayOf[p]], nCycles]
-(* default pitched rendering uses self-contained OSCILLATORS, not MusicScore/FluidSynth: the
-   external soundfont backend is slow to re-render on every live edit and was the likely source
-   of the kernel-reconnect ("MathLink") dialog + instability.  Set $DefaultWave to retimbre, or
-   wrap a voice in Synth["..."] for an explicit oscillator.  (MusicScore is still used by
-   ["Score"]/MusicPlot/Sound.) *)
+(* drums from the kit or the sample bank, pitched notes on the default instrument of the studio *)
 voiceAudio[p_Track, nCycles_] := With[{ev = Select[p["Query", 0, nCycles], hasOnset], dec = decayOf[p]},
-    fitTo[mix[{sampleLayer[ev, dec], oscLayer[ev, $DefaultWave, dec]}], nCycles]]
+    fitTo[mix[{sampleLayer[ev, dec], instrumentAudio[defaultInstrument, Select[ev, valuePitches[#["Value"]] =!= {} && ! sampleQ[#["Value"]] &], dec]}], nCycles]]
 
 (* sum the voices at their natural per-voice level -- NO peak-normalize, so a Track[a,b,c]
    sounds exactly like playing a, b, c in separate players (which the speakers also just sum).
@@ -612,7 +578,7 @@ gainMeta[GainVoice[g_, v_]] := g gainMeta[v]
 gainMeta[_] := 1
 (* post-render FX chain (// Pan / Delay / Room), applied after the per-voice normalize *)
 applyFx[a_, {"Pan", x_}] := AudioPan[a, x]
-applyFx[a_, {"Delay", t_, fb_}] := Quiet @ Check[AudioDelay[a, t, fb], a]
+applyFx[a_, {"Delay", t_, fb_}] := Quiet @ Check[AudioDelay[a, t cycleSeconds[], fb], a]
 applyFx[a_, {"Room", m_}] := Quiet @ Check[AudioOverlay[{a, AudioAmplify[AudioReverb[a], m]}], a]
 applyFx[a_, _] := a
 (* sidechain duck: dip the gain to (1-depth) at every onset of the trigger pattern, recovering
@@ -645,15 +611,13 @@ Track /: Audio[p_Track, nCycles_ : 1] := renderAudio[p, nCycles]
 Track /: Audio[p_Track, nCycles_, "CyclesPerSecond" -> cps_] := Block[{$CyclesPerSecond = cps}, renderAudio[p, nCycles]]
 Track /: MusicPlot[p_Track, nCycles_ : 1, opts___] := MusicPlot[patternScore[p, nCycles], opts]
 Track /: Sound[p_Track, nCycles_ : 1] := Sound[patternScore[p, nCycles]]
-SynthVoice /: Audio[v_SynthVoice, nCycles_ : 1] := renderAudio[v, nCycles]
 GainVoice /: Audio[v_GainVoice, nCycles_ : 1] := renderAudio[v, nCycles]
-SynthVoice /: Audio[v_SynthVoice, nCycles_, "CyclesPerSecond" -> cps_] := Block[{$CyclesPerSecond = cps}, renderAudio[v, nCycles]]
 GainVoice /: Audio[v_GainVoice, nCycles_, "CyclesPerSecond" -> cps_] := Block[{$CyclesPerSecond = cps}, renderAudio[v, nCycles]]
 
 
 (* ::Subsection:: Track: a multi-voice composition (each line its own timbre/voice) *)
 
-voiceQ[v_] := MatchQ[v, _Track | _SynthVoice | _GainVoice]
+voiceQ[v_] := MatchQ[v, _Track | _GainVoice | Instrument[_String, _]]
 voiceLikeQ[v_] := StringQ[v] || voiceQ[v]
 asVoice[s_String] := Track[s]
 asVoice[v_] := v
@@ -883,12 +847,12 @@ Track[voices_List, ___]["Scope", nCycles_ : 2] := scopePlay[Track[voices], nCycl
 
 (* A pattern's Visual is what it shows as its live display: the labeled "PianoRoll" (default),
    a progress "Bar", or the "Oscilloscope".  PianoRoll[p] / Oscilloscope[p] return p with it
-   set; p["Visual"] reads it.  $DefaultVisual sets the global default for unset patterns. *)
+   set; p["Visual"] reads it.  defaultVisual sets the global default for unset patterns. *)
 (* a pattern carries a LIST of visual specs {name, opts}; multiple stack in a Column.  Each
    setter APPENDS, so p // Oscilloscope // PianoRoll shows both. *)
-visualsOf[Track[_, m_Association]] := Lookup[m, "Visuals", {{$DefaultVisual, {}}}]
+visualsOf[Track[_, m_Association]] := Lookup[m, "Visuals", {{defaultVisual, {}}}]
 visualsOf[_Track] := {{"PianoRoll", {}}}
-visualsOf[_] := {{$DefaultVisual, {}}}
+visualsOf[_] := {{defaultVisual, {}}}
 visualOf[pat_] := visualsOf[pat][[1, 1]]
 buttonsQ[pat_] := AnyTrue[visualsOf[pat], TrueQ @ Lookup[Association @ #[[2]], "Buttons", False] &]
 setVisual[Track[q_, m_Association], name_, o_ : {}] := Track[q, <|m, "Visuals" -> Append[Lookup[m, "Visuals", {}], {name, o}]|>]
@@ -948,7 +912,7 @@ renderVisual["PianoRoll", pat_, n_, stream_, opts_] := pianoRoll[pat, n, None, "
 renderVisual["Punchcard", pat_, n_, stream_, opts_] := punchcard[pat, n, None, "LiveCycles" -> n, Sequence @@ FilterRules[opts, Options[punchcard]]]
 renderVisual["Oscilloscope", pat_, n_, stream_, opts_] := scopeWidget[stream, Sequence @@ FilterRules[opts, Options[scopeFrame]]]
 renderVisual[_, pat_, n_, stream_, opts_] := visualBarLive[n]
-renderVisuals[specs_, pat_, n_, stream_] := With[{ss = If[specs === {}, {{$DefaultVisual, {}}}, specs]},
+renderVisuals[specs_, pat_, n_, stream_] := With[{ss = If[specs === {}, {{defaultVisual, {}}}, specs]},
     If[Length[ss] == 1,
         renderVisual[ss[[1, 1]], pat, n, stream, ss[[1, 2]]],
         Column[Function[s, renderVisual[s[[1]], pat, n, stream, s[[2]]]] /@ ss, Spacings -> 0.3, Alignment -> Left]]]
@@ -1100,3 +1064,29 @@ Track /: MakeBoxes[p : Track[_Function | _Symbol, ___] /; p["Source"] === None, 
     With[{boxes = ToBoxes[pianoRoll[p, 2], StandardForm]}, InterpretationBox[boxes, p]]
 Track /: MakeBoxes[t : Track[_List, ___], TraditionalForm] :=
     With[{boxes = ToBoxes[pianoRoll[t, 2], StandardForm]}, InterpretationBox[boxes, t]]
+
+
+(* ::Section:: *)
+(*Picture locked to sound*)
+
+(* TrackPulse[track, decay][t] is 1 at each onset of the track and decays exponentially (decay per
+   cycle) until the next: the kick that makes a picture hop, read off the same Track that sounds it.
+   t is in cycles, the unit an AnimatedGraphics counts in. *)
+TrackPulse[track_, decay_ : 18][t_] := With[{on = Quiet @ track["Onsets", t - 4, t + 10^-9]},
+    If[! ListQ[on] || on === {}, 0., N @ Exp[-decay (t - Max[#["Whole"][[1]] & /@ on])]]];
+
+
+(* ::Section:: *)
+(*A Track from explicit events*)
+
+(* EventTrack[{{onset, duration, value}, ...}] (or {onset, duration, value, velocity}) is a Track (in cycles) that plays exactly those
+   events: linear time rather than a cycle, for scores written out note by note (a film score, a
+   transcription).  Queries clip each event to the span, keeping its whole extent, so onsets,
+   visuals and audio rendering all behave as for any other Track. *)
+EventTrack[events_List] := With[{ev = SortBy[events, First]},
+    WolframInstitute`WAnim`Track[Function[span, eventsIn[ev, span]], <|"Events" -> ev|>]
+]
+eventsIn[ev_, {b_, e_}] := Map[
+    <|"Value" -> #[[3]], "Whole" -> {#[[1]], #[[1]] + #[[2]]}, "Part" -> {Max[b, #[[1]]], Min[e, #[[1]] + #[[2]]]}, "Velocity" -> If[Length[#] > 3, #[[4]], 1]|> &,
+    Select[ev, #[[1]] < e && #[[1]] + #[[2]] > b &]
+]

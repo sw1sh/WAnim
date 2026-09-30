@@ -34,7 +34,7 @@ RelatedGuides: [WAnim]
 Rule 30 flowing into a head in the middle of the frame:
 
 ```wl
-AutomatonTape[30, None, {0, 4}, Position -> {1200, 540}, "CellSize" -> 16, "Length" -> 800]["Graphics", 2, ImageSize -> 480]
+AutomatonTape[30, None, {0, 4}, Position -> {1200, 540}, "CellSize" -> 16, "Length" -> 800][2, ImageSize -> 480]
 ```
 
 <!-- => a sideways Rule 30 band ending at a red line -->
@@ -44,7 +44,7 @@ AutomatonTape[30, None, {0, 4}, Position -> {1200, 540}, "CellSize" -> 16, "Leng
 With a Track, the note under the head is named:
 
 ```wl
-AutomatonTape[30, Track["a4 c5 e5 g5"], {0, 4}, Position -> {1200, 540}, "CellSize" -> 16, "Length" -> 800]["Graphics", 2.1, ImageSize -> 480]
+AutomatonTape[30, Track["a4 c5 e5 g5"], {0, 4}, Position -> {1200, 540}, "CellSize" -> 16, "Length" -> 800][2.1, ImageSize -> 480]
 ```
 
 <!-- => the tape with a note name above the head -->
@@ -54,7 +54,7 @@ AutomatonTape[30, Track["a4 c5 e5 g5"], {0, 4}, Position -> {1200, 540}, "CellSi
 Other rules:
 
 ```wl
-Table[AutomatonTape[r, None, {0, 4}, Position -> {1600, 540}, "CellSize" -> 12, "Rows" -> 41, "Length" -> 1400, "Label" -> "RULE " <> ToString[r]]["Graphics", 3, ImageSize -> 240], {r, {90, 110}}]
+Table[AutomatonTape[r, None, {0, 4}, Position -> {1600, 540}, "CellSize" -> 12, "Rows" -> 41, "Length" -> 1400, "Label" -> "RULE " <> ToString[r]][3, ImageSize -> 240], {r, {90, 110}}]
 ```
 
 <!-- => two tapes: the Sierpinski pattern of Rule 90 and the structures of Rule 110 -->

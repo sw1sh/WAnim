@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/YearRuler
 Keywords: [year, ruler, timeline, history, marker, release]
-SeeAlso: [Counter, TrackPulse, Timeline]
+SeeAlso: [NumberCounter, TrackPulse, AnimatedGraphics]
 RelatedGuides: [WAnim]
 ---
 
@@ -32,7 +32,7 @@ RelatedGuides: [WAnim]
 The marker travelling from 1979 to 1988:
 
 ```wl
-YearRuler[{{0, 1979.85}, {1, 1988.47}}, {0, 3}, "Marks" -> {{1988.47, "1.0"}}]["Graphics", 2, ImageSize -> 480]
+YearRuler[{{0, 1979.85}, {1, 1988.47}}, {0, 3}, "Marks" -> {{1988.47, "1.0"}}][2, ImageSize -> 480]
 ```
 
 <!-- => a ruler with the red line to 1988 and a "1.0" tick -->
@@ -42,7 +42,7 @@ YearRuler[{{0, 1979.85}, {1, 1988.47}}, {0, 3}, "Marks" -> {{1988.47, "1.0"}}]["
 Halfway through the jump:
 
 ```wl
-YearRuler[{{0, 1979.85}, {1, 2007.33}}, {0, 3}]["Graphics", 1.05, ImageSize -> 480]
+YearRuler[{{0, 1979.85}, {1, 2007.33}}, {0, 3}][1.05, ImageSize -> 480]
 ```
 
 <!-- => the marker moving through the 2000s -->

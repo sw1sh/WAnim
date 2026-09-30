@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/DictionaryCard
 Keywords: [dictionary, entry, symbol, usage, WolframLanguageData, version introduced]
-SeeAlso: [WolframLanguageData, Caption, Title]
+SeeAlso: [WolframLanguageData, CaptionText, TitleCard]
 RelatedGuides: [WAnim]
 ---
 
@@ -17,7 +17,7 @@ RelatedGuides: [WAnim]
 
 - The usage (first usage statement) and the version and date introduced are looked up with [WolframLanguageData](); "Usage" and "Note" override them, for example for a symbol too new to be in the data.
 - The headword shrinks until it fits "Width"; at most "Lines" lines of usage are shown, revealed line by line.
-- DictionaryCard takes the options common to all creation tools ([$LayerOptions]()) and these:
+- DictionaryCard takes the options common to all creation tools ([Backdrop]()) and these:
 
 | Option | Default | Description |
 | --- | --- | --- |
@@ -32,7 +32,7 @@ RelatedGuides: [WAnim]
 The entry for Names, looked up live:
 
 ```wl
-DictionaryCard["Names", {0, 2}]["Graphics", 1, ImageSize -> 480]
+DictionaryCard["Names", {0, 2}][1, ImageSize -> 480]
 ```
 
 <!-- => "Names", "symbol · since 1.0, 1988" and its usage line -->
@@ -42,7 +42,7 @@ DictionaryCard["Names", {0, 2}]["Graphics", 1, ImageSize -> 480]
 A newer symbol:
 
 ```wl
-DictionaryCard["TuringMachine", {0, 2}]["Graphics", 1, ImageSize -> 480]
+DictionaryCard["TuringMachine", {0, 2}][1, ImageSize -> 480]
 ```
 
 <!-- => "TuringMachine", "symbol · since 6.0, 2007" and its usage -->
@@ -54,7 +54,7 @@ DictionaryCard["TuringMachine", {0, 2}]["Graphics", 1, ImageSize -> 480]
 A symbol with its own usage and note:
 
 ```wl
-DictionaryCard["MusicNote", {0, 2}, "Note" -> "symbol \[CenterDot] new in 15.0, 2026", "Usage" -> "MusicNote[p, d] returns a music note with the specified pitch p and duration d."]["Graphics", 1, ImageSize -> 480]
+DictionaryCard["MusicNote", {0, 2}, "Note" -> "symbol \[CenterDot] new in 15.0, 2026", "Usage" -> "MusicNote[p, d] returns a music note with the specified pitch p and duration d."][1, ImageSize -> 480]
 ```
 
 <!-- => the MusicNote entry with the given note and usage -->

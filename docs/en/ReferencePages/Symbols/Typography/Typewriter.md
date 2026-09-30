@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/Typewriter
 Keywords: [typewriter, typing, kinetic typography, cursor, highlight, text animation]
-SeeAlso: [Title, Caption, TypedText, Timeline, TimelineLayer]
+SeeAlso: [TitleCard, CaptionText, TypedText, AnimatedGraphics]
 RelatedGuides: [WAnim]
 ---
 
@@ -15,16 +15,16 @@ RelatedGuides: [WAnim]
 
 ## Details & Options
 
-- [Typewriter]() returns a [TimelineLayer](); put it in a [Timeline]() or look at it alone with <code>*layer*["Graphics", *t*]</code>.
-- Times are in the timeline's own unit (seconds, bars, ...). Typing starts at $t_0$ and lasts "TypingTime"; the line then holds until $t_1$ and leaves by its "Exit".
+- [Typewriter]() returns an [AnimatedGraphics](); put it in a film, or look at it alone with <code>*g*[*t*]</code>.
+- Times are in the timeline's own unit (seconds, bars, ...). Typing starts at $t_0$ and lasts "TypeTime"; the line then holds until $t_1$ and leaves by its "Exit".
 - The text is set in a monospaced face by default with its baseline at Position (centred on it by default), a canvas point {*x*, *y*} in pixels with $y$ down, `Center`, or `Scaled[{u, v}]` of the canvas.
 - "Highlight" words change to "HighlightColor" once typing is done (at "HighlightTime").
 - "Exit" -> "Collapse" folds the line into its cursor over "ExitTime", as if the text were being swallowed by the prompt.
-- Typewriter takes the options common to all creation tools ([$LayerOptions]()) and these:
+- Typewriter takes the options common to all creation tools ([Backdrop]()) and these:
 
 | Option | Default | Description |
 | --- | --- | --- |
-| "TypingTime" | Automatic | time taken to type the whole text; `Automatic` types briskly, at most half the span |
+| "TypeTime" | Automatic | time taken to type the whole text; `Automatic` types briskly, at most half the span |
 | "Cursor" | "Block" | "Block", "Bar" or `None` |
 | "CursorColor" | red | colour of the cursor |
 | "Highlight" | {} | words to light up after typing |
@@ -42,14 +42,14 @@ A line to be typed over the first two seconds of a four-second span:
 Typewriter["Every language starts with a few words.", {0, 4}]
 ```
 
-<!-- => a TimelineLayer summary box named Typewriter, span {0, 4} -->
+<!-- => a AnimatedGraphics summary box named Typewriter, span {0, 4} -->
 
 ---
 
 Halfway through the typing, on a dark canvas:
 
 ```wl
-Typewriter["Every language starts with a few words.", {0, 4}]["Graphics", 1, Background -> Black, ImageSize -> 480]
+Typewriter["Every language starts with a few words.", {0, 4}][1, Background -> Black, ImageSize -> 480]
 ```
 
 <!-- => the first half of the sentence and a red block cursor, centred -->
@@ -59,7 +59,7 @@ Typewriter["Every language starts with a few words.", {0, 4}]["Graphics", 1, Bac
 The finished line with its last word lit up:
 
 ```wl
-Typewriter["Every language starts with a few words.", {0, 4}, "Highlight" -> "words"]["Graphics", 3, Background -> Black, ImageSize -> 480]
+Typewriter["Every language starts with a few words.", {0, 4}, "Highlight" -> "words"][3, Background -> Black, ImageSize -> 480]
 ```
 
 <!-- => the whole sentence, "words" in red -->
@@ -71,7 +71,7 @@ Typewriter["Every language starts with a few words.", {0, 4}, "Highlight" -> "wo
 A thin bar cursor instead of a block:
 
 ```wl
-Typewriter["Names[\"*\"]", {0, 2}, "Cursor" -> "Bar"]["Graphics", 0.3, Background -> Black, ImageSize -> 480]
+Typewriter["Names[\"*\"]", {0, 2}, "Cursor" -> "Bar"][0.3, Background -> Black, ImageSize -> 480]
 ```
 
 <!-- => a partial input with a thin red bar after it -->
@@ -81,7 +81,7 @@ Typewriter["Names[\"*\"]", {0, 2}, "Cursor" -> "Bar"]["Graphics", 0.3, Backgroun
 Collapsing into the cursor at the end of the span:
 
 ```wl
-Typewriter["Every language starts with a few words.", {0, 4}, "Exit" -> "Collapse", "ExitTime" -> 0.5]["Graphics", 3.8, Background -> Black, ImageSize -> 480]
+Typewriter["Every language starts with a few words.", {0, 4}, "Exit" -> "Collapse", "ExitTime" -> 0.5][3.8, Background -> Black, ImageSize -> 480]
 ```
 
 <!-- => the sentence squeezed toward its right end -->
@@ -91,7 +91,7 @@ Typewriter["Every language starts with a few words.", {0, 4}, "Exit" -> "Collaps
 A serif line at the top left of the canvas:
 
 ```wl
-Typewriter["1986.", {0, 2}, FontFamily -> "Source Serif 4", FontSize -> 120, Position -> {160, 300}, Alignment -> Left, FontColor -> Black]["Graphics", 1.5, ImageSize -> 480]
+Typewriter["1986.", {0, 2}, FontFamily -> "Source Serif 4", FontSize -> 120, Position -> {160, 300}, Alignment -> Left, FontColor -> Black][1.5, ImageSize -> 480]
 ```
 
 <!-- => "1986." in large serif type at the upper left -->
@@ -101,7 +101,7 @@ Typewriter["1986.", {0, 2}, FontFamily -> "Source Serif 4", FontSize -> 120, Pos
 A cold open: the thesis typed, its last word lit, then everything folding into the cursor:
 
 ```wl
-Timeline[{Backdrop[Black], Typewriter["Every language starts with a few words.", {0.5, 4}, "TypingTime" -> 2.1, "Highlight" -> "words", "Exit" -> "Collapse", "ExitTime" -> 0.45]}, "Duration" -> 4]["Graphics", 3.2, ImageSize -> 480]
+AnimatedGraphics[{Backdrop[Black], Typewriter["Every language starts with a few words.", {0.5, 4}, "TypeTime" -> 2.1, "Highlight" -> "words", "Exit" -> "Collapse", "ExitTime" -> 0.45]}, "Duration" -> 4][3.2, ImageSize -> 480]
 ```
 
 <!-- => the finished line with "words" in red on black -->

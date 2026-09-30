@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/CanvasText
 Keywords: [text, canvas, baseline, font, tracking, letter spacing, typography]
-SeeAlso: [CanvasFont, CanvasTextWidth, CanvasWrap, CanvasBlock, Text]
+SeeAlso: [CanvasFont, CanvasTextWidth, CanvasWrap, Text]
 RelatedGuides: [WAnim]
 ---
 
@@ -15,7 +15,7 @@ RelatedGuides: [WAnim]
 
 ## Details & Options
 
-- Canvas coordinates are pixels with $y$ down, on the canvas of [CanvasBlock]() (or of the [Timeline]() drawing it).
+- Canvas coordinates are pixels with $y$ down, on the canvas of the [AnimatedGraphics]() drawing it ("CanvasSize").
 - *font* is a [CanvasFont](); its size is in pixels and follows the current [CanvasTransform]().
 - Widths come from per-face advance tables measured once through the front end and cached, so [CanvasTextWidth]() agrees with what is drawn; font sizes are emitted as fractions of the canvas width, so text keeps its proportions at any `ImageSize`.
 
@@ -30,7 +30,7 @@ RelatedGuides: [WAnim]
 Text on its baseline, with the baseline drawn:
 
 ```wl
-Graphics[CanvasBlock[{600, 200}, {CanvasLine[{{0, 120}, {600, 120}}, Red], CanvasText["Baseline", {40, 120}, CanvasFont["Source Sans 3", 80, 700], Black]}], PlotRange -> {{0, 600}, {0, 200}}, ImageSize -> 360]
+AnimatedGraphics[{CanvasLine[{{0, 120}, {600, 120}}, Red], CanvasText["Baseline", {40, 120}, CanvasFont["Source Sans 3", 80, 700], Black]}, "CanvasSize" -> {600, 200}, Background -> White][0, ImageSize -> 360]
 ```
 
 <!-- => the word sitting on a red line -->
@@ -40,7 +40,7 @@ Graphics[CanvasBlock[{600, 200}, {CanvasLine[{{0, 120}, {600, 120}}, Red], Canva
 Centred, and tracked:
 
 ```wl
-Graphics[CanvasBlock[{600, 200}, {CanvasText["CENTRED", {300, 80}, CanvasFont["Source Sans 3", 40, 600], Black, Alignment -> Center], CanvasText["TRACKED", {300, 160}, CanvasFont["Source Sans 3", 20, 600], Red, Alignment -> Center, "Tracking" -> 8]}], PlotRange -> {{0, 600}, {0, 200}}, ImageSize -> 360]
+AnimatedGraphics[{CanvasText["CENTRED", {300, 80}, CanvasFont["Source Sans 3", 40, 600], Black, Alignment -> Center], CanvasText["TRACKED", {300, 160}, CanvasFont["Source Sans 3", 20, 600], Red, Alignment -> Center, "Tracking" -> 8]}, "CanvasSize" -> {600, 200}, Background -> White][0, ImageSize -> 360]
 ```
 
 <!-- => two centred lines, the second with wide letter spacing -->

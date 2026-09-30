@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/WordScroll
 Keywords: [words, scroll, credits, background, texture, names]
-SeeAlso: [WordWall, TileGrid, Timeline]
+SeeAlso: [WordWall, TileGrid, AnimatedGraphics]
 RelatedGuides: [WAnim]
 ---
 
@@ -32,7 +32,7 @@ RelatedGuides: [WAnim]
 Every plotting function, rolling past:
 
 ```wl
-WordScroll[Names["System`*Plot"], {0, 4}, "Opacity" -> {0.4, 0.7}]["Graphics", 2.5, ImageSize -> 480]
+WordScroll[Names["System`*Plot"], {0, 4}, "Opacity" -> {0.4, 0.7}][2.5, ImageSize -> 480]
 ```
 
 <!-- => columns of ...Plot names rising -->

@@ -5,7 +5,7 @@
 
 PackageExported[{Instrument, Mixer}]
 
-PackageScoped[{instrumentVoiceQ, studioQ, studioRender}]
+PackageScoped[{instrumentVoiceQ, studioQ, studioRender, instrumentAudio}]
 
 
 (* ::Section:: *)
@@ -230,11 +230,30 @@ instrument["Voice", _][f_, v_, hold_, onset_, seed_] := Module[{rel = 0.3, n, ts
     env = adsrArray[ts, hold, 0.06, 0.2, 0.85, rel];
     y = y env v 0.9;
     note["Music", panned[y, -0.1], mono[0.55 y], mono[0.4 y]]];
+(* the plain oscillators, for tracks played as they are *)
+instrument[wave : "Sine" | "Triangle" | "Square" | "Sawtooth" | "Supersaw", _][f_, v_, hold_, onset_, seed_] := Module[{n = samples[hold + 0.05], ts, x},
+    ts = times[n];
+    x = Switch[wave, "Sine", Sin[2 Pi f ts], "Triangle", 2 / Pi ArcSin[Sin[2 Pi f ts]], "Square", Sign[Sin[2 Pi f ts]],
+        "Sawtooth", sawWave[f, n], _, (sawWave[0.993 f, n] + sawWave[f, n, 0.31] + sawWave[1.007 f, n, 0.67]) / 3];
+    x = x adsrArray[ts, hold, 0.004, 0.08, 0.85, 0.05] v 0.3;
+    note["Music", mono[x], mono[0.2 x]]];
 instrument[name_, _][___] := (Message[Instrument::unknown, name]; note["Music", {{0.}, {0.}}]);
 
 Instrument::unknown = "`1` is not an instrument; Instrument[] lists them.";
 Instrument[] = {"Kick", "SoftKick", "Clap", "Hat", "OpenHat", "Crash", "Riser", "Roll", "Impact", "Tick", "Blip",
-    "Pluck", "Arp", "Pad", "Bass", "LongBass", "Stab", "Lead", "Bell", "Voice"};
+    "Pluck", "Arp", "Pad", "Bass", "LongBass", "Stab", "Lead", "Bell", "Voice", "Sine", "Triangle", "Square", "Sawtooth", "Supersaw"};
+
+(* the notes of events played on an instrument, dry, as one Audio (a Track played as it is): d cycles
+   shorten every note when given *)
+instrumentAudio[_, {}, _] := Nothing;
+instrumentAudio[name_String, events_List, dec_] := Module[{cs = cycleSecondsNow[], notes, n, buf},
+    notes = Flatten[Table[With[{hold = If[dec === None, #, Min[#, dec cs]] &[(ev["Whole"][[2]] - ev["Whole"][[1]]) cs], onset = ev["Whole"][[1]] cs},
+        {samples[onset] + 1, instrument[name, name][midiFreq[m], Lookup[ev, "Velocity", 1], hold, onset, Mod[Hash[{name, onset, m}], 2^31]]["Dry"]}],
+        {ev, events}, {m, valuePitches[ev["Value"]]}], 1];
+    n = Max[#[[1]] + Length[#[[2, 1]]] & /@ notes];
+    buf = ConstantArray[0., {2, n}];
+    Do[buf[[All, x[[1]] ;; x[[1]] + Length[x[[2, 1]]] - 1]] += x[[2]], {x, notes}];
+    Audio[buf, SampleRate -> studioRate[]]];
 
 
 (* ::Subsection:: *)
@@ -251,8 +270,8 @@ voiceGain[v_] := Times @@ Cases[{v}, HoldPattern[GainVoice[g_, _]] :> g, Infinit
      "Sidechain" -> kickTrack    duck the music (0.55), bass (0.8) and reverb (0.35) under its onsets
      "Cutoff" -> f               the music bus runs through a low-pass at f[cycle] Hz
      "DelayTime" -> 3/16         the ping-pong delay, in cycles; "DelayFeedback" -> 0.42
-     "Master" -> True            rumble high-pass, soft saturation, limiter; "FadeOut" -> seconds *)
-Options[Mixer] = {"Sidechain" -> None, "Cutoff" -> None, "DelayTime" -> 3/16, "DelayFeedback" -> 0.42, "Master" -> True, "FadeOut" -> 2.5};
+     "Master" -> True            rumble high-pass, soft saturation, limiter; "FadeOut" -> cycles *)
+Options[Mixer] = {"Sidechain" -> None, "Cutoff" -> None, "DelayTime" -> 3/16, "DelayFeedback" -> 0.42, "Master" -> True, "FadeOut" -> 5/4};
 Mixer[opts : OptionsPattern[]][Track[vs_List, m_Association : <||>]] := Track[vs, Append[m, "Mixer" -> {opts}]];
 studioQ[t_] := MatchQ[t, Track[vs_List, ___] /; AnyTrue[vs, instrumentVoiceQ] || MatchQ[t, Track[_, KeyValuePattern["Mixer" -> _]]]];
 mixerOption[t_, name_] := OptionValue[Mixer, Replace[t, {Track[_, m_Association] :> Lookup[m, "Mixer", {}], _ -> {}}], name];
@@ -271,7 +290,7 @@ studioRender[t : Track[vs_List, ___], nCycles_] := Module[{sr = studioRate[], cs
                     addAt[verb, i0, nt["Verb"]]; addAt[delay, i0, nt["Delay"]]],
                     {m, Replace[valuePitches[ev["Value"]], {} -> {0}]}]],
                 {ev, Select[p["Query", 0, nCycles], hasOnset]}]],
-        (* any other voice (a Synth, samples, an Audio) is rendered as usual and joins the music bus *)
+        (* any other voice (a track played as it is, samples, an Audio) is rendered as usual and joins the music bus *)
         With[{a = voiceRendered[v, nCycles]},
             If[Head[a] === Audio, With[{d = AudioData[AudioResample[a, sr]]}, addAt[music, 1, If[Length[d] == 1, {d[[1]], d[[1]]}, d[[;; 2]]]]]]]],
         {v, vs}];
@@ -300,5 +319,5 @@ mixBuses[bus0_, n_, t_] := Module[{bus = bus0, sr = studioRate[], cs = cycleSeco
         gain = limiterKernel[Developer`ToPackedArray[MapThread[Max, Abs[mix]]], 0.891, samples[0.005], Exp[-1. / (0.12 sr)]];
         mix = gain # & /@ mix];
     fade = mixerOption[t, "FadeOut"];
-    If[NumericQ[fade] && fade > 0, With[{m = Min[n, samples[fade]]}, mix[[All, n - m + 1 ;;]] = (Cos[Range[0, m - 1] / m Pi / 2] #) & /@ mix[[All, n - m + 1 ;;]]]];
+    If[NumericQ[fade] && fade > 0, With[{m = Min[n, samples[fade cs]]}, mix[[All, n - m + 1 ;;]] = (Cos[Range[0, m - 1] / m Pi / 2] #) & /@ mix[[All, n - m + 1 ;;]]]];
     Audio[mix, SampleRate -> sr]];

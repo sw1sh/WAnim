@@ -3,16 +3,19 @@
 (* ::Section:: *)
 (*PackageExported*)
 
-PackageExported[{Brace}]
+PackageExported[{BraceLabel}]
 
 
 
 
 
-Options[Brace] = {"Direction" -> Down, "WidthMultiplier" -> 2, "Buffer" -> 0.2, "Height" -> 0.22}
+(* BraceLabel[g] is Manim's Brace: a curly brace under g, typeset in TeX and stretched across its
+   width; BraceLabel[g, dir, label] draws it in dir with label (an AnimatedGraphics) at its tip, and
+   "Direction" turns it to another side *)
+Options[BraceLabel] = {"Direction" -> Down, "WidthMultiplier" -> 2, "Buffer" -> 0.2, "Height" -> 0.22}
 
-Brace[obj_AnimatedObject, Optional[dir : _ ? directiveQ | Automatic, $AnimatedObjectDefaultDirective],
-    Optional[text_AnimatedObject, AnimatedObject[""]],
+BraceLabel[obj_AnimatedGraphics, Optional[dir : _ ? directiveQ | Automatic, Automatic],
+    Optional[text_AnimatedGraphics, AnimatedGraphics[{}]],
     opts : OptionsPattern[]] := Module[{
     direction, angle, corners, left, right, width, numQuads, brace, tip
 },
@@ -22,9 +25,9 @@ Brace[obj_AnimatedObject, Optional[dir : _ ? directiveQ | Automatic, $AnimatedOb
     {left, right} = Values@corners[[{Key[{-1, -1}], Key[{1, -1}]}]];
     width = First[right] - First[left];
     numQuads = Clip[width OptionValue["WidthMultiplier"], {2, 15}];
-    brace = AnimatedObject[StringTemplate["\\underbrace{``}"][StringJoin @ Table["\\qquad", numQuads]], dir /. Automatic -> obj["Directive"]]["Apply", "Stretch", width, OptionValue["Height"]];   (* stretched across only, like Manim's: a long brace keeps its weight *)
+    brace = AnimatedGraphics[StringTemplate["\\underbrace{``}"][StringJoin @ Table["\\qquad", numQuads]], dir /. Automatic -> obj["Directive"]]["Apply", "Stretch", width, OptionValue["Height"]];   (* stretched across only, like Manim's: a long brace keeps its weight *)
     tip = RotationTransform[- angle][left + {width / 2, -  (OptionValue["Buffer"] + 3 brace["Height"])}];
-    AnimatedObject[{
+    AnimatedGraphics[{
         text["Apply", "Translate", tip],
         brace["Apply", "Translate", left - brace["Corners"][{-1, 1}] + {0, - OptionValue["Buffer"]}]["TransformPrimitives", RotationTransform[- angle]]
     }]

@@ -10,9 +10,11 @@ PackageExported[{AnimationEffect}]
 
 
 
-Options[AnimationEffect] = {"Duration" -> 1, "Reverse" -> False, "Rate" -> "Linear"}
+(* "Easing" is the curve an effect runs along: an Easing name ("Smooth", Manim's rate, by default), a
+   name with its parameter {"OutBack", 2}, or any function on [0, 1] *)
+Options[AnimationEffect] = {"Duration" -> 1, "Reverse" -> False, "Easing" -> "Smooth"}
 
-$AnimationEffectProperties = {"Function", "Duration", "Reverse", "Rate"};
+$AnimationEffectProperties = {"Function", "Duration", "Reverse", "Easing"};
 
 
 animationEffectDataQ[data_] :=
@@ -20,37 +22,35 @@ animationEffectDataQ[data_] :=
     NumericQ[data["Duration"]]
 
 AnimationEffect[f_Function, OptionsPattern[]] :=
-    AnimationEffect[<|"Function" -> f, "Duration" -> OptionValue["Duration"], "Reverse" -> OptionValue["Reverse"], "Rate" -> OptionValue["Rate"]|>]
+    AnimationEffect[<|"Function" -> f, "Duration" -> OptionValue["Duration"], "Reverse" -> OptionValue["Reverse"], "Easing" -> OptionValue["Easing"]|>]
 
 AnimationEffect[data_ ? animationEffectDataQ][prop_ /; MemberQ[$AnimationEffectProperties, prop]] := data[prop]
 
 
-eff_AnimationEffect[obj_AnimatedObject] := obj["Play", eff]
+eff_AnimationEffect[obj_AnimatedGraphics] := obj["Play", eff]
 
 
-(* any of the standard Easing curves (Timeline.wl) works as a rate too: "Rate" -> "OutCubic" *)
-animationRateFunction[rate_String] /; MemberQ[Easing["Names"], rate] := Easing[rate]
-animationRateFunction[rate_String] := rate /. {"Linear" -> Function[#], "Quadratic" -> Function[# ^ 2], "Exponential" -> Function[Exp[#] / E]}
-
-animationRateFunction[rate_Function] := rate
+easingOf[e_String] := Easing[e]
+easingOf[{e_String, args__}] := Easing[e, args]
+easingOf[f_] := f
 
 
 (* AnimationEffect[] -> a catalog of every effect, the Creation methods and their suboptions *)
 AnimationEffect[] := Dataset[{
-    <|"Effect" -> "Scale", "Method" -> "", "Arguments" -> "factor, point", "Options" -> "Duration (1), Rate (Linear), Reverse (False)", "Description" -> "scale by factor about a point (default: the center)"|>,
-    <|"Effect" -> "Rotate", "Method" -> "", "Arguments" -> "angle, point", "Options" -> "Duration, Rate, Reverse", "Description" -> "rotate by an angle about a point"|>,
-    <|"Effect" -> "Translate", "Method" -> "", "Arguments" -> "vector", "Options" -> "Duration, Rate, Reverse", "Description" -> "translate by a vector (or Left/Right/Up/Down)"|>,
-    <|"Effect" -> "Stretch", "Method" -> "", "Arguments" -> "width, height", "Options" -> "Duration, Rate, Reverse", "Description" -> "stretch to a width and/or height"|>,
+    <|"Effect" -> "Scale", "Method" -> "", "Arguments" -> "factor, point", "Options" -> "Duration (1), Easing (Smooth), Reverse (False)", "Description" -> "scale by factor about a point (default: the center)"|>,
+    <|"Effect" -> "Rotate", "Method" -> "", "Arguments" -> "angle, point", "Options" -> "Duration, Easing, Reverse", "Description" -> "rotate by an angle about a point"|>,
+    <|"Effect" -> "Translate", "Method" -> "", "Arguments" -> "vector", "Options" -> "Duration, Easing, Reverse", "Description" -> "translate by a vector (or Left/Right/Up/Down)"|>,
+    <|"Effect" -> "Stretch", "Method" -> "", "Arguments" -> "width, height", "Options" -> "Duration, Easing, Reverse", "Description" -> "stretch to a width and/or height"|>,
     <|"Effect" -> "Wait", "Method" -> "", "Arguments" -> "", "Options" -> "Duration, Reverse", "Description" -> "hold without changing"|>,
-    <|"Effect" -> "Transform", "Method" -> "", "Arguments" -> "target", "Options" -> "Duration, Rate, Reverse", "Description" -> "turn into another object's shape (Transform)"|>,
-    <|"Effect" -> "Creation", "Method" -> "Write", "Arguments" -> "", "Options" -> "Duration, Rate, Reverse, Delay (0), LagRatio (0), BorderFraction (0.5)", "Description" -> "trace the outline then fade the fill in (aka Partial, DrawBorderThenFill)"|>,
-    <|"Effect" -> "Creation", "Method" -> "Create", "Arguments" -> "", "Options" -> "Duration, Rate, Reverse, Delay, LagRatio", "Description" -> "reveal the partial filled path (aka ShowCreation)"|>,
-    <|"Effect" -> "Creation", "Method" -> "FadeIn", "Arguments" -> "", "Options" -> "Duration, Rate, Reverse, Delay, LagRatio", "Description" -> "fade in"|>,
-    <|"Effect" -> "Creation", "Method" -> "GrowFromCenter", "Arguments" -> "", "Options" -> "Duration, Rate, Reverse, Delay, ScaleFactor (0)", "Description" -> "scale up from the center"|>,
-    <|"Effect" -> "Creation", "Method" -> "GrowFromPoint", "Arguments" -> "", "Options" -> "Duration, Rate, Reverse, Delay, Point (center), ScaleFactor (0)", "Description" -> "scale up from a point"|>,
-    <|"Effect" -> "Creation", "Method" -> "SpiralIn", "Arguments" -> "", "Options" -> "Duration, Rate, Reverse, Delay, ScaleFactor (2), FadeFraction (0.3), Angle (2 Pi)", "Description" -> "spiral inward while fading in"|>,
-    <|"Effect" -> "Creation", "Method" -> "ShowIncreasingSubsets", "Arguments" -> "", "Options" -> "Duration, Rate, Reverse, Delay, LagRatio (1)", "Description" -> "reveal primitives one at a time"|>,
-    <|"Effect" -> "Creation", "Method" -> "Gradient", "Arguments" -> "", "Options" -> "Duration, Rate, Reverse, Delay, Direction (0), Softness (0.15)", "Description" -> "gradient wipe reveal"|>
+    <|"Effect" -> "Transform", "Method" -> "", "Arguments" -> "target", "Options" -> "Duration, Easing, Reverse", "Description" -> "turn into another object's shape (Transform)"|>,
+    <|"Effect" -> "Creation", "Method" -> "Write", "Arguments" -> "", "Options" -> "Duration, Easing, Reverse, Delay (0), LagRatio (0), BorderFraction (0.5)", "Description" -> "trace the outline then fade the fill in (aka Partial, DrawBorderThenFill)"|>,
+    <|"Effect" -> "Creation", "Method" -> "Create", "Arguments" -> "", "Options" -> "Duration, Easing, Reverse, Delay, LagRatio", "Description" -> "reveal the partial filled path (aka ShowCreation)"|>,
+    <|"Effect" -> "Creation", "Method" -> "FadeIn", "Arguments" -> "", "Options" -> "Duration, Easing, Reverse, Delay, LagRatio", "Description" -> "fade in"|>,
+    <|"Effect" -> "Creation", "Method" -> "GrowFromCenter", "Arguments" -> "", "Options" -> "Duration, Easing, Reverse, Delay, ScaleFactor (0)", "Description" -> "scale up from the center"|>,
+    <|"Effect" -> "Creation", "Method" -> "GrowFromPoint", "Arguments" -> "", "Options" -> "Duration, Easing, Reverse, Delay, Point (center), ScaleFactor (0)", "Description" -> "scale up from a point"|>,
+    <|"Effect" -> "Creation", "Method" -> "SpiralIn", "Arguments" -> "", "Options" -> "Duration, Easing, Reverse, Delay, ScaleFactor (2), FadeFraction (0.3), Angle (2 Pi)", "Description" -> "spiral inward while fading in"|>,
+    <|"Effect" -> "Creation", "Method" -> "ShowIncreasingSubsets", "Arguments" -> "", "Options" -> "Duration, Easing, Reverse, Delay, LagRatio (1)", "Description" -> "reveal primitives one at a time"|>,
+    <|"Effect" -> "Creation", "Method" -> "Gradient", "Arguments" -> "", "Options" -> "Duration, Easing, Reverse, Delay, Direction (0), Softness (0.15)", "Description" -> "gradient wipe reveal"|>
 }]
 
 
@@ -172,7 +172,7 @@ createDrawer[p_] := writeDrawer[p, 0.5]
 
 (* per-primitive drawer for a creation method; directives and nested objects pass through *)
 creationPrimitiveDrawer[method_, args_][prim_] := Which[
-    directiveQ[prim] || MatchQ[prim, _AnimatedObject], Function[alpha, prim],
+    directiveQ[prim] || MatchQ[prim, _AnimatedGraphics], Function[alpha, prim],
     method === "FadeIn", Function[alpha, {Opacity[alpha], prim}],
     method === "ShowIncreasingSubsets", Function[alpha, If[alpha > 0, prim, Nothing]],
     method === "Create" || method === "ShowCreation", createDrawer[prim],
@@ -218,7 +218,7 @@ creationEffect[duration_, rate_, opts : OptionsPattern[]] := Module[{method, arg
 ]
 
 (* an object's primitives with its nested objects spliced in, each after its own directive *)
-flatPrimitives[obj_] := Flatten[{obj["Primitives"]} /. o_AnimatedObject :> Flatten[{o["Directive"], flatPrimitives[o]}]]
+flatPrimitives[obj_] := Flatten[{obj["Primitives"]} /. o_AnimatedGraphics :> Flatten[{o["Directive"], flatPrimitives[o]}]]
 
 (* methods that reveal each primitive with its own drawer, optionally staggered by LagRatio *)
 perPrimitiveCreation[duration_, delay_, rate_, lag0_, method_, args_] :=
@@ -234,7 +234,7 @@ perPrimitiveCreation[duration_, delay_, rate_, lag0_, method_, args_] :=
                         (* nested objects (the parts of a formula) are drawn glyph by glyph too *)
                         With[{prims = flatPrimitives[obj]},
                             drawers = creationPrimitiveDrawer[method, args] /@ prims;
-                            With[{drawable = Boole[! directiveQ[#] && ! MatchQ[#, _AnimatedObject]] & /@ prims},
+                            With[{drawable = Boole[! directiveQ[#] && ! MatchQ[#, _AnimatedGraphics]] & /@ prims},
                                 staggerIdx = Accumulate[drawable] - drawable;
                                 maxEnd = 1 + Max[Total[drawable] - 1, 0] lag
                             ]
@@ -302,7 +302,7 @@ gradientCreation[duration_, delay_, rate_, direction_, softness_] :=
                     ];
                     edge = frac (1 + softness);   (* sweep from 0 past 1 so it ends fully solid *)
                     obj["SetPrimitives", MapThread[
-                        If[ directiveQ[#1] || MatchQ[#1, _AnimatedObject],
+                        If[ directiveQ[#1] || MatchQ[#1, _AnimatedGraphics],
                             #1,
                             {Opacity[Clip[(edge - #2) / softness, {0, 1}]], #1}
                         ] &,
@@ -315,10 +315,10 @@ gradientCreation[duration_, delay_, rate_, direction_, softness_] :=
 
 
 AnimationEffect["Scale", factor_, Optional[p_List, Automatic], opts : OptionsPattern[]] := With[{
-    duration = OptionValue["Duration"], rate = animationRateFunction @ OptionValue["Rate"]
+    duration = OptionValue["Duration"], rate = easingOf @ OptionValue["Easing"]
 },
     AnimationEffect[
-        Function @ With[{scale = If[ListQ @ factor, factor, Table[factor, #Object["EmbeddingDimension"]]]},
+        Function @ With[{scale = If[ListQ @ factor, factor, Table[factor, Length[#Object["Center"]]]]},
             #Object["TransformPrimitives", ScalingTransform[(1 + rate[#t / duration] (scale - 1)), p /. Automatic -> #Object["Center"]]]
         ],
     opts
@@ -326,7 +326,7 @@ AnimationEffect["Scale", factor_, Optional[p_List, Automatic], opts : OptionsPat
 ]
 
 AnimationEffect["Rotate", angle_, Optional[p_List, Automatic], opts : OptionsPattern[]] := With[{
-    duration = OptionValue["Duration"], rate = animationRateFunction @ OptionValue["Rate"]
+    duration = OptionValue["Duration"], rate = easingOf @ OptionValue["Easing"]
 },
     AnimationEffect[#Object["TransformPrimitives",
         RotationTransform[rate[#t / duration] angle, p /. Automatic -> #Object["Center"]]] &,
@@ -335,7 +335,7 @@ AnimationEffect["Rotate", angle_, Optional[p_List, Automatic], opts : OptionsPat
 ]
 
 AnimationEffect["Translate", v_, opts : OptionsPattern[]] := With[{
-    duration = OptionValue["Duration"], rate = animationRateFunction @ OptionValue["Rate"]
+    duration = OptionValue["Duration"], rate = easingOf @ OptionValue["Easing"]
 },
     AnimationEffect[#Object["TransformPrimitives",
         TranslationTransform[rate[#t / duration] (v /. {Left -> {-1, 0}, Right -> {1, 0}, Down -> {0, -1}, Up -> {0, 1}})]] &,
@@ -358,14 +358,14 @@ AnimationEffect["Stretch", width_, height_ : Automatic, opts : OptionsPattern[]]
 ]
 
 AnimationEffect["Creation", opts : OptionsPattern[Join[Options[AnimationEffect], Options[creationEffect]]]] :=
-    creationEffect[OptionValue["Duration"], animationRateFunction @ OptionValue["Rate"], FilterRules[{opts}, Options[creationEffect]]]
+    creationEffect[OptionValue["Duration"], easingOf @ OptionValue["Easing"], FilterRules[{opts}, Options[creationEffect]]]
 
 AnimationEffect["Wait", opts : OptionsPattern[]] := AnimationEffect[#Object &, opts]
 
 (* the object's shape turning into target's (Manim's Transform / ReplacementTransform): the outlines
    are blended with Morph and, when it is done, the object is the target *)
-AnimationEffect["Transform", target_AnimatedObject, opts : OptionsPattern[]] := With[{
-    duration = OptionValue["Duration"], rate = animationRateFunction @ OptionValue["Rate"]
+AnimationEffect["Transform", target_AnimatedGraphics, opts : OptionsPattern[]] := With[{
+    duration = OptionValue["Duration"], rate = easingOf @ OptionValue["Easing"]
 },
     AnimationEffect[Function @ With[{u = rate[#t / duration]},
         If[u >= 1, #Object["SetPrimitives", target["Primitives"]]["SetDirective", target["Directive"]],
@@ -383,22 +383,9 @@ AnimationEffect[effects : {__AnimationEffect}] := AnimationEffect[
 
 
 
-(* StandardForm = summary box; TraditionalForm = the effect previewed on a sample object as a
-   live ["Dynamic"]; InputForm = the raw AnimationEffect[<|...|>] expression. *)
-AnimationEffect /: MakeBoxes[eff : AnimationEffect[data_ ? animationEffectDataQ], StandardForm] := Module[{
-    above, below
-},
-    above = {{BoxForm`SummaryItem[{"Duration", ":", Quantity[eff["Duration"], "Seconds"]}]}};
-    below = {};
-    BoxForm`ArrangeSummaryBox[
-        AnimationEffect,
-        eff,
-        AnimatedObject[RegularPolygon[3]]["Play", eff]["Dynamic"],
-        above, below,
-        StandardForm,
-        "Interpretable" -> Automatic
-    ]
-]
-
-AnimationEffect /: MakeBoxes[eff : AnimationEffect[data_ ? animationEffectDataQ], TraditionalForm] :=
-    InterpretationBox[ToBoxes[AnimatedObject[RegularPolygon[3]]["Play", eff]["Dynamic"], TraditionalForm], eff]
+(* the summary box shows the effect played on a triangle *)
+AnimationEffect /: MakeBoxes[eff : AnimationEffect[data_ ? animationEffectDataQ], StandardForm] := BoxForm`ArrangeSummaryBox[
+    AnimationEffect, eff,
+    Quiet @ Check[With[{g = AnimatedGraphics[RegularPolygon[3], LightBlue, PlotRange -> {{-1.6, 1.6}, {-1.6, 1.6}}]["Play", eff]}, summaryIcon[g, {0, eff["Duration"]}]], ""],
+    {{BoxForm`SummaryItem[{"Duration: ", eff["Duration"]}]}, {BoxForm`SummaryItem[{"Easing: ", eff["Easing"]}]}}, {},
+    StandardForm, "Interpretable" -> Automatic]

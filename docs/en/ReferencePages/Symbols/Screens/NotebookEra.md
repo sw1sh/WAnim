@@ -50,7 +50,7 @@ NotebookEra["NeXT1988"][[{"Pixel", "Depth"}]]
 Every era, the same session:
 
 ```wl
-Grid[Partition[Table[NotebookSession[{{0, "In", "words = StringSplit[\"Every language starts\"]"}, {0.3, "Out", "{Every, language, starts}"}}, {0, 1}, "Era" -> e, "Enter" -> "Cut", "PushIn" -> 0]["Graphics", 0.9, ImageSize -> 240], {e, NotebookEra[]}], 2]]
+Grid[Partition[Table[NotebookSession[{{0, "In", "words = StringSplit[\"Every language starts\"]"}, {0.3, "Out", "{Every, language, starts}"}}, {0, 1}, "Era" -> e, "Enter" -> "Cut", "PushIn" -> 0][0.9, ImageSize -> 240], {e, NotebookEra[]}], 2]]
 ```
 
 <!-- => ten windows from 1988 to 2024 -->
@@ -60,7 +60,7 @@ Grid[Partition[Table[NotebookSession[{{0, "In", "words = StringSplit[\"Every lan
 A changed era: Big Sur with a dark page:
 
 ```wl
-NotebookSession[{{0, "In", "Range[10]"}}, {0, 1}, "Era" -> NotebookEra["BigSur2020", "Page" -> GrayLevel[0.1], "Ink" -> White, "LightDark" -> "Dark"], "Evaluate" -> True, "Enter" -> "Cut"]["Graphics", 0.9, ImageSize -> 480]
+NotebookSession[{{0, "In", "Range[10]"}}, {0, 1}, "Era" -> NotebookEra["BigSur2020", "Page" -> GrayLevel[0.1], "Ink" -> White, "LightDark" -> "Dark"], "Evaluate" -> True, "Enter" -> "Cut"][0.9, ImageSize -> 480]
 ```
 
 <!-- => a Big Sur window with light text on a dark page -->

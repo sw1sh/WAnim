@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/Tween
 Keywords: [tween, keyframes, interpolation, value tracker, easing, animation]
-SeeAlso: [Easing, Stage, Morph, Timeline]
+SeeAlso: [Easing, Morph, AnimatedGraphics]
 RelatedGuides: [WAnim]
 ---
 

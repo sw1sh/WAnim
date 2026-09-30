@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/Easing
 Keywords: [easing, tween, interpolation, ease in, ease out, overshoot, animation curve]
-SeeAlso: [AnimationEffect, Timeline, Title]
+SeeAlso: [AnimationEffect, AnimatedGraphics, TitleCard]
 RelatedGuides: [WAnim]
 ---
 

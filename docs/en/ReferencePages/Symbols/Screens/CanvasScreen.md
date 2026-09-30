@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/CanvasScreen
 Keywords: [retro, low resolution, 1-bit, pixel art, display, dithering, screen]
-SeeAlso: [RasterScreen, OrderedDither, NotebookSession, CanvasBlock]
+SeeAlso: [OrderedDither, NotebookSession]
 RelatedGuides: [WAnim]
 ---
 
@@ -31,7 +31,7 @@ RelatedGuides: [WAnim]
 A disk and some text on a one-bit screen at half resolution:
 
 ```wl
-Graphics[CanvasBlock[{600, 300}, CanvasScreen[{50, 50, 500, 200}, Function[{lw, lh}, {CanvasDisk[{60, 50}, 40, Black], CanvasText["one bit", {120, 60}, CanvasFont["Arimo", 14, 700], Black]}], "Pixel" -> 2, "Depth" -> "Bit"]], PlotRange -> {{0, 600}, {0, 300}}, ImageSize -> 480]
+AnimatedGraphics[CanvasScreen[{50, 50, 500, 200}, Function[{lw, lh}, {CanvasDisk[{60, 50}, 40, Black], CanvasText["one bit", {120, 60}, CanvasFont["Arimo", 14, 700], Black]}], "Pixel" -> 2, "Depth" -> "Bit"], "CanvasSize" -> {600, 300}, Background -> White][0, ImageSize -> 480]
 ```
 
 <!-- => a blocky disk and pixelated text -->
@@ -41,7 +41,7 @@ Graphics[CanvasBlock[{600, 300}, CanvasScreen[{50, 50, 500, 200}, Function[{lw, 
 The same in four greys at a third of the resolution:
 
 ```wl
-Graphics[CanvasBlock[{600, 300}, CanvasScreen[{50, 50, 500, 200}, Function[{lw, lh}, {CanvasDisk[{40, 33}, 26, GrayLevel[0.3]], CanvasText["NeXT", {80, 40}, CanvasFont["Arimo", 12, 700], GrayLevel[0.6]]}], "Pixel" -> 3, "Depth" -> "Gray4"]], PlotRange -> {{0, 600}, {0, 300}}, ImageSize -> 480]
+AnimatedGraphics[CanvasScreen[{50, 50, 500, 200}, Function[{lw, lh}, {CanvasDisk[{40, 33}, 26, GrayLevel[0.3]], CanvasText["NeXT", {80, 40}, CanvasFont["Arimo", 12, 700], GrayLevel[0.6]]}], "Pixel" -> 3, "Depth" -> "Gray4"], "CanvasSize" -> {600, 300}, Background -> White][0, ImageSize -> 480]
 ```
 
 <!-- => coarse grey shapes -->

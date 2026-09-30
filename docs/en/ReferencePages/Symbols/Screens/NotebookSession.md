@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/NotebookSession
 Keywords: [notebook, session, retro, Macintosh, NeXT, Windows, dark mode, 1-bit, input, output, evaluate, typing, Mathematica 1.0]
-SeeAlso: [Terminal, CanvasScreen, OrderedDither, NotebookEra, Timeline]
+SeeAlso: [TerminalSession, CanvasScreen, OrderedDither, NotebookEra, AnimatedGraphics]
 RelatedGuides: [WAnim]
 ---
 
@@ -27,7 +27,7 @@ RelatedGuides: [WAnim]
 - With "Evaluate" -> True every input also gets its computed output, "OutputDelay" after it has been typed.
 - The notebook scrolls so the newest cell stays in view, gliding when one arrives.
 - "Era" is the look: a name from <code>[NotebookEra]()[]</code> or a [NotebookEra]() association. Since 6.0 inputs are syntax-coloured.
-- "Enter" -> "Burst" grows the window out of its middle; "Enter" -> "Wipe" with "From" -> *previous* wipes the new era down over the last frame of the *previous* session, as one window living through its eras.
+- "Enter" -> "Burst" grows the window out of its middle; "From" -> *previous* wipes the new era down over the last frame of the *previous* session (a "Wipe" over 0.1 unless "Enter" says otherwise), as one window living through its eras.
 - "Pulse" -> *track* punches the window on the track's onsets; "PushIn" is a slow zoom across the span; "Dim" -> {$t_a$, $t_b$} shrinks and darkens it between the two times; "Exit" -> "FlyAway" flies it at the viewer over "ExitTime"; "Hide" -> {{$t_a$, $t_b$}, …} takes it off screen for an interlude and bursts it back after.
 - "ChatBar" -> {$t_0$, "*request*", *dur*, $t_s$} puts a chat bar under the notebook, typing *request* from $t_0$ over *dur* and sending it at $t_s$.
 - "GraphicsSize" -> *w* shows graphics outputs *w* logical pixels wide.
@@ -56,7 +56,7 @@ RelatedGuides: [WAnim]
 Mathematica 1.0 listing its vocabulary:
 
 ```wl
-NotebookSession[{{0, "In", "Names[\"*\"]"}, {0.5, "Out", "{Above, Abs, Accuracy, AccuracyGoal, AddTo, AiryAi, All, And, Apart, Append, AppendTo, Apply, ...}"}}, {0, 2}]["Graphics", 1.5, ImageSize -> 480]
+NotebookSession[{{0, "In", "Names[\"*\"]"}, {0.5, "Out", "{Above, Abs, Accuracy, AccuracyGoal, AddTo, AiryAi, All, And, Apart, Append, AppendTo, Apply, ...}"}}, {0, 2}][1.5, ImageSize -> 480]
 ```
 
 <!-- => a 1-bit Mac window with In[1] and Out[1] -->
@@ -66,7 +66,7 @@ NotebookSession[{{0, "In", "Names[\"*\"]"}, {0.5, "Out", "{Above, Abs, Accuracy,
 Inputs evaluated as they are typed, graphics dithered to one bit:
 
 ```wl
-NotebookSession[{{0, "In", "Plot3D[Sin[x y], {x, 0, 3}, {y, 0, 3}]"}}, {0, 2}, "Evaluate" -> True]["Graphics", 1.5, ImageSize -> 480]
+NotebookSession[{{0, "In", "Plot3D[Sin[x y], {x, 0, 3}, {y, 0, 3}]"}}, {0, 2}, "Evaluate" -> True][1.5, ImageSize -> 480]
 ```
 
 <!-- => the input and a dithered surface plot under Out[1] -->
@@ -76,7 +76,7 @@ NotebookSession[{{0, "In", "Plot3D[Sin[x y], {x, 0, 3}, {y, 0, 3}]"}}, {0, 2}, "
 An input still being typed, with its caret:
 
 ```wl
-NotebookSession[{{0, "In", "Integrate[1/(x^3 - 1), x]"}}, {0, 2}, "TypeTime" -> 1]["Graphics", 0.5, ImageSize -> 480]
+NotebookSession[{{0, "In", "Integrate[1/(x^3 - 1), x]"}}, {0, 2}, "TypeTime" -> 1][0.5, ImageSize -> 480]
 ```
 
 <!-- => half the input and a caret -->
@@ -86,7 +86,7 @@ NotebookSession[{{0, "In", "Integrate[1/(x^3 - 1), x]"}}, {0, 2}, "TypeTime" -> 
 An output animated over one unit, the way a Manipulate slider moves:
 
 ```wl
-NotebookSession[{{0, "In", "Plot[Sin[a x], {x, 0, 6}]"}, {0.3, "Out", a |-> Plot[Sin[(1 + 2 a) x], {x, 0, 6}, ImageSize -> 260], 1}}, {0, 2}, "Era" -> "BigSur2020", "Enter" -> "Cut"]["Graphics", 0.8, ImageSize -> 480]
+NotebookSession[{{0, "In", "Plot[Sin[a x], {x, 0, 6}]"}, {0.3, "Out", a |-> Plot[Sin[(1 + 2 a) x], {x, 0, 6}, ImageSize -> 260], 1}}, {0, 2}, "Era" -> "BigSur2020", "Enter" -> "Cut"][0.8, ImageSize -> 480]
 ```
 
 <!-- => a sine plot part-way through its sweep -->
@@ -98,7 +98,7 @@ NotebookSession[{{0, "In", "Plot[Sin[a x], {x, 0, 6}]"}, {0.3, "Out", a |-> Plot
 The window bursting out of its middle:
 
 ```wl
-NotebookSession[{{0, "In", "1 + 1"}}, {0, 2}]["Graphics", 0.06, ImageSize -> 480]
+NotebookSession[{{0, "In", "1 + 1"}}, {0, 2}][0.06, ImageSize -> 480]
 ```
 
 <!-- => a small window, growing -->
@@ -109,7 +109,7 @@ One window from 1991 into 1996, wiped down:
 
 ```wl
 With[{a = NotebookSession[{{0, "In", "1 + 1"}}, {0, 1}, "Era" -> "Win1991", "Evaluate" -> True, "Enter" -> "Cut"]},
-    NotebookSession[{{1, "In", "2 + 2"}}, {1, 2}, "Era" -> "Win1996", "Enter" -> "Wipe", "EnterTime" -> 0.1, "From" -> a]["Graphics", 1.05, ImageSize -> 480]]
+    NotebookSession[{{1, "In", "2 + 2"}}, {1, 2}, "Era" -> "Win1996", "From" -> a][1.05, ImageSize -> 480]]
 ```
 
 <!-- => Windows 95 chrome over the top half, Windows 3.1 below -->
@@ -121,7 +121,7 @@ A chat notebook asking, answering, and running the answer:
 ```wl
 NotebookSession[{{0, "ChatInput", "What are the ten most common words in Alice in Wonderland?", 0.5},
     {0.75, "ChatOutput", "You can count them with WordCounts:", {"Take[WordCounts[ExampleData[{\"Text\", \"AliceInWonderland\"}]], 10]"}, "WordCounts"},
-    {2, "In", "Take[WordCounts[ExampleData[{\"Text\", \"AliceInWonderland\"}]], 10]", 0.3}}, {0, 4}, "Era" -> "BigSur2020", "Title" -> "Chat.nb", "Evaluate" -> True]["Graphics", 3.5, ImageSize -> 480]
+    {2, "In", "Take[WordCounts[ExampleData[{\"Text\", \"AliceInWonderland\"}]], 10]", 0.3}}, {0, 4}, "Era" -> "BigSur2020", "Title" -> "Chat.nb", "Evaluate" -> True][3.5, ImageSize -> 480]
 ```
 
 <!-- => a Big Sur chat notebook: question, answer with code, and the counts -->

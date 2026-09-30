@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/TileGrid
 Keywords: [grid, tiles, contact sheet, montage, cards, plots, rotating]
-SeeAlso: [WordScroll, PhotoPrint, TrackPulse, Timeline]
+SeeAlso: [WordScroll, PhotoPrint, TrackPulse, AnimatedGraphics]
 RelatedGuides: [WAnim]
 ---
 
@@ -38,7 +38,7 @@ Four plots dealt out on the beat:
 
 ```wl
 TileGrid[{{"Plot", Plot[Sin[x], {x, 0, 6}], "1.0"}, {"ContourPlot", ContourPlot[Sin[x y], {x, 0, 3}, {y, 0, 3}], "1.0"},
-    {"DensityPlot", DensityPlot[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}], "1.0"}, {"StreamPlot", StreamPlot[{-y, x}, {x, -1, 1}, {y, -1, 1}], "7"}}, {0, 3}]["Graphics", 2, ImageSize -> 480]
+    {"DensityPlot", DensityPlot[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}], "1.0"}, {"StreamPlot", StreamPlot[{-y, x}, {x, -1, 1}, {y, -1, 1}], "7"}}, {0, 3}][2, ImageSize -> 480]
 ```
 
 <!-- => four white cards with plots, names under them -->
@@ -48,7 +48,7 @@ TileGrid[{{"Plot", Plot[Sin[x], {x, 0, 6}], "1.0"}, {"ContourPlot", ContourPlot[
 A surface that turns:
 
 ```wl
-TileGrid[{{"SphericalPlot3D", u |-> SphericalPlot3D[1 + Sin[5 t] Sin[4 p]/3, {t, 0, Pi}, {p, 0, 2 Pi}, Mesh -> None, ViewPoint -> {3 Cos[2 Pi u], 3 Sin[2 Pi u], 1.5}]}}, {0, 3}, "Frames" -> 8]["Graphics", 1.2, ImageSize -> 480]
+TileGrid[{{"SphericalPlot3D", u |-> SphericalPlot3D[1 + Sin[5 t] Sin[4 p]/3, {t, 0, Pi}, {p, 0, 2 Pi}, Mesh -> None, ViewPoint -> {3 Cos[2 Pi u], 3 Sin[2 Pi u], 1.5}]}}, {0, 3}, "Frames" -> 8][1.2, ImageSize -> 480]
 ```
 
 <!-- => one card with a turning spherical plot -->

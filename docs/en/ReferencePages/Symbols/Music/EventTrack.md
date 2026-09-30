@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/EventTrack
 Keywords: [score, events, notes, track, linear time, transcription]
-SeeAlso: [Track, TrackPulse, Synth, Gain, Timeline]
+SeeAlso: [Track, TrackPulse, Gain, AnimatedGraphics]
 RelatedGuides: [WAnim]
 ---
 
@@ -44,7 +44,7 @@ $CyclesPerSecond = 1/2; Audio[EventTrack[Table[{b/4, 1/4, "bd"}, {b, 0, 7}]], 2]
 Voices of a written-out score mixed as one Track:
 
 ```wl
-$CyclesPerSecond = 1/2; Audio[Track[{Synth["Triangle"][EventTrack[{{0, 1/2, 69}, {1/2, 1/2, 72}, {1, 1, 76}}]], Gain[0.5][EventTrack[{{0, 1/4, "bd"}, {1, 1/4, "bd"}}]]}], 2]
+$CyclesPerSecond = 1/2; Audio[Track[{Instrument["Triangle", EventTrack[{{0, 1/2, 69}, {1/2, 1/2, 72}, {1, 1, 76}}]], Gain[0.5][EventTrack[{{0, 1/4, "bd"}, {1, 1/4, "bd"}}]]}], 2]
 ```
 
 <!-- => a short phrase over two kicks -->

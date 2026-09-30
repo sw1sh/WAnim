@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/WordWall
 Keywords: [word wall, vocabulary, lexicon, dictionary, word cloud, frequency]
-SeeAlso: [WolframLanguageData, Counter, Timeline]
+SeeAlso: [WolframLanguageData, NumberCounter, AnimatedGraphics]
 RelatedGuides: [WAnim]
 ---
 
@@ -21,7 +21,7 @@ RelatedGuides: [WAnim]
 - "Camera" -> *f* moves the page: *f*[*t*] is a canvas transform (built from CanvasTranslate, CanvasScale, …) or None. Close up, the words in view are drawn as type, so they stay sharp.
 - "Emphasis" -> *f* picks words out: *f*[*t*] is {*test*, *strength*} or None; the page dims by *strength* and the words for which *test*[*word*] is True stand out.
 - *wall*["Places"] gives the canvas point at the middle of each word, for pointing a camera at it.
-- With "From" -> {*x*, *y*}, arriving words fly in an arc from that point to their places over "FlightTime", the biggest "FlightCount" of them at a time, as if coming out of an output.
+- With "Origin" -> {*x*, *y*}, arriving words fly in an arc from that point to their places over "FlightTime", the biggest "FlightCount" of them at a time, as if coming out of an output.
 
 | Option | Default | Description |
 | --- | --- | --- |
@@ -42,7 +42,7 @@ RelatedGuides: [WAnim]
 The first 300 symbols of the Wolfram Language by usage, all present:
 
 ```wl
-WordWall[Take[SortBy[Cases[WolframLanguageData[All, {"Name", "Frequencies"}], {n_, {"All" -> w_ ? NumericQ, ___}} :> {n, w, 0}], -#[[2]] &], 300], {0, 2}, "Presence" -> 1]["Graphics", 1, ImageSize -> 480]
+WordWall[Take[SortBy[Cases[WolframLanguageData[All, {"Name", "Frequencies"}], {n_, {"All" -> w_ ? NumericQ, ___}} :> {n, w, 0}], -#[[2]] &], 300], {0, 2}, "Presence" -> 1][1, ImageSize -> 480]
 ```
 
 <!-- => a dense alphabetical wall, List and Set large -->
@@ -52,7 +52,7 @@ WordWall[Take[SortBy[Cases[WolframLanguageData[All, {"Name", "Frequencies"}], {n
 Words arriving over time:
 
 ```wl
-WordWall[{#, 1., RandomReal[{0, 2}, WorkingPrecision -> 3]} & /@ {"alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta"}, {0, 3}]["Graphics", 1, ImageSize -> 480]
+WordWall[{#, 1., RandomReal[{0, 2}, WorkingPrecision -> 3]} & /@ {"alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta"}, {0, 3}][1, ImageSize -> 480]
 ```
 
 <!-- => some Greek letters, the newest red -->
@@ -64,7 +64,7 @@ WordWall[{#, 1., RandomReal[{0, 2}, WorkingPrecision -> 3]} & /@ {"alpha", "beta
 Words flying out of a point to their places:
 
 ```wl
-WordWall[{#, 1., 1} & /@ {"alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta"}, {0, 3}, "From" -> {300, 900}]["Graphics", 0.8, ImageSize -> 480]
+WordWall[{#, 1., 1} & /@ {"alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta"}, {0, 3}, "Origin" -> {300, 900}][0.8, ImageSize -> 480]
 ```
 
 <!-- => words mid-flight in red arcs from the lower left -->
@@ -76,7 +76,7 @@ Zooming in on one word; its place comes from the wall itself:
 ```wl
 With[{words = Take[SortBy[Cases[WolframLanguageData[All, {"Name", "Frequencies"}], {n_, {"All" -> w_ ? NumericQ, ___}} :> {n, w, 0}], -#[[2]] &], 300]},
     With[{focus = WordWall[words, {0, 2}]["Places"]["List"]},
-        WordWall[words, {0, 2}, "Presence" -> 1, "Camera" -> (CanvasScale[1 + #, focus] &)]["Graphics", 1.5, ImageSize -> 480]]]
+        WordWall[words, {0, 2}, "Presence" -> 1, "Camera" -> (CanvasScale[1 + #, focus] &)][1.5, ImageSize -> 480]]]
 ```
 
 <!-- => the page magnified about 2.5 times around List -->
@@ -87,7 +87,7 @@ The words ending in Q, standing out of a dimmed page:
 
 ```wl
 WordWall[Take[SortBy[Cases[WolframLanguageData[All, {"Name", "Frequencies"}], {n_, {"All" -> w_ ? NumericQ, ___}} :> {n, w, 0}], -#[[2]] &], 300], {0, 2},
-    "Presence" -> 1, Background -> White, "Emphasis" -> ({StringEndsQ[#, "Q"] &, 1} &)]["Graphics", 1, ImageSize -> 480]
+    "Presence" -> 1, Background -> White, "Emphasis" -> ({StringEndsQ[#, "Q"] &, 1} &)][1, ImageSize -> 480]
 ```
 
 <!-- => a dim page with MatchQ, FreeQ, StringQ... bright -->

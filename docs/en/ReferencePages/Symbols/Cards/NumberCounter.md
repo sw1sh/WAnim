@@ -1,17 +1,17 @@
 ---
 Template: Symbol
-Name: Counter
+Name: NumberCounter
 Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
-URI: WolframInstitute/WAnim/ref/Counter
+URI: WolframInstitute/WAnim/ref/NumberCounter
 Keywords: [counter, number, HUD, statistic, count up]
-SeeAlso: [YearRuler, Title, Timeline]
+SeeAlso: [YearRuler, TitleCard, AnimatedGraphics]
 RelatedGuides: [WAnim]
 ---
 
 ## Usage
 
-<code>[Counter]()[*f*, {$t_0$, $t_1$}]</code> shows the number *f*[*t*] at time *t*, flushed right in the top-right corner, flashing "ChangeColor" while it changes.
+<code>[NumberCounter]()[*f*, {$t_0$, $t_1$}]</code> shows the number *f*[*t*] at time *t*, flushed right in the top-right corner, flashing "ChangeColor" while it changes.
 
 ## Details & Options
 
@@ -31,7 +31,7 @@ RelatedGuides: [WAnim]
 A count of words, climbing to 554 over a second:
 
 ```wl
-Counter[Round[554 Min[1, #]] &, {0, 2}, "Label" -> "Words in the language"]["Graphics", 1.5, ImageSize -> 480]
+NumberCounter[Round[554 Min[1, #]] &, {0, 2}, "Label" -> "Words in the language"][1.5, ImageSize -> 480]
 ```
 
 <!-- => 554 in the top-right corner with the label under it -->
@@ -41,7 +41,7 @@ Counter[Round[554 Min[1, #]] &, {0, 2}, "Label" -> "Words in the language"]["Gra
 While it climbs it turns red:
 
 ```wl
-Counter[Round[6801 Min[1, #]] &, {0, 2}]["Graphics", 0.5, ImageSize -> 480]
+NumberCounter[Round[6801 Min[1, #]] &, {0, 2}][0.5, ImageSize -> 480]
 ```
 
 <!-- => 3,401 in red -->
@@ -53,7 +53,7 @@ Counter[Round[6801 Min[1, #]] &, {0, 2}]["Graphics", 0.5, ImageSize -> 480]
 A percentage:
 
 ```wl
-Counter[Round[100 Min[1, #]] &, {0, 2}, "Format" -> (ToString[#] <> "%" &)]["Graphics", 1.5, ImageSize -> 480]
+NumberCounter[Round[100 Min[1, #]] &, {0, 2}, "Format" -> (ToString[#] <> "%" &)][1.5, ImageSize -> 480]
 ```
 
 <!-- => 100% -->

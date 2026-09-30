@@ -5,7 +5,7 @@ Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/ref/PhotoPrint
 Keywords: [photo, print, archive, polaroid, caption, scan]
-SeeAlso: [CanvasImage, Caption, Timeline]
+SeeAlso: [CanvasImage, CaptionText, AnimatedGraphics]
 RelatedGuides: [WAnim]
 ---
 
@@ -17,7 +17,7 @@ RelatedGuides: [WAnim]
 
 - The image is fitted inside "Size" with its top-left corner at Position, and tilted by "Tilt" degrees.
 - "Kicker" puts a small tracked line over the caption, for example `"FROM THE ARCHIVE · 1981"`.
-- PhotoPrint takes the options common to all creation tools ([$LayerOptions]()) and these:
+- PhotoPrint takes the options common to all creation tools ([Backdrop]()) and these:
 
 | Option | Default | Description |
 | --- | --- | --- |
@@ -32,7 +32,7 @@ RelatedGuides: [WAnim]
 A test image as a print:
 
 ```wl
-PhotoPrint[ExampleData[{"TestImage", "Mandrill"}], "A test image", {0, 2}, Position -> {760, 240}, "Size" -> {400, 400}]["Graphics", 1, ImageSize -> 480]
+PhotoPrint[ExampleData[{"TestImage", "Mandrill"}], "A test image", {0, 2}, Position -> {760, 240}, "CanvasSize" -> {400, 400}][1, ImageSize -> 480]
 ```
 
 <!-- => the mandrill in a white border, slightly tilted, with a caption -->
@@ -44,7 +44,7 @@ PhotoPrint[ExampleData[{"TestImage", "Mandrill"}], "A test image", {0, 2}, Posit
 With a kicker line and a stronger tilt:
 
 ```wl
-PhotoPrint[ExampleData[{"TestImage", "House"}], "The house, photographed", {0, 2}, "Kicker" -> "From the archive \[CenterDot] 1973", "Tilt" -> 4, Position -> {760, 240}, "Size" -> {420, 380}]["Graphics", 1, ImageSize -> 480]
+PhotoPrint[ExampleData[{"TestImage", "House"}], "The house, photographed", {0, 2}, "Kicker" -> "From the archive \[CenterDot] 1973", "Tilt" -> 4, Position -> {760, 240}, "CanvasSize" -> {420, 380}][1, ImageSize -> 480]
 ```
 
 <!-- => the print tilted clockwise with a red kicker line -->
