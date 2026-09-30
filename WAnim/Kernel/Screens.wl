@@ -124,8 +124,8 @@ sessionCells[cells_, era_, o_] := Module[{n = 0, out = {}},
    from 10 to 14 the ColorData[97] colours; a Manipulate before 10 with the controls of 6.0 *)
 $defaultColors15 = {RGBColor[0.24, 0.6, 0.8], RGBColor[0.95, 0.627, 0.1425], RGBColor[0.455, 0.7, 0.21], RGBColor[0.922526, 0.385626, 0.209179]};
 asOfVersion[e_, v_ /; v >= 15] := e;
-asOfVersion[m : HoldPattern[Manipulate[body_, {{var_Symbol, init_}, min_, max_}, ___]], v_ /; v < 10] := classicManipulate[
-    asOfVersion[ReleaseHold[Hold[body] /. HoldPattern[var] -> init], v], SymbolName[Unevaluated[var]], (init - min) / (max - min)];
+asOfVersion[m : HoldPattern[Manipulate[body_, {{var_Symbol, init_, label___}, min_, max_}, ___]], v_ /; v < 10] := classicManipulate[
+    asOfVersion[ReleaseHold[Hold[body] /. HoldPattern[var] -> init], v], Replace[{label}, {{l_String} :> l, _ :> SymbolName[Unevaluated[var]]}], (init - min) / (max - min)];
 asOfVersion[e_, v_] := With[{cols = Which[v < 6, ConstantArray[Black, 4], v < 10, Hue[#, 0.6, 0.6] & /@ {0.67, 0.9061, 0.1421, 0.378}, True, ColorData[97] /@ Range[4]]},
     e /. {g_Graphics3D /; v < 10 :> Show[g /. Directive[___, RGBColor[0.880722, 0.611041, 0.142051], ___] -> Directive[GrayLevel[1], Specularity[GrayLevel[1], 20]],
             Lighting -> "Classic", AxesStyle -> Black, BoxStyle -> Black],
