@@ -122,5 +122,5 @@ captionDraw[s_, t_, {t0_, t1_}, o_] := Module[{f = layerFont[o], p = layerPoint[
         With[{a = Easing["OutExpo"][localU[t, t0 + k di, t0 + k di + 0.2]]}, k++;
             {CanvasText[w, {cx, p[[2]] + (li[[1]] - 1) ov[o, "LineHeight"] f["Size"] + 22 (1 - a) + 16 leave}, f,
                 If[MemberQ[hl, StringDelete[w, PunctuationCharacter]], ov[o, "HighlightColor"], ov[o, FontColor]],
-                Opacity -> a (1 - leave)],
+                Opacity -> a * (1 - leave)],
              cx += CanvasTextWidth[w <> " ", f]}[[1]]], {w, StringSplit[ln]}]]], lines]];

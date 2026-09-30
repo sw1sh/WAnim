@@ -43,7 +43,7 @@ svfKernel := svfKernel = compiled["svf", Function[{Typed[x, "PackedArray"::["Rea
             ic1 = 0., ic2 = 0., g = 0., k = 1. / q, a1 = 0., a2 = 0., a3 = 0., v1 = 0., v2 = 0., v3 = 0., f = 0., last = -1.},
         Do[
             f = Min[Max[fc[[i]], 10.], 0.45 sr];
-            If[f != last, g = Tan[Pi f / sr]; a1 = 1. / (1. + g (g + k)); a2 = g a1; a3 = g a2; last = f];
+            If[f != last, g = Tan[Pi f / sr]; a1 = 1. / (1. + g * (g + k)); a2 = g a1; a3 = g a2; last = f];
             v3 = x[[i]] - ic2; v1 = a1 ic1 + a2 v3; v2 = ic2 + a2 ic1 + a3 v3;
             ic1 = 2. v1 - ic1; ic2 = 2. v2 - ic2;
             lp[[i]] = v2; bp[[i]] = v1; hp[[i]] = x[[i]] - k v1 - v2,
@@ -79,7 +79,7 @@ reverbKernel := reverbKernel = compiled["reverb", Function[{Typed[l, "PackedArra
             Do[
                 p = starts[[j]] + pos[[j]] + 1;
                 y = buf[[p]];
-                store[[j]] = y (1. - damp) + store[[j]] damp;
+                store[[j]] = y * (1. - damp) + store[[j]] damp;
                 buf[[p]] = x + store[[j]] room;
                 pos[[j]] = If[pos[[j]] + 1 >= lens[[j]], 0, pos[[j]] + 1];
                 If[j <= 8, yl = yl + y, yr = yr + y],
@@ -99,7 +99,7 @@ delayKernel := delayKernel = compiled["delay", Function[{Typed[l, "PackedArray":
         Typed[m, "MachineInteger"], Typed[fb, "Real64"], Typed[lpHz, "Real64"], Typed[sr, "Real64"]},
     Module[{n = Length[l], bl = ConstantArray[0., m], br = ConstantArray[0., m], outL = ConstantArray[0., Length[l]], outR = ConstantArray[0., Length[l]],
             g = Tan[Pi lpHz / sr], k = Sqrt[2.], a1 = 0., a2 = 0., a3 = 0., p1 = 0., p2 = 0., q1 = 0., q2 = 0., dl = 0., dr = 0., v1 = 0., v2 = 0., v3 = 0., fl = 0., fr = 0., j = 1},
-        a1 = 1. / (1. + g (g + k)); a2 = g a1; a3 = g a2;
+        a1 = 1. / (1. + g * (g + k)); a2 = g a1; a3 = g a2;
         Do[
             dl = bl[[j]]; dr = br[[j]];
             v3 = dr - p2; v1 = a1 p1 + a2 v3; v2 = p2 + a2 p1 + a3 v3; p1 = 2. v1 - p1; p2 = 2. v2 - p2; fl = v2;
@@ -181,7 +181,7 @@ snare[v_, seed_] := Module[{n = samples[0.16], ts, x},
     {panned[x, 0.05], mono[0.3 x]}];
 (* an accelerating snare roll, eighths to thirty-seconds of a cycle, swelling *)
 instrument["Roll", _][f_, v_, hold_, onset_, seed_] := Module[{bar = cycleSecondsNow[], hits = {}, t = 0., u, n, dry, verb, k = 0},
-    While[t < hold, u = t / hold; AppendTo[hits, {t, v (0.25 + 0.75 u^2)}]; t += bar / Which[u < 0.5, 8, u < 0.75, 16, True, 32]];
+    While[t < hold, u = t / hold; AppendTo[hits, {t, v * (0.25 + 0.75 u^2)}]; t += bar / Which[u < 0.5, 8, u < 0.75, 16, True, 32]];
     n = samples[hold] + samples[0.16] + 1; dry = ConstantArray[0., {2, n}]; verb = ConstantArray[0., {2, n}];
     Do[With[{s = snare[h[[2]], seed + k++], i0 = samples[h[[1]]] + 1}, With[{m = Length[s[[1, 1]]]},
         dry[[All, i0 ;; i0 + m - 1]] += s[[1]]; verb[[All, i0 ;; i0 + m - 1]] += s[[2]]]], {h, hits}];
@@ -236,7 +236,7 @@ instrument["Voice", _][f_, v_, hold_, onset_, seed_] := Module[{rel = 0.3, n, ts
         vi, va, vb, src, y, env},
     n = samples[hold + rel]; ts = times[n];
     vi = Mod[Floor[4 onset / cycleSecondsNow[]], 5] + 1; va = vowels[[vi]]; vb = vowels[[Mod[vi, 5] + 1]];
-    src = sawWave[f (1 + 0.006 Sin[2 Pi 5.2 ts] Clip[2 ts, {0, 1}]), n] + 0.04 noise[n, seed];
+    src = sawWave[f * (1 + 0.006 Sin[2 Pi 5.2 ts] Clip[2 ts, {0, 1}]), n] + 0.04 noise[n, seed];
     y = Total[Table[svf[src, stepped[va[[k]] + (vb[[k]] - va[[k]]) Clip[# / Max[0.2, hold], {0, 1}] &, n, 32], 9][[2]] (1 / 9) {1, 0.5, 0.25}[[k]], {k, 3}]];
     env = adsrArray[ts, hold, 0.06, 0.2, 0.85, rel];
     y = y env v 0.9;

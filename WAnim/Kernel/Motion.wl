@@ -66,7 +66,7 @@ pathPrefix[pts_, u_] := Module[{d = Accumulate[Prepend[Norm /@ Differences[N[pts
     If[u <= 0, Return[{pts[[1]], pts[[1]]}]]; If[u >= 1, Return[pts]];
     k = LengthWhile[d, # <= L &];
     s = (L - d[[k]]) / (d[[k + 1]] - d[[k]]);
-    Append[Take[pts, k], pts[[k]] + s (pts[[k + 1]] - pts[[k]])]];
+    Append[Take[pts, k], pts[[k]] + s * (pts[[k + 1]] - pts[[k]])]];
 
 (* n points around a shape's outline, evenly by arc length, counterclockwise from due east *)
 outline[shape_, n_] := Module[{pts = N[ring[shape]], c, d, L, i0},

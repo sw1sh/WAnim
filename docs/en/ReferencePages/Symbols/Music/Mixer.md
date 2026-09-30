@@ -36,7 +36,7 @@ A pad pumping under a kick, its filter opening over two cycles:
 
 ```wl
 With[{kick = Track["bd*4"]},
-    Audio[Mixer["Sidechain" -> kick, "Cutoff" -> (300 40^(#/2) &)][Track[{Instrument["Kick"][kick], Instrument["Pad"][Track[{{0, 2, 57}, {0, 2, 60}, {0, 2, 64}}]]}]], 2, "CyclesPerSecond" -> 1/2]]
+    Mixer["Sidechain" -> kick, "Cutoff" -> (300 40^(#/2) &)][Track[{Instrument["Kick"][kick], Instrument["Pad"][Track[{{0, 2, 57}, {0, 2, 60}, {0, 2, 64}}]]}]]["Video", 2, "View" -> {"PianoRoll", "Oscilloscope"}, "CyclesPerSecond" -> 1/2]]
 ```
 
 <!-- => a pad breathing with the kick, brightening -->

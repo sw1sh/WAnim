@@ -45,12 +45,15 @@ Print["submitting ", paclet["Name"], " ", version, " (publisher ", publisher, ")
 
 (* the repository refuses a submission with Error-level issues, so check first.  NoPacletInfoFileCell
    is expected: the paclet is attached from the loaded directory, not from a file cell. *)
-issues = Normal @ UsingFrontEnd @ Block[{nb, r},
+(* each issue with the start of the cell it points at *)
+issues = UsingFrontEnd @ Block[{nb, r, cells},
     nb = NotebookOpen[nbFile, Visible -> False];
-    r = DefinitionNotebookClient`CheckDefinitionNotebook[nb];
+    r = Normal @ DefinitionNotebookClient`CheckDefinitionNotebook[nb];
+    cells = AssociationThread[CurrentValue[#, CellID] & /@ Cells[nb], Cells[nb]];
+    Scan[Print["  [", #Level, "] ", #Tag, "  ", With[{c = Lookup[cells, Lookup[#, "CellID", None], None]},
+        If[c === None, "", StringTake[StringReplace[ToString[First[NotebookRead[c]], InputForm], "\n" -> " "], UpTo[160]]]]] &, r];
     NotebookClose[nb];
     r];
-Scan[Print["  [", #Level, "] ", #Tag] &, issues];
 If[Select[issues, #Level === "Error" && #Tag =!= "NoPacletInfoFileCell" &] =!= {},
     Print["FATAL: the definition notebook has blocking errors."]; Exit[1]];
 If[checkOnly, Print["check passed"]; Exit[0]];

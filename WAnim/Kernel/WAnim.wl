@@ -15,13 +15,14 @@
    wiring PackageExported / PackageScoped declarations into the WolframInstitute`WAnim` context.
    - HiddenImports: GeneralUtilities` for the format itself, Wolfram`Parser` so MiniNotation's
      grammar symbols (ParseRegex, LeafNode, ...) resolve when the file is read.
-   - InitialEvaluations loads first (graceful MaTeX setup). *)
+   - InitialEvaluations loads first (graceful MaTeX setup); Strudel.wl, the opt-in lowercase shortcuts,
+     is a package of its own, loaded by Needs["WolframInstitute`WAnim`Strudel`"]. *)
 PackageInitialize["WolframInstitute`WAnim`",
   <|
     "HiddenImports"  -> {"GeneralUtilities`", "Wolfram`Parser`"},
     "LoadFirstFiles" -> {"InitialEvaluations.wl"},
     "LoadLastFiles"  -> {},
-    "IgnoreFiles"    -> {}
+    "IgnoreFiles"    -> {"Strudel.wl"}
   |>
 ]
 
@@ -38,11 +39,3 @@ BeginPackage["WolframInstitute`WAnim`PackageScope`"]
 EndPackage[]
 $ContextPath = DeleteCases[$ContextPath, "WolframInstitute`WAnim`PackageScope`"];
 
-(* Every live output is saved with SaveDefinitions -> True and reloads WAnim when opened, so it keeps
-   working in a fresh session.  The package's contexts count as internal ones, which SaveDefinitions
-   leaves out: a saved output carries only the notebook's definitions it uses, never the package's
-   internals (nor its shared state, like the registry of playing streams, which a snapshot would
-   overwrite on every display). *)
-Unprotect[Language`$InternalContexts];
-Language`$InternalContexts = DeleteDuplicates @ Join[Language`$InternalContexts, # <> "*" & /@ Contexts["WolframInstitute`WAnim`*"]];
-Protect[Language`$InternalContexts];

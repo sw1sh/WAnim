@@ -63,7 +63,7 @@ printDraw[img_, cap_, t_, {t0_, t1_}, o_] := Module[{p = layerPoint[ov[o, Positi
     s = Min[box[[1]] / d[[1]], box[[2]] / d[[2]]]; {w, h} = d s;
     u = Clip[Easing["OutBack", 1.3][localU[t, t0, t0 + ov[o, "EnterTime"]]], {0, 1}];
     leave = Easing["InCubic"][localU[t, t1, t1 + ov[o, "ExitTime"]]];
-    CanvasOpacity[u (1 - leave), CanvasTransform[CanvasTranslate[{p[[1]] + w / 2, p[[2]] + h / 2 + 40 (1 - u)}] . CanvasRotate[ov[o, "Tilt"] Degree + 0.05 (1 - u)], {
+    CanvasOpacity[u * (1 - leave), CanvasTransform[CanvasTranslate[{p[[1]] + w / 2, p[[2]] + h / 2 + 40 (1 - u)}] . CanvasRotate[ov[o, "Tilt"] Degree + 0.05 (1 - u)], {
         CanvasRectangle[{-w / 2 - 12, -h / 2 - 2, w + 24, h + 58}, Black, Opacity -> 0.12],
         CanvasRectangle[{-w / 2 - 12, -h / 2 - 12, w + 24, h + 58}, ov[o, "Paper"]],
         CanvasImage[img, {-w / 2, -h / 2, w, h}],

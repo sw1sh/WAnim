@@ -130,7 +130,7 @@ basicInputPalette[{x_, y_}, t_] := Module[{syms = Characters["\[Pi]ei\[Infinity]
     w = cols bw + 8; h = Ceiling[Length[syms] / cols] bw + 26;
     {bevel[{x, y, w, h}, gr], eraBox[{x + 3, y + 3, w - 6, 14}, RGBColor["#000080"]], T["BasicInput", {x + 6, y + 13.5}, 9, 700, White],
      bevel[{x + w - 15, y + 4, 11, 11}],
-     MapIndexed[With[{bx = x + 4 + Mod[#2[[1]] - 1, cols] bw, by = y + 20 + Floor[(#2[[1]] - 1) / cols] bw, lit = Mod[Floor[8 t], Length[syms]] == #2[[1]] - 1},
+     MapIndexed[With[{bx = x + 4 + Mod[#2[[1]] - 1, cols] bw, by = y + 20 + Floor[(#2[[1]] - 1) / cols] bw, lit = (Mod[Floor[8 t], Length[syms]] == #2[[1]] - 1)},
         {bevel[{bx, by, bw - 1, bw - 1}, If[lit, RGBColor["#DFDFDF"], gr], lit, True], T[#1, {bx + (bw - 1) / 2, by + 12}, 11, 400, Black, Center, "Tinos"]}] &, syms]}];
 
 
@@ -214,7 +214,7 @@ osxChrome[style_][lw_, lh_, title_] := Module[{g = osxGeom[style, lw, lh], dark 
     wp = Switch[style, "OSX", {"#1B1745", "#5A2A8C", "#1E4F9A"}, "Yosemite", {"#E9A56A", "#7C6FA0", "#2F4F7D"}, "BigSur", {"#F4A77B", "#C45E8E", "#2C4F9E"}, _, {"#1D2436", "#312043", "#0E2440"}];
     cy = g["wy"] + g["tbh"] + 1 + g["tool"]; h = g["wy"] + g["wh"] - cy - If[style === "OSX", 16, 0];
     {dgrad[{0, 0, lw, lh}, {{0, RGBColor[wp[[1]]]}, {0.5, RGBColor[wp[[2]]]}, {1, RGBColor[wp[[3]]]}}],
-     If[style === "OSX", CanvasOpacity[0.3, CanvasLine[Table[{u lw, lh (0.8 - 0.55 u + 0.3 Sin[3 u])}, {u, -0.05, 1.05, 0.05}], RGBColor["#B9A7FF"], "Thickness" -> 60]], {}],
+     If[style === "OSX", CanvasOpacity[0.3, CanvasLine[Table[{u lw, lh * (0.8 - 0.55 u + 0.3 Sin[3 u])}, {u, -0.05, 1.05, 0.05}], RGBColor["#B9A7FF"], "Thickness" -> 60]], {}],
      CanvasRectangle[{0, 0, lw, g["mbh"]}, If[dark, RGBColor[0.12, 0.12, 0.13], RGBColor[0.98, 0.98, 0.98]], Opacity -> If[dark, 0.85, 0.92]],
      CanvasRectangle[{0, g["mbh"], lw, 1}, If[dark, Black, GrayLevel[0, 0.18]]],
      Module[{x = 20, ms = osxMenus[]}, Table[{T[ms[[i]], {x, 0.7 g["mbh"]}, 13, If[i == 1, 700, 400], If[dark, RGBColor["#EEEEEE"], RGBColor["#111111"]]],

@@ -122,11 +122,11 @@ gradientImpl[{x_, y_, w_, h_}, dir_, stops : {{_ ? NumericQ, _ ? ColorQ | _Strin
     col[u_] := Blend[st, Clip[u, {st[[1, 1]], st[[-1, 1]]}]];
     us = Union[{0, 1}, Select[st[[All, 1]], 0 < # < 1 &]];
     Switch[dir,
-        "Horizontal", Table[With[{a = us[[i]], b = us[[i + 1]]}, quad[{x + w a, y, w (b - a), h}, {col[a], col[b], col[b], col[a]}]], {i, Length[us] - 1}],
-        "Vertical", Table[With[{a = us[[i]], b = us[[i + 1]]}, quad[{x, y + h a, w, h (b - a)}, {col[a], col[a], col[b], col[b]}]], {i, Length[us] - 1}],
+        "Horizontal", Table[With[{a = us[[i]], b = us[[i + 1]]}, quad[{x + w a, y, w * (b - a), h}, {col[a], col[b], col[b], col[a]}]], {i, Length[us] - 1}],
+        "Vertical", Table[With[{a = us[[i]], b = us[[i + 1]]}, quad[{x, y + h a, w, h * (b - a)}, {col[a], col[a], col[b], col[b]}]], {i, Length[us] - 1}],
         _, vs = Range[0, 1, 1 / 8];
         Table[With[{a = vs[[i]], b = vs[[i + 1]], c = vs[[j]], d = vs[[j + 1]]},
-            quad[{x + w a, y + h c, w (b - a), h (d - c)}, col /@ ({a + c, b + c, b + d, a + d} / 2)]], {i, 8}, {j, 8}]]];
+            quad[{x + w a, y + h c, w * (b - a), h * (d - c)}, col /@ ({a + c, b + c, b + d, a + d} / 2)]], {i, 8}, {j, 8}]]];
 (* a rectangle whose corners (tl, tr, br, bl) carry colours; a hair oversized so bands meet without seams *)
 quad[{x_, y_, w_, h_}, cs_] := {If[$canvasAlpha < 1, cop[], Nothing], EdgeForm[], Polygon[cxf /@ {{x, y}, {x + w + 0.4, y}, {x + w + 0.4, y + h + 0.4}, {x, y + h + 0.4}}, VertexColors -> cs]};
 

@@ -77,7 +77,7 @@ partialPolyline[pts_, alpha_] := If[Length[pts] < 2, pts,
             i < 1, Take[pts, 1],
             True,
             r = (target - cumulative[[i]]) / (cumulative[[i + 1]] - cumulative[[i]]);
-            Append[Take[pts, i], pts[[i]] + r (pts[[i + 1]] - pts[[i]])]
+            Append[Take[pts, i], pts[[i]] + r * (pts[[i + 1]] - pts[[i]])]
         ]
     ]
 ]
@@ -252,7 +252,7 @@ growCreation[duration_, delay_, rate_, point_, fromScale_] :=
         Function @ With[{
             alpha = rate[Clip[(#t - delay) / duration, {0, 1}]],
             pt = point /. Automatic :> #Object["Center"]},
-            #Object["TransformPrimitives", ScalingTransform[ConstantArray[Max[fromScale + alpha (1 - fromScale), 1.*^-3], Length[pt]], pt]]
+            #Object["TransformPrimitives", ScalingTransform[ConstantArray[Max[fromScale + alpha * (1 - fromScale), 1.*^-3], Length[pt]], pt]]
         ],
         "Duration" -> duration + delay
     ]
@@ -300,7 +300,7 @@ gradientCreation[duration_, delay_, rate_, direction_, softness_] :=
                         prims = Flatten[{obj["Primitives"]}];
                         pos = sweepPositions[prims, direction]
                     ];
-                    edge = frac (1 + softness);   (* sweep from 0 past 1 so it ends fully solid *)
+                    edge = frac * (1 + softness);   (* sweep from 0 past 1 so it ends fully solid *)
                     obj["SetPrimitives", MapThread[
                         If[ directiveQ[#1] || MatchQ[#1, _AnimatedGraphics],
                             #1,
@@ -314,7 +314,8 @@ gradientCreation[duration_, delay_, rate_, direction_, softness_] :=
     ]
 
 
-AnimationEffect["Scale", factor_, Optional[p_List, Automatic], opts : OptionsPattern[]] := With[{
+AnimationEffect["Scale", factor_, opts : OptionsPattern[]] := AnimationEffect["Scale", factor, Automatic, opts];
+AnimationEffect["Scale", factor_, p : _List | Automatic, opts : OptionsPattern[]] := With[{
     duration = OptionValue["Duration"], rate = easingOf @ OptionValue["Easing"]
 },
     AnimationEffect[
@@ -325,7 +326,8 @@ AnimationEffect["Scale", factor_, Optional[p_List, Automatic], opts : OptionsPat
     ]
 ]
 
-AnimationEffect["Rotate", angle_, Optional[p_List, Automatic], opts : OptionsPattern[]] := With[{
+AnimationEffect["Rotate", angle_, opts : OptionsPattern[]] := AnimationEffect["Rotate", angle, Automatic, opts];
+AnimationEffect["Rotate", angle_, p : _List | Automatic, opts : OptionsPattern[]] := With[{
     duration = OptionValue["Duration"], rate = easingOf @ OptionValue["Easing"]
 },
     AnimationEffect[#Object["TransformPrimitives",
@@ -343,7 +345,8 @@ AnimationEffect["Translate", v_, opts : OptionsPattern[]] := With[{
     ]
 ]
 
-AnimationEffect["Stretch", width_, height_ : Automatic, opts : OptionsPattern[]] := Enclose @ AnimationEffect[
+AnimationEffect["Stretch", width_, opts : OptionsPattern[]] := AnimationEffect["Stretch", width, Automatic, opts];
+AnimationEffect["Stretch", width_, height : Except[_Rule | _RuleDelayed], opts : OptionsPattern[]] := Enclose @ AnimationEffect[
     Function @ Module[{w, h},
         If[ width =!= Automatic,
             w = width / #Object["Width"];

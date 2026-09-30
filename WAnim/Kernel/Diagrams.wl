@@ -45,7 +45,7 @@ treeDraw[nodes_, t_, {t0_, t1_}, o_] := Module[{f = layerFont[o, "Mono"], hf, en
     CanvasOpacity[env["Alpha"], Table[With[{u = Easing["OutBack", 2][localU[t, n["At"], n["At"] + et]], e = Easing["OutCubic"][localU[t, n["At"] - 0.05, n["At"] + 0.1]]},
         If[t < n["At"] - 0.05, {}, {
             If[n["Parent"] === None, {}, With[{a = nodes[[n["Parent"], "Point"]] + {0, 18}, b = n["Point"] - {0, 34}},
-                CanvasLine[{a, a + e (b - a)}, ov[o, FontColor], "Thickness" -> 2, Opacity -> 0.5]]],
+                CanvasLine[{a, a + e * (b - a)}, ov[o, FontColor], "Thickness" -> 2, Opacity -> 0.5]]],
             If[u <= 0, {}, CanvasTransform[CanvasTranslate[n["Point"]] . CanvasScale[u],
                 CanvasText[n["Text"], {0, 0}, If[n["Head"], hf, f], If[n["Head"], ov[o, "HeadColor"], ov[o, FontColor]], Alignment -> Center]]]}]],
         {n, nodes}]]];

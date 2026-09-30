@@ -20,7 +20,7 @@ Links: ["[Manim](https://www.manim.community)", "[Strudel](https://strudel.cc)",
 - A film, a Manim scene and a single animated object are all an [AnimatedGraphics](): graphics with a time axis. It holds graphics primitives, spans <code>{$t_0$, $t_1$} -> *x*</code>, functions of time, nested AnimatedGraphics and a [Track]() for its sound, and a queue of [AnimationEffect]()s.
 - <code>*g*[*t*]</code> is the frame at time *t*, a [Graphics](). [Export]() to ".mp4" renders every frame in parallel and encodes them with ffmpeg together with the sound; [Video](), [AnimatedImage]() and [Audio]() render it too.
 - Creation tools write a film one segment per line: [Typewriter](), [TitleCard](), [CaptionText](), [TerminalSession](), [NotebookSession]() (a notebook window of its era, 1988 to today), [DictionaryCard](), [Spikey](), and more. They draw with a canvas kit that places text exactly where a browser canvas would.
-- A [Track]() is a cyclic-time music pattern after Strudel and TidalCycles, written in mini-notation ("bd [~ bd] sd, hh*8"). It plays live as an editable, highlighting piano roll, renders to [Audio]() through synthesized instruments, and can be queried by the picture ([TrackPulse]()), so motion locks to sound.
+- A [Track]() is a cyclic-time music pattern after Strudel and TidalCycles, written in mini-notation such as `"bd [~ bd] sd, hh*8"`. It plays live as an editable, highlighting piano roll, renders to [Audio]() through synthesized instruments, and can be queried by the picture ([TrackPulse]()), so motion locks to sound.
 - LaTeX is typeset with MaTeX when it is installed.
 
 ## Usage
@@ -60,10 +60,10 @@ AnimatedGraphics[{Backdrop[RGBColor["#F4F1EA"]], TitleCard["Mathematica", {0, 2}
 
 ---
 
-A drum pattern, rendered for two cycles:
+A drum pattern, rendered for one cycle:
 
 ```wl
-Audio[Track["bd [~ bd] sd ~, hh*8"], 2]
+Audio[Track["bd [~ bd] sd ~, hh*8"], 1]
 ```
 
 <!-- => an Audio object of a drum beat -->
@@ -77,3 +77,11 @@ Track["bd [~ bd] sd ~, hh*8"]["Query", 0, 1/2][[All, "Value"]]
 ```
 
 <!-- => {"bd", "bd", "hh", "hh", "hh", "hh"} -->
+
+## Hero Image
+
+Frames of a film about the Wolfram Language, scenes from Manim's gallery, and a trance loop as a punch card and a piano roll, all made with WAnim:
+
+```wl
+Import[PacletObject["WolframInstitute/WAnim"]["AssetLocation", "Hero"]]
+```

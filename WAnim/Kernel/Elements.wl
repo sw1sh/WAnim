@@ -9,7 +9,7 @@ PackageExported[{Backdrop}]
 (* ::Section:: *)
 (*PackageScoped*)
 
-PackageScoped[{timeFunctionQ, elementOptions, toolOptions, drawOptions, $inheritedOptions, makeElement, ov, keystrokes, weightNum, layerFont, layerPoint, envelope, localU, typedCount, defaultFont}]
+PackageScoped[{userDefinitions, restoreDefinitions, timeFunctionQ, elementOptions, toolOptions, drawOptions, $inheritedOptions, makeElement, ov, keystrokes, weightNum, layerFont, layerPoint, envelope, localU, typedCount, defaultFont}]
 
 
 (* ::Section:: *)
@@ -101,3 +101,24 @@ keystrokes[at_, dur_, n_Integer] := Module[{last = -1, b, out = {}},
 
 (* characters of an n-character text shown u of the way through typing *)
 typedCount[n_, u_] := Floor[Clip[u, {0, 1}] n + 10^-6];
+
+
+(* ::Section:: *)
+(*Live outputs that keep working*)
+
+(* A live output (a player, an editable track) is saved with the definitions of the notebook's own
+   functions it uses, and restores them when it is opened in a new session, after loading WAnim --
+   what SaveDefinitions does, but leaving out the package and its shared state. *)
+userDefinitions[expr_] := Language`ExtendedFullDefinition[expr,
+    ExcludedContexts -> Join[Language`$InternalContexts, # <> "*" & /@ Contexts["WolframInstitute`WAnim`*"]]];
+restoreDefinitions[Language`DefinitionList[rs___]] := Scan[restoreSymbol, {rs}];
+restoreDefinitions[_] := Null;
+restoreSymbol[HoldForm[s_Symbol] -> vals_List] := (Quiet[Unprotect[s]]; Scan[restoreValues[s, #] &, vals]);
+restoreSymbol[_] := Null;
+SetAttributes[restoreValues, HoldFirst];
+restoreValues[s_, (OwnValues | DownValues | SubValues | NValues | FormatValues | Messages) -> v_] :=
+    Scan[Replace[#, (HoldPattern[lhs_] :> rhs_) :> SetDelayed[lhs, rhs]] &, Flatten[{v}]];
+restoreValues[s_, UpValues -> v_] := Scan[Replace[#, (HoldPattern[lhs_] :> rhs_) :> TagSetDelayed[s, lhs, rhs]] &, Flatten[{v}]];
+restoreValues[s_, DefaultValues -> v_] := Scan[Replace[#, (HoldPattern[lhs_] :> rhs_) :> Set[lhs, rhs]] &, Flatten[{v}]];
+restoreValues[s_, Attributes -> a_List] := If[a =!= {}, SetAttributes[s, a]];
+restoreValues[_, _] := Null;

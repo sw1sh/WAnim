@@ -14,7 +14,7 @@ RelatedTutorials: [MusicGallery]
 
 <code>[TrackView]()["*view*", …, *opts*][*track*]</code> sets what *track* shows while it plays.
 
-<code>*track*["PianoRoll", *n*]</code> and <code>*track*["Punchcard", *n*]</code> are still views of *n* cycles.
+<code>*track*["Video", *n*]</code> renders the view playing through *n* cycles, with the sound; <code>*track*["PianoRoll", *n*]</code> and <code>*track*["Punchcard", *n*]</code> are still frames of it.
 
 ## Details & Options
 
@@ -30,13 +30,21 @@ RelatedTutorials: [MusicGallery]
 
 ## Basic Examples
 
-A punch card of four cycles:
+A punch card of four cycles, playing:
 
 ```wl
-TrackView["Punchcard", "Cycles" -> 4][Track["bd [~ bd] sd ~, hh*8, <c3 eb3 g3 bb3>"]]["Punchcard"]
+TrackView["Punchcard", "Cycles" -> 4][Track["bd [~ bd] sd ~, hh*8, <c3 eb3 g3 bb3>"]]["Video"]
 ```
 
-<!-- => the events of four cycles as bars in three bands -->
+<!-- => a video of the events scrolling past the now-line -->
+
+---
+
+A piano roll over its oscilloscope:
+
+```wl
+TrackView["PianoRoll", "Oscilloscope"][Track["<[c3,eb3,g3] [ab2,c3,eb3]> [c5 eb5 g5 bb5]"]]["Video"]
+```
 
 ---
 

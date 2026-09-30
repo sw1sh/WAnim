@@ -41,7 +41,7 @@ terminalDraw[lines_, t_, {t0_, t1_}, o_] := Module[{W = $canvasSize[[1]], H = $c
     {off1, off2} = If[ov[o, "Exit"] === "PowerOff", {Easing["InCubic"][localU[t, t1 - ov[o, "ExitTime"], t1 - 0.1]], Easing["InCubic"][localU[t, t1 - 0.1, t1]]}, {0, 0}];
     caps = Select[lines, Length[#] >= 3 && #[[3]] === "Caption" &];
     {CanvasRectangle[{0, 0, W, H}, ov[o, "Bezel"]],
-     CanvasTransform[CanvasTranslate[{W / 2, sy + sh / 2}] . CanvasScale[{1 - 0.998 off2, Max[0.002, on (1 - 0.995 off1)]}] . CanvasTranslate[{-W / 2, -sy - sh / 2}], {
+     CanvasTransform[CanvasTranslate[{W / 2, sy + sh / 2}] . CanvasScale[{1 - 0.998 off2, Max[0.002, on * (1 - 0.995 off1)]}] . CanvasTranslate[{-W / 2, -sy - sh / 2}], {
         CanvasRectangle[{sx, sy, sw, sh}, ov[o, Background], "Radius" -> 38],
         Table[If[t < l[[1]], Nothing, Switch[If[Length[l] >= 3, l[[3]], "Input"],
             "Input", {glowText[TypedText[l[[2]], localU[t, l[[1]], l[[1]] + ov[o, "TypeTime"]]], {x0, y}, f, ph, glow], y += ov[o, "LineHeight"]}[[1]],
@@ -138,7 +138,7 @@ classicManipulate[body_, name_, u_] := Module[{w = 380, knob},
     knob[x_] := Table[{Blend[{RGBColor["#2B5CB8"], RGBColor["#5C8FE0"], RGBColor["#DDEBFF"]}, k], Disk[{x - 1.5 k, 1.5 k}, 8 (1 - 0.8 k)]}, {k, 0, 1, 0.125}];
     Framed[Column[{
         Row[{Style[name, FontFamily -> "Arial", 13], Spacer[8],
-            Graphics[{EdgeForm[GrayLevel[0.6]], White, Rectangle[{0, -2.5}, {w - 90, 2.5}, RoundingRadius -> 2.5], EdgeForm[RGBColor["#1D3F80"]], knob[u (w - 90)]},
+            Graphics[{EdgeForm[GrayLevel[0.6]], White, Rectangle[{0, -2.5}, {w - 90, 2.5}, RoundingRadius -> 2.5], EdgeForm[RGBColor["#1D3F80"]], knob[u * (w - 90)]},
                 PlotRange -> {{-9, w - 81}, {-9, 9}}, ImageSize -> {w - 72, 18}, ImagePadding -> 1], Spacer[6],
             Framed[Style["+", FontFamily -> "Arial", Bold, 12, GrayLevel[0.35]], FrameStyle -> GrayLevel[0.6], Background -> GrayLevel[0.97], FrameMargins -> {{4, 4}, {0, 0}}, RoundingRadius -> 2]}],
         Framed[body, FrameStyle -> GrayLevel[0.78], Background -> White, FrameMargins -> 4]}, Spacings -> 0.8],
@@ -202,7 +202,7 @@ cellHeight[c_, era_, w_] := labelH[c, era] + Switch[c["kind"], "Pic", c["size"][
     _, With[{f = cellFont[c, era]}, 1.3 f["Size"] Length[CanvasWrap[c["text"], f, w, "Break" -> If[MatchQ[c["kind"], "In" | "Out"], "Code", "Words"]]] + 4]];
 notebookDraw[{rx_, ry_, rw_, rh_}, era_, cs_, t_] := Module[{vis = Select[cs, #["at"] <= t < Lookup[#, "until", Infinity] &], w = rw - era["Left"] - 30, hs, scrollFor, scroll, y, gap = era["Gap"]},
     hs = cellHeight[#, era, w] & /@ vis;
-    scrollFor[n_] := Max[0, Total[Take[hs, n]] + gap (n + 3) - rh];
+    scrollFor[n_] := Max[0, Total[Take[hs, n]] + gap * (n + 3) - rh];
     scroll = If[Length[vis] < 2, scrollFor[Length[vis]], scrollFor[Length[vis] - 1] +
         (scrollFor[Length[vis]] - scrollFor[Length[vis] - 1]) Easing["OutCubic"][localU[t, vis[[-1]]["at"], vis[[-1]]["at"] + 0.15]]];
     y = ry + gap - scroll;

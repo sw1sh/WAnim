@@ -42,17 +42,17 @@ RelatedGuides: [WAnim]
 A kick, a clap and a plucked line:
 
 ```wl
-Audio[Track[{Instrument["Kick"][Track["bd*4"]], Instrument["Clap"][Track["~ cp ~ cp"]], Instrument["Pluck"][Track["[a4 c5 e5 g5]*2"]]}], 2, "CyclesPerSecond" -> 1/2]
+Track[{Instrument["Kick"][Track["bd*4"]], Instrument["Clap"][Track["~ cp ~ cp"]], Instrument["Pluck"][Track["[a4 c5 e5 g5]*2"]]}]["Video", 2, "View" -> "Punchcard", "CyclesPerSecond" -> 1/2]
 ```
 
-<!-- => four seconds of a beat under a pluck line -->
+<!-- => a video: four seconds of a beat under a pluck line -->
 
 ---
 
 A bell, and a voice singing:
 
 ```wl
-Audio[Track[{Instrument["Bell"][Track[{{0, 1/2, 76}, {1/2, 1/2, 81}}]], Instrument["Voice"][Track[{{1, 1, 72}}]]}], 2, "CyclesPerSecond" -> 1/2]
+Track[{Instrument["Bell"][Track[{{0, 1/2, 76}, {1/2, 1/2, 81}}]], Instrument["Voice"][Track[{{1, 1, 72}}]]}]["Video", 2, "CyclesPerSecond" -> 1/2]
 ```
 
 <!-- => a bell phrase then a sung vowel -->
@@ -74,7 +74,7 @@ Instrument["Gain" -> 0.4, "Pan" -> 0.6][Track["hh*8"]]["Source"]
 Short, dry notes:
 
 ```wl
-Audio[Instrument["Pad", "Decay" -> 1/16, "Reverb" -> 0][Track["c3 e3 g3 c4"]], 1, "CyclesPerSecond" -> 1/2]
+Instrument["Pad", "Decay" -> 1/16, "Reverb" -> 0][Track["c3 e3 g3 c4"]]["Video", 1, "CyclesPerSecond" -> 1/2]
 ```
 
 <!-- => four clipped pad notes -->

@@ -126,7 +126,7 @@ highlightedString[str_, active_] := Row[Table[
      - editing=False: ONE refreshing Dynamic draws [highlight] over [visual], 30 ms ticks.
      - editing=True : a stable InputField (no refresh, so the cursor survives) over the visual.
    `curPat` tracks the live-parsed pattern so an edit also updates the piano-roll visual. *)
-miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat], solo = soloFlagQ[pat]},
+miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat], solo = soloFlagQ[pat], defs = userDefinitions[pat]},
     DynamicModule[{id = Unique[], src = source, curPat = pat, stream = AudioStream[renderAudio[pat, n, True], Looping -> True],
                    editing = False, lastClick = 0., sched = scheduleOf[pat, n]},
         (* The apply (re-parse) action is INLINED into the apply Button + Enter handler below.
@@ -176,8 +176,9 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]
         }, Spacings -> 0.5, Alignment -> Left], Background -> GrayLevel[0.1], FrameMargins -> 10],
         (* start the clock + audio together on first appearance.  Saving definitions leaves out the
            package's internal symbols, so an edit's reparse still uses the LIVE grammar. *)
-        Initialization :> (Needs["WolframInstitute`WAnim`"]; registerStream[id, stream, n]; If[solo, soloStream[id, stream, n]]; If[! $Playing, TrackPlay[]]),
-        SaveDefinitions -> True,
+        Initialization :> (Needs["WolframInstitute`WAnim`"]; restoreDefinitions[defs];
+            If[! MemberQ[AudioStreams[], stream], stream = AudioStream[renderAudio[curPat, n, True], Looping -> True]];
+            registerStream[id, stream, n]; If[solo, soloStream[id, stream, n]]; If[! $Playing, TrackPlay[]]),
         Deinitialization :> (unregisterStream[id]; Quiet[AudioStop[stream]; RemoveAudioStream[stream]])]]
 
 (* ---------- extractable trace of the dynamic play (for debugging headless) ---------- *)

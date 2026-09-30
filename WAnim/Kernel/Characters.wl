@@ -89,7 +89,7 @@ spikeyDraw[t_, {t0_, t1_}, o_] := Module[{p = layerPoint[ov[o, Position]], r, ki
         If[TrueQ[ov[o, "Face"]], spikeyFace[p, r, TrueQ[ov[o, "Blink"]]], {}]}]];
 
 (* legs stepping, the left arm relaxed, the right arm rising as "Raise" goes to 1 *)
-spikeyLimbs[{cx_, cy_}, r_, t_, raise_] := With[{ink = RGBColor["#8A0A00"], w = 0.09 r, step = 0.08 r Sin[4 Pi t], hx = cx + r (0.95 + 0.25 raise), hy = cy + r (0.5 - 1.25 raise)},
+spikeyLimbs[{cx_, cy_}, r_, t_, raise_] := With[{ink = RGBColor["#8A0A00"], w = 0.09 r, step = 0.08 r Sin[4 Pi t], hx = cx + r * (0.95 + 0.25 raise), hy = cy + r * (0.5 - 1.25 raise)},
     {CanvasLine[{{cx - 0.25 r, cy + 0.6 r}, {cx - 0.3 r, cy + 1.05 r + step}}, ink, "Thickness" -> w], CanvasLine[{{cx + 0.25 r, cy + 0.6 r}, {cx + 0.3 r, cy + 1.05 r - step}}, ink, "Thickness" -> w],
      CanvasLine[BezierFunction[{{cx - 0.7 r, cy + 0.1 r}, {cx - 1.05 r, cy + 0.35 r}, {cx - r, cy + 0.65 r}}] /@ Subdivide[0., 1., 12], ink, "Thickness" -> w],
      CanvasLine[BezierFunction[{{cx + 0.7 r, cy + 0.05 r}, {cx + 1.1 r, cy - 0.1 r raise}, {hx, hy}}] /@ Subdivide[0., 1., 12], ink, "Thickness" -> w],
@@ -163,7 +163,7 @@ WordWall[words_List, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = toolOptio
     With[{placed = wallPlace[words, o]}, makeElement["WordWall", {t0, t1}, Function[t, wallDraw[placed, t, drawOptions[{opts}, WordWall, t]]],
         <|"Places" -> Association[#[[1]] -> {#[[5]] + #[[4]] / 2, #[[6]] - 0.3 #[[3]]} & /@ placed]|>]]];
 
-wallSize[w_, k_] := k (1 + 11 Clip[(Log10[Max[w, 10^-9]] + 7.2) / 6.8, {0, 1}]^3.1);
+wallSize[w_, k_] := k * (1 + 11 Clip[(Log10[Max[w, 10^-9]] + 7.2) / 6.8, {0, 1}]^3.1);
 wallLayout[words_, k_, o_] := Module[{f = CanvasFont[defaultFont["Sans"], 1, weightNum[ov[o, FontWeight]]], mx, my, W, out = {}, line = {}, x, y, maxW, flush},
     {mx, my} = ov[o, "Margin"]; W = $canvasSize[[1]]; x = mx; y = my; maxW = W - 2 mx;
     flush[justify_] := If[line =!= {}, With[{lh = 1.02 Max[line[[All, 3]]], gaps = Length[line] - 1},

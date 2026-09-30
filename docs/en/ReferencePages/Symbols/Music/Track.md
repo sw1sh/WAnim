@@ -30,6 +30,7 @@ RelatedTutorials: [MusicGallery]
 - It plays on [Instrument]()s and is mixed by the [Mixer](): drum names on the "Kit", notes on "Sawtooth", unless an instrument is given.
 - In a notebook a Track shows itself as a live player on a shared clock: left-click plays and pauses every track, right-click mutes this one, a double-click solos it. [TrackView]() sets what it shows.
 - <code>[Audio]()[*track*, *n*]</code> renders *n* cycles, by default its "Cycles", at `"CyclesPerSecond" -> $CyclesPerSecond`. [MusicPlot]() and [Sound]() give it as notation.
+- <code>*track*["Video", *n*]</code> and <code>[Video]()[*track*, *n*]</code> render its live view playing with its sound, a player that works anywhere a [Video]() does; "View" picks the views ([TrackView]()), "Theme" is "Dark" or "Light", with [FrameRate]() and [ImageSize]().
 - <code>*track*["Query", *a*, *b*]</code> gives the events between cycles *a* and *b*, <code>*track*["Onsets", *a*, *b*]</code> those that start there; "Voices", "Source" and "Cycles" read its parts.
 
 ## Basic Examples
@@ -44,13 +45,23 @@ Track["bd [~ bd] sd ~, hh*8"]["Query", 0, 1/2][[All, "Value"]]
 
 ---
 
-Rendered for two cycles at 120 BPM:
+Rendered for a cycle at 120 BPM:
 
 ```wl
-Audio[Track["bd [~ bd] sd ~, hh*8"], 2, "CyclesPerSecond" -> 1/2]
+Audio[Track["bd [~ bd] sd ~, hh*8"], 1, "CyclesPerSecond" -> 1/2]
 ```
 
-<!-- => four seconds of a drum beat -->
+<!-- => two seconds of a drum beat -->
+
+---
+
+Its live view, playing, as a video:
+
+```wl
+Track["bd [~ bd] sd ~, hh*8"]["Video", 2, "View" -> "Punchcard", "CyclesPerSecond" -> 1/2]
+```
+
+<!-- => a video of a scrolling punch card with the beat -->
 
 ---
 

@@ -5,7 +5,7 @@
 
 PackageExported[{AnimatedGraphics}]
 
-PackageScoped[{directiveQ, summaryIcon}]
+PackageScoped[{directiveQ, summaryIcon, encodeVideo}]
 
 
 (* ::Section:: *)
@@ -327,14 +327,14 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts_
 AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts : OptionsPattern[agExport]] := Module[{
     from = OptionValue[agExport, {opts}, "From"], to = Replace[OptionValue[agExport, {opts}, "To"], Automatic :> g["Duration"]],
     fps = Replace[OptionValue[agExport, {opts}, FrameRate], Automatic :> agOption[g, FrameRate]],
-    cps = agOption[g, "CyclesPerSecond"], dir, n, times, aud, wav, ffmpeg, args, res},
+    cps = agOption[g, "CyclesPerSecond"], dir, n, times, aud, wav},
     dir = Replace[OptionValue[agExport, {opts}, "FrameDirectory"], Automatic :> CreateDirectory[]];
     n = Round[(to - from) fps / cps];
     times = from + Range[0, n - 1] cps / fps;
     (* in parallel when kernels can be had; otherwise (none launched, none licensed) here, in order *)
     If[TrueQ @ OptionValue[agExport, {opts}, "Parallel"] && (Length[Kernels[]] > 0 || Length[Quiet[LaunchKernels[]]] > 0 || Length[Quiet[LaunchKernels[$ProcessorCount]]] > 0),
         With[{root = ParentDirectory[PacletObject["WolframInstitute/WAnim"]["Location"]]},
-            ParallelEvaluate[Block[{Print}, PacletDirectoryLoad[root]; Quiet @ Needs["WolframInstitute`WAnim`"]]; Null]];
+            ParallelEvaluate[Block[{$Output = {}}, PacletDirectoryLoad[root]; Quiet @ Needs["WolframInstitute`WAnim`"]]; Null]];
         With[{init = Unevaluated @@ {OptionValue[agExport, {opts}, "KernelInitialization"]}}, ParallelEvaluate[ReleaseHold[Hold[init]]]];
         (* the film can be large (rasterized outputs, photos, a laid-out wall), so it goes to each kernel
            ONCE, inside the definition of a frame function made there directly; frames are then dealt out
@@ -352,15 +352,17 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts 
         Do[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]]]], {i, n}]];
     aud = Audio[g];
     wav = If[aud === None, None, Export[FileNameJoin[{dir, "soundtrack.wav"}], AudioTrim[aud, Quantity[{from, to} / cps, "Seconds"]]]];
+    encodeVideo[dir, fps, wav, file, OptionValue[agExport, {opts}, "CRF"]]];
+
+(* frames f000001.png, ... in dir, and a sound or None, encoded by ffmpeg into file *)
+encodeVideo[dir_, fps_, wav_, file_, crf_] := Module[{ffmpeg, res},
     ffmpeg = SelectFirst[{"/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"}, FileExistsQ, "ffmpeg"];
-    args = Join[{ffmpeg, "-y", "-v", "error", "-framerate", ToString[fps], "-i", FileNameJoin[{dir, "f%06d.png"}]},
+    res = RunProcess[Join[{ffmpeg, "-y", "-v", "error", "-framerate", ToString[fps], "-i", FileNameJoin[{dir, "f%06d.png"}]},
         If[wav === None, {}, {"-i", wav}],
-        {"-c:v", "libx264", "-preset", "medium", "-crf", ToString @ OptionValue[agExport, {opts}, "CRF"], "-pix_fmt", "yuv420p"},
+        {"-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-preset", "medium", "-crf", ToString[crf], "-pix_fmt", "yuv420p"},
         If[wav === None, {}, {"-c:a", "aac", "-b:a", "256k", "-shortest"}],
-        {"-movflags", "+faststart", ExpandFileName[file]}];
-    res = RunProcess[args];
-    If[res["ExitCode"] =!= 0, Return[Failure["FFmpeg", <|"MessageTemplate" -> res["StandardError"]|>]]];
-    ExpandFileName[file]];
+        {"-movflags", "+faststart", ExpandFileName[file]}]];
+    If[res["ExitCode"] =!= 0, Failure["FFmpeg", <|"MessageTemplate" -> res["StandardError"]|>], ExpandFileName[file]]];
 (* Video[g]: rendered to a temporary file *)
 AnimatedGraphics /: Video[g : AnimatedGraphics[_ ? agDataQ], opts___] := With[{f = Export[FileNameJoin[{$TemporaryDirectory, CreateUUID["wanim-"] <> ".mp4"}], g, opts]},
     If[StringQ[f], Video[f], f]];
@@ -381,7 +383,8 @@ AnimatedGraphics /: AnimatedImage[g : AnimatedGraphics[_ ? agDataQ], opts : Opti
 Options[agPlayer] = {ImageSize -> 960, UpdateInterval -> 1 / 30, "StartTime" -> 0};
 (g : AnimatedGraphics[a_ ? agDataQ])["Dynamic", opts : OptionsPattern[agPlayer]] := With[{
     dur = g["Duration"], spc = 1 / agOption[g, "CyclesPerSecond"], aud = Audio[g],
-    size = OptionValue[agPlayer, {opts}, ImageSize], dt = OptionValue[agPlayer, {opts}, UpdateInterval], t0 = OptionValue[agPlayer, {opts}, "StartTime"]},
+    size = OptionValue[agPlayer, {opts}, ImageSize], dt = OptionValue[agPlayer, {opts}, UpdateInterval], t0 = OptionValue[agPlayer, {opts}, "StartTime"],
+    defs = userDefinitions[g]},
     DynamicModule[{t = t0, playing = False, stream = None, begin = 0.},
         Column[{
             EventHandler[
@@ -397,7 +400,7 @@ Options[agPlayer] = {ImageSize -> 960, UpdateInterval -> 1 / 30, "StartTime" -> 
                 Slider[Dynamic[t, (t = #; If[playing, seekTo[Hold[t, playing, stream, begin], aud, spc, #]]) &], {0, dur}, ImageSize -> size - 120],
                 Dynamic[Row[{NumberForm[t, {4, 2}], " / ", dur}]]}, Spacer[6]]}],
         Deinitialization :> If[stream =!= None, Quiet[AudioStop[stream]; RemoveAudioStream[stream]]],
-        SaveDefinitions -> True, Initialization :> Needs["WolframInstitute`WAnim`"]]];
+        Initialization :> (Needs["WolframInstitute`WAnim`"]; restoreDefinitions[defs])]];
 SetAttributes[{togglePlay, seekTo}, HoldFirst];
 togglePlay[Hold[t_, playing_, stream_, begin_], aud_, spc_, dur_] := If[playing,
     playing = False; If[stream =!= None, AudioStop[stream]],

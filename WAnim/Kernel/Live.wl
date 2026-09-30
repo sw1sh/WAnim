@@ -133,9 +133,9 @@ Options[pianoRoll] = {
     "PlayheadColor" -> Automatic, "GridColor" -> Automatic, FrameStyle -> Automatic,
     AspectRatio -> 1/3, ImageSize -> 480, "LiveCycles" -> None
 };
-blockColor[Automatic, hue_] := LightDarkSwitched[Hue[hue, 0.7, 0.7], Hue[hue, 0.55, 0.95]]
+blockColor[Automatic, hue_] := LightDarkSwitched[Hue[hue, 0.6, 0.75], Hue[hue, 0.55, 0.8]]
 blockColor[c_, _] := c
-pianoRoll[patsOrTrack_, nCycles_ : 1, highlight_ : None, opts : OptionsPattern[]] := Module[
+pianoRoll[patsOrTrack_, nCycles_, highlight_, opts : OptionsPattern[]] := Module[
     {lanes, data, mids, lo, hi, bg, blk, labelCol, playCol, gridCol, frameCol, fs, lab},
     lanes = voicesOf[patsOrTrack];
     data = MapIndexed[Function[{lane, i}, {First[i], #} & /@ rollData[lane, nCycles]], lanes];
@@ -180,7 +180,7 @@ pianoRoll[patsOrTrack_, nCycles_ : 1, highlight_ : None, opts : OptionsPattern[]
    per-token, opacity rides the voice's gain (a quiet voice has dim bars).  `phase` is the CONTINUOUS
    (unwrapped) clock position so the scroll never jumps at the cycle boundary. *)
 valueHue[v_] := Mod[Hash[v], 997]/997.   (* integer mod FIRST -- Hash is ~10^18, so scaling it as a float loses all fractional precision *)
-punchColor[Automatic, v_] := LightDarkSwitched[Hue[valueHue[v], 0.55, 0.78], Hue[valueHue[v], 0.5, 0.95]]
+punchColor[Automatic, v_] := LightDarkSwitched[Hue[valueHue[v], 0.35, 0.95], Hue[valueHue[v], 0.6, 0.55]]
 punchColor[c_, _] := c
 (* "LiveCycles" -> n: bars are built ONCE (in absolute-time coords, one pattern period padded on
    both sides) and an inner Dynamic merely TRANSLATES them each frame -- the FE re-rasterizes one
@@ -189,19 +189,18 @@ punchColor[c_, _] := c
 Options[punchcard] = {FontSize -> 9, Background -> Automatic, "BlockColor" -> Automatic, "LabelColor" -> Automatic,
     "PlayheadColor" -> Automatic, "GridColor" -> Automatic, FrameStyle -> Automatic, AspectRatio -> 1/4,
     ImageSize -> 480, "Window" -> Automatic, "LiveCycles" -> None};
-punchcard[patsOrTrack_, nCycles_ : 1, phase_ : None, opts : OptionsPattern[]] := Module[
+punchcard[patsOrTrack_, nCycles_, phase_, opts : OptionsPattern[]] := Module[
     {live, ph, w, x0, lanes, nl, bg, blk, labCol, lineCol, gridCol, frameCol, fs, bar, span, prims, moving},
     live = OptionValue["LiveCycles"] =!= None;
     ph = If[phase === None, 0., N @ phase];
     w = OptionValue["Window"] /. Automatic -> nCycles;
-    (* live, the fixed now-line runs down the middle: the past scrolls off left, the future enters right;
-       a still starts at the cycle given *)
-    x0 = If[live, 0.5 w, 0];
+    (* the fixed now-line runs down the middle: the past scrolls off left, the future enters right *)
+    x0 = 0.5 w;
     lanes = voicesOf[patsOrTrack];
     nl = Length[lanes];
     fs = OptionValue[FontSize];  blk = OptionValue["BlockColor"];
     bg       = OptionValue[Background]      /. Automatic -> LightDarkSwitched[GrayLevel[0.96], GrayLevel[0.12]];
-    labCol   = OptionValue["LabelColor"]    /. Automatic -> LightDarkSwitched[GrayLevel[0.1], GrayLevel[0.97]];
+    labCol   = OptionValue["LabelColor"]    /. Automatic -> LightDarkSwitched[GrayLevel[0.12], GrayLevel[0.97]];
     lineCol  = OptionValue["PlayheadColor"] /. Automatic -> LightDarkSwitched[RGBColor[0.85, 0.2, 0.2], RGBColor[1, 0.9, 0.35]];
     gridCol  = OptionValue["GridColor"]     /. Automatic -> LightDarkSwitched[GrayLevel[0.82], GrayLevel[0.25]];
     frameCol = OptionValue[FrameStyle]      /. Automatic -> LightDarkSwitched[GrayLevel[0.6], GrayLevel[0.4]];
@@ -211,9 +210,11 @@ punchcard[patsOrTrack_, nCycles_ : 1, phase_ : None, opts : OptionsPattern[]] :=
          Rectangle[{x1, band[[1]] + 0.05}, {x2, band[[2]] - 0.05}],
          Text[Style[labelOf[val], fs, FontFamily -> "Source Code Pro", FontWeight -> Bold, FontColor -> labCol], {Mean[{x1, x2}], Mean[band]}]}];
     span = If[live, {-(nCycles + 1), w + nCycles + 1}, {ph - x0 - 1, ph + w - x0}];
-    (* each voice a band, cut into a row for each sound it plays at once (a stack "bd sd, hh*4" in one voice) *)
+    (* each voice a band, cut into a row for each sound it plays (a stack "bd sd, hh*4" in one voice), top
+       to bottom in the order they first sound in a cycle *)
     prims = MapIndexed[Function[{lane, i}, With[{evs = Select[lane["Query", span[[1]], span[[2]]], hasOnset[#] && ! restQ[#["Value"]] &]},
-        With[{rows = DeleteDuplicates[#["Value"] & /@ SortBy[evs, #["Whole"][[1]] &]], lo = nl - First[i]},
+        With[{rows = DeleteDuplicates[Join[#["Value"] & /@ SortBy[Select[lane["Query", 0, 1], hasOnset[#] && ! restQ[#["Value"]] &], #["Whole"][[1]] &],
+                #["Value"] & /@ SortBy[evs, #["Whole"][[1]] &]]], lo = nl - First[i]},
             With[{k = Max[1, Length[rows]]},
                 bar[Lookup[Lookup[metaOf[lane], "Instrument", <||>], "Gain", 1], lo + {k - #, k - # + 1} / k &[First[FirstPosition[rows, #["Value"], {1}]]]][#] & /@ evs]]]], lanes];
     moving = If[live,
@@ -224,7 +225,7 @@ punchcard[patsOrTrack_, nCycles_ : 1, phase_ : None, opts : OptionsPattern[]] :=
     Graphics[{
         EdgeForm[LightDarkSwitched[GrayLevel[0.7, 0.5], GrayLevel[0.05, 0.5]]],
         moving,
-        If[live, {lineCol, Thickness[0.011], Line[{{x0, 0}, {x0, Max[nl, 1]}}]}, {}]
+        {lineCol, Thickness[0.011], Line[{{x0, 0}, {x0, Max[nl, 1]}}]}
     },
         PlotRange -> {{0, w}, {0, Max[nl, 1]}}, PlotRangeClipping -> True,
         AspectRatio -> OptionValue[AspectRatio], Background -> bg,
@@ -290,8 +291,10 @@ buttonsQ[t_Track] := TrueQ @ Lookup[metaOf[t], "Buttons", False];
 soloFlagQ[t_Track] := TrueQ @ Lookup[metaOf[t], "Solo", False];
 
 (* stills: track["PianoRoll", n] and track["Punchcard", n] *)
-(t_Track)["PianoRoll", n_ : Automatic, opts : OptionsPattern[pianoRoll]] := pianoRoll[t, Replace[n, Automatic :> cyclesOf[t]], None, opts];
-(t_Track)["Punchcard", n_ : Automatic, opts : OptionsPattern[punchcard]] := punchcard[t, Replace[n, Automatic :> cyclesOf[t]], None, opts];
+(t_Track)["PianoRoll", opts : OptionsPattern[pianoRoll]] := pianoRoll[t, cyclesOf[t], None, opts];
+(t_Track)["PianoRoll", n_ ? NumericQ, opts : OptionsPattern[pianoRoll]] := pianoRoll[t, n, None, opts];
+(t_Track)["Punchcard", opts : OptionsPattern[punchcard]] := punchcard[t, cyclesOf[t], None, opts];
+(t_Track)["Punchcard", n_ ? NumericQ, opts : OptionsPattern[punchcard]] := punchcard[t, n, None, opts];
 
 (* render one visual (name + its options) as a shell built ONCE with only its MOVING part on an
    inner Dynamic -- the playhead line (roll), the translated bar strip (punchcard), the wave Line
@@ -313,7 +316,8 @@ renderVisuals[specs_, pat_, n_, stream_] := With[{ss = If[specs === {}, {{defaul
    Playhead is WALL-CLOCK (t0), not stream Position -- polling the stream was what broke the
    player for combinator-derived patterns (Fast/Reverse/...) shown as StandardForm. *)
 livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
-    {aud = renderAudio[patOrTrack, n, True], viss = visualsOf[patOrTrack], buttons = buttonsQ[patOrTrack], solo = soloFlagQ[patOrTrack]},
+    {aud = renderAudio[patOrTrack, n, True], viss = visualsOf[patOrTrack], buttons = buttonsQ[patOrTrack], solo = soloFlagQ[patOrTrack],
+     defs = userDefinitions[patOrTrack]},
     DynamicModule[{id = Unique[], stream = AudioStream[aud, Looping -> True], lastClick = 0.},
         (* visual built ONCE (self-updating inner Dynamics drive the playhead/wave); this outer
            Dynamic only re-wraps in the red frame when $Streams (enable/disable) changes. *)
@@ -338,11 +342,11 @@ livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
         (* join the global transport: register this stream (plays at the clock position if the
            transport is running); a Solo-marked track silences the rest on appearance; autoplay
            starts the transport if nothing is playing yet *)
-        Initialization :> (Needs["WolframInstitute`WAnim`"]; registerStream[id, stream, n]; If[solo, soloStream[id, stream, n]]; If[autoplay && ! $Playing, TrackPlay[]]),
-        Deinitialization :> (unregisterStream[id]; Quiet[AudioStop[stream]; RemoveAudioStream[stream]]),
-        (* the package's contexts are internal ones, so saving definitions never snapshots the SHARED
-           $Streams registry (which would clobber live disable/solo state on every display) *)
-        SaveDefinitions -> True
+        (* opened in a new session, the notebook's own definitions come back and the sound is made again *)
+        Initialization :> (Needs["WolframInstitute`WAnim`"]; restoreDefinitions[defs];
+            If[! MemberQ[AudioStreams[], stream], stream = AudioStream[renderAudio[patOrTrack, n, True], Looping -> True]];
+            registerStream[id, stream, n]; If[solo, soloStream[id, stream, n]]; If[autoplay && ! $Playing, TrackPlay[]]),
+        Deinitialization :> (unregisterStream[id]; Quiet[AudioStop[stream]; RemoveAudioStream[stream]])
     ]
 ]
 
@@ -353,4 +357,36 @@ livePlayer[patOrTrack_, n_ : 2, autoplay_ : False] := With[
 (* StandardForm is the live player; TraditionalForm is the editable, highlighting mini-notation
    (MiniNotation.wl) for a track with a source, and the still piano roll for one without *)
 Track /: MakeBoxes[t_Track, StandardForm] := With[{boxes = ToBoxes[livePlayer[t, cyclesOf[t], True]]}, InterpretationBox[boxes, t]];
-Track /: MakeBoxes[t_Track /; t["Source"] === None, TraditionalForm] := With[{boxes = ToBoxes[pianoRoll[t, cyclesOf[t]], StandardForm]}, InterpretationBox[boxes, t]];
+Track /: MakeBoxes[t_Track /; t["Source"] === None, TraditionalForm] := With[{boxes = ToBoxes[pianoRoll[t, cyclesOf[t], None], StandardForm]}, InterpretationBox[boxes, t]];
+
+
+(* ::Subsection:: *)
+(*Video*)
+
+(* track["Video", n] and Video[track, n]: the live view playing through n cycles (by default its "Cycles"),
+   with its sound -- a player that works anywhere a Video does, the cloud included.  "View" picks the
+   views (Automatic: the track's own, a PianoRoll unless TrackView set others), "Theme" the colours. *)
+Options[trackVideo] = {"View" -> Automatic, FrameRate -> 24, ImageSize -> 640, "Theme" -> "Dark", "CyclesPerSecond" :> $CyclesPerSecond};
+(t_Track)["Video", n : (_ ? NumericQ | Automatic) : Automatic, opts : OptionsPattern[trackVideo]] := trackVideo[t, n, opts];
+Track /: Video[t_Track, n : (_ ? NumericQ | Automatic) : Automatic, opts : OptionsPattern[trackVideo]] := trackVideo[t, n, opts];
+trackVideo[t_, n0_, opts___] := Block[{$CyclesPerSecond = OptionValue[trackVideo, {opts}, "CyclesPerSecond"]},
+    Module[{n = Replace[n0, Automatic :> cyclesOf[t]], fps = OptionValue[trackVideo, {opts}, FrameRate], size = OptionValue[trackVideo, {opts}, ImageSize],
+            pick = If[OptionValue[trackVideo, {opts}, "Theme"] === "Light", First, Last], views, aud, dir, wav, file},
+        views = Replace[OptionValue[trackVideo, {opts}, "View"], {Automatic :> visualsOf[t], v_String :> {{v, {}}}, l_List :> ({#, {}} & /@ l)}];
+        aud = renderAudio[t, n, True];
+        dir = CreateDirectory[];
+        Do[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}],
+            Rasterize[videoFrame[views, t, n, (i - 1) $CyclesPerSecond / fps, aud, size] /. LightDarkSwitched[l_, d_] :> pick[{l, d}], "Image", ImageResolution -> 144],
+            "PNG"], {i, Round[n / $CyclesPerSecond fps]}];
+        wav = Export[FileNameJoin[{dir, "sound.wav"}], aud];
+        file = encodeVideo[dir, fps, wav, FileNameJoin[{$TemporaryDirectory, CreateUUID["wanim-track-"] <> ".mp4"}], 20];
+        Quiet @ DeleteDirectory[dir, DeleteContents -> True];
+        If[StringQ[file], Video[file], file]]];
+(* the views at phase p, as the live player shows them then *)
+videoFrame[views_, t_, n_, p_, aud_, size_] := With[{frames = videoView[#[[1]], t, n, p, aud, size, #[[2]]] & /@ views},
+    If[Length[frames] == 1, First[frames], Column[frames, Spacings -> 0.3, Background -> LightDarkSwitched[White, GrayLevel[0.1]]]]];
+videoView["PianoRoll", t_, n_, p_, aud_, size_, o_] := pianoRoll[t, n, Mod[p, n], ImageSize -> size, Sequence @@ FilterRules[o, Options[pianoRoll]]];
+videoView["Punchcard", t_, n_, p_, aud_, size_, o_] := punchcard[t, n, p, ImageSize -> size, Sequence @@ FilterRules[o, Options[punchcard]]];
+videoView["Oscilloscope", t_, n_, p_, aud_, size_, o_] := With[{s = Mod[p / $CyclesPerSecond, n / $CyclesPerSecond]},
+    scopeFrame[AudioTrim[aud, Quantity[{s, Min[s + 0.04, n / $CyclesPerSecond]}, "Seconds"]], ImageSize -> size, Sequence @@ FilterRules[o, Options[scopeFrame]]]];
+videoView[_, t_, n_, p_, aud_, size_, o_] := visualBarShell[barCursor[Mod[p, n], n], n] /. (ImageSize -> _) -> (ImageSize -> size);
