@@ -1,13 +1,19 @@
 ---
-Template: ComputationalEssay
-Name: "WAnim Gallery"
-Author: Nikolay Murzin
-Date: 2026
-Description: "The Manim example gallery, scene by scene, in the Wolfram Language with WAnim"
-Abstract: "Manim's gallery is the standard tour of what an animation library can do: shapes and braces, value trackers and updaters, plots, moving and zoomed cameras, 3D scenes. Here is every one of its scenes written with WAnim, following Manim's code. A scene and its mobjects are the same thing, AnimatedGraphics: Graphics with a time axis. TeX is typeset with MaTeX, and self.play is an object playing an effect: Creation (Write, Create, FadeIn, GrowFromCenter), Transform, Scale, Rotate, Translate. Axes are ordinary Plots. A scene is a list of objects playing on its clock, or a function of time, and a later animation is an object placed at a later time. A ValueTracker is a Tween, and where Manim needs updaters the picture is simply computed from the time."
-Keywords: [WAnim, Manim, animation, gallery, AnimatedGraphics, MaTeX, Tween]
-Sources: ["[Manim example gallery](https://docs.manim.community/en/stable/examples.html)", "[WAnim](https://github.com/sw1sh/WAnim)"]
+Template: TechNote
+Name: ManimGallery
+Title: The Manim Gallery
+Context: WolframInstitute`WAnim`
+Paclet: WolframInstitute/WAnim
+URI: WolframInstitute/WAnim/tutorial/ManimGallery
+Keywords: [Manim, gallery, animation, AnimatedGraphics, MaTeX, Tween, camera, 3D, tutorial]
+RelatedGuides: [WAnim]
+RelatedTutorials: [MusicGallery]
 ---
+
+Manim's example gallery is the standard tour of what an animation library can do: shapes and braces, value trackers and updaters, plots, moving and zoomed cameras, 3D scenes. Here is every one of its scenes written with WAnim, following [Manim's code](https://docs.manim.community/en/stable/examples.html).
+
+A scene and its mobjects are the same thing, an [AnimatedGraphics](): graphics with a time axis. TeX is typeset with MaTeX, and Manim's `self.play` is an object playing an [AnimationEffect](): creation (Write, Create, FadeIn, GrowFromCenter), Transform, Scale, Rotate, Translate. Axes are ordinary plots. A scene is a list of objects playing on its clock, or a function of time, and a later animation is an object placed at a later time. A ValueTracker is a [Tween](), and where Manim needs updaters the picture is simply computed from the time.
+
 
 ## Setting Up
 
@@ -30,7 +36,7 @@ A scene of a given length in Manim's frame, 14.2 by 8 about the origin, on black
 
 ```wl
 scene[content_, dur_, opts___] := AnimatedGraphics[Flatten[{content}], opts, PlotRange -> {{-64/9, 64/9}, {-4, 4}}, Background -> Black, "Duration" -> dur];
-play[g_] := AnimatedImage[g, FrameRate -> 15, ImageSize -> 480];
+play[g_] := AnimatedImage[g, FrameRate -> 12, ImageSize -> 360];
 still[g_] := g[g["Duration"] - 10^-3, ImageSize -> 480];
 dot[p_, col_ : White, r_ : 0.08] := {col, Disk[p, r]};
 ```

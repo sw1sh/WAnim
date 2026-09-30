@@ -6,3 +6,9 @@
 
 # downloaded sound assets + renders (CC samples from tidalcycles/Dirt-Samples)
 /assets/
+
+# credentials (symlinks to the publishing and build accounts), build stages
+.env
+.env.*
+/build/
+WAnim/build/
