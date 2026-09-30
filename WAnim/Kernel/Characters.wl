@@ -81,7 +81,7 @@ spikeyFace[{cx_, cy_}, r_, blink_] := With[{ink = RGBColor["#1B1B1B"], mouth = R
             {CanvasDisk[{cx + s ex + 0.02 r, ey + 0.01 r}, 0.075 r, ink], CanvasDisk[{cx + s ex + 0.045 r, ey - 0.025 r}, 0.025 r, White]}],
         CanvasRectangle[{cx + s ex - gw / 2, ey - gh / 2, gw, gh}, ink, "Stroke" -> 0.05 r, "Radius" -> 0.06 r],
         (* an eyebrow *)
-        CanvasLine[{{cx + s (ex - 0.12 r), ey - 0.27 r}, {cx + s (ex + 0.1 r), ey - 0.3 r}}, ink, "Thickness" -> 0.045 r]}, {s, {-1, 1}}],
+        CanvasLine[{{cx + s * (ex - 0.12 r), ey - 0.27 r}, {cx + s * (ex + 0.1 r), ey - 0.3 r}}, ink, "Thickness" -> 0.045 r]}, {s, {-1, 1}}],
      (* the bridge *)
      CanvasLine[{{cx - ex + gw / 2, ey - 0.02 r}, {cx + ex - gw / 2, ey - 0.02 r}}, ink, "Thickness" -> 0.04 r],
      (* an open smile, teeth along its top *)
