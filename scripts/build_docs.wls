@@ -59,7 +59,7 @@ If[pattern === "*" || StringMatchQ["ResourceDefinition", pattern],
     (* list the paclet's files in the notebook, as its file manager would *)
     UsingFrontEnd @ With[{nbo = NotebookOpen[FileNameJoin[{repoRoot, "WAnim", "ResourceDefinition.nb"}], Visible -> False]},
         (* the Check finds each file by its cell's ID: cells need IDs *)
-        SetOptions[nbo, CreateCellID -> True];
+        SetOptions[nbo, CreateCellID -> True]; NotebookSave[nbo];
         PacletResource`DefinitionNotebook`RefreshNotebookPacletFiles[nbo]; NotebookSave[nbo]; NotebookClose[nbo]];
     Print["  ResourceDefinition.md -> WAnim/ResourceDefinition.nb"]];
 

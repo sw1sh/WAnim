@@ -43,8 +43,16 @@ cloudConnect[FileNameJoin[{repoRoot, ".env.publish"}]];
 $PublisherID = publisher;
 Print["submitting ", paclet["Name"], " ", version, " (publisher ", publisher, ") as ", $WolframID];
 
-(* the repository refuses a submission with Error-level issues, so check first.  NoPacletInfoFileCell
-   is expected: the paclet is attached from the loaded directory, not from a file cell. *)
+(* the notebook's list of paclet files, rebuilt from the paclet directory: MarkdownToNotebook writes cells
+   with CellID 0, and the repository's scraper keys files by CellID, so without real ids the list collapses
+   to one entry and the check fails with NoPacletInfoFileCell.  The entries resolve through
+   NotebookDirectory, so the notebook is saved before the list is rebuilt, and after. *)
+Needs["PacletResource`DefinitionNotebook`"];
+UsingFrontEnd @ With[{nb = NotebookOpen[nbFile, Visible -> False]},
+    SetOptions[nb, CreateCellID -> True]; NotebookSave[nb];
+    PacletResource`DefinitionNotebook`RefreshNotebookPacletFiles[nb]; NotebookSave[nb]; NotebookClose[nb]];
+
+(* the repository refuses a submission with Error-level issues, so check first *)
 (* each issue with the start of the cell it points at *)
 issues = UsingFrontEnd @ Block[{nb, r, cells},
     nb = NotebookOpen[nbFile, Visible -> False];
@@ -54,7 +62,7 @@ issues = UsingFrontEnd @ Block[{nb, r, cells},
         If[c === None, "", StringTake[StringReplace[ToString[First[NotebookRead[c]], InputForm], "\n" -> " "], UpTo[160]]]]] &, r];
     NotebookClose[nb];
     r];
-If[Select[issues, #Level === "Error" && #Tag =!= "NoPacletInfoFileCell" &] =!= {},
+If[Select[issues, #Level === "Error" &] =!= {},
     Print["FATAL: the definition notebook has blocking errors."]; Exit[1]];
 If[checkOnly, Print["check passed"]; Exit[0]];
 
