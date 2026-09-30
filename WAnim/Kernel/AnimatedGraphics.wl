@@ -292,14 +292,17 @@ foley[AnimatedGraphics[a_], off_] := Join[{#[[1]] + off, #[[2]], #[[3]]} & /@ Lo
 foley[_, _] := {};
 
 (* the foley as instrument voices: key clicks and evaluation blips *)
-foleyVoices[ev_] := {Instrument["Tick"][EventTrack[Cases[ev, {t_, "Tick", v_} :> {t, 1/100, 1, v}]]],
-    Instrument["Blip"][EventTrack[Cases[ev, {t_, "Blip", v_} :> {t, 1/20, 91, v}]]]};
+foleyVoices[ev_] := Join[
+    If[FreeQ[ev, "Tick"], {}, {Instrument["Tick"][Track[Cases[ev, {t_, "Tick", v_} :> {t, 1/100, 1, v}]]]}],
+    If[FreeQ[ev, "Blip"], {}, {Instrument["Blip"][Track[Cases[ev, {t_, "Blip", v_} :> {t, 1/20, 91, v}]]]}]];
 
-(* Audio[g]: its sound over its duration, the foley mixed into the first Track's studio when "Foley" -> True *)
+(* Audio[g]: its sound over its duration, the foley mixed with the first Track that starts with it, through
+   the same studio and mixer, when "Foley" -> True *)
 AnimatedGraphics /: Audio[g : AnimatedGraphics[a_ ? agDataQ]] := Module[{cps = agOption[g, "CyclesPerSecond"], dur = g["Duration"], ss = sounds[g, 0], fv, k, rendered, mix},
     fv = If[TrueQ[agOption[g, "Foley"]], foleyVoices[foley[g, 0]], {}];
-    If[fv =!= {}, k = FirstPosition[ss, {0, Track[_List, ___]}, None, {1}];
-        ss = If[k === None, Append[ss, {0, Track[fv]}], MapAt[Replace[#, {0, Track[vs_, m___]} :> {0, Track[Join[vs, fv], m]}] &, ss, k]]];
+    If[fv =!= {}, k = FirstPosition[ss, {0, _Track}, None, {1}];
+        ss = If[k === None, Append[ss, {0, Track[fv]}],
+            MapAt[Replace[#, {0, t_Track} :> {0, Track[Join[{Track[First[t], KeyDrop[metaOf[t], "Mixer"]]}, fv], KeyTake[metaOf[t], "Mixer"]]}] &, ss, k]]];
     If[ss === {}, Return[None]];
     rendered = Map[With[{au = If[MatchQ[#[[2]], _Audio], #[[2]], Audio[#[[2]], Max[1, Ceiling[dur - #[[1]]]], "CyclesPerSecond" -> cps]]},
         If[#[[1]] > 0, AudioPad[au, {#[[1]] / cps, 0}], au]] &, ss];

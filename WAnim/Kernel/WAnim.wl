@@ -15,13 +15,12 @@
    wiring PackageExported / PackageScoped declarations into the WolframInstitute`WAnim` context.
    - HiddenImports: GeneralUtilities` for the format itself, Wolfram`Parser` so MiniNotation's
      grammar symbols (ParseRegex, LeafNode, ...) resolve when the file is read.
-   - InitialEvaluations loads first (graceful MaTeX setup); MiniNotation loads last so its
-     CyclicPattern[_String] (AST) constructor overrides Pattern's plain one. *)
+   - InitialEvaluations loads first (graceful MaTeX setup). *)
 PackageInitialize["WolframInstitute`WAnim`",
   <|
     "HiddenImports"  -> {"GeneralUtilities`", "Wolfram`Parser`"},
     "LoadFirstFiles" -> {"InitialEvaluations.wl"},
-    "LoadLastFiles"  -> {"MiniNotation.wl"},
+    "LoadLastFiles"  -> {},
     "IgnoreFiles"    -> {}
   |>
 ]

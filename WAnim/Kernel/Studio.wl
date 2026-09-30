@@ -5,14 +5,15 @@
 
 PackageExported[{Instrument, Mixer}]
 
-PackageScoped[{instrumentVoiceQ, studioQ, studioRender, instrumentAudio}]
+PackageScoped[{renderAudio}]
 
 
 (* ::Section:: *)
 (*Studio: instruments played sample by sample, mixed through buses*)
 
-(* A small offline studio.  An Instrument renders each note of a Track into its dry sound, routed to
-   the drums, music or bass bus, and its sends to a shared reverb and a shared ping-pong delay.  The
+(* A small offline studio, where every Track is heard.  Each voice plays on an Instrument, which renders
+   each of its notes into a dry sound routed to the drums, music or bass bus, and its sends to a shared
+   reverb and a shared ping-pong delay.  The
    mixer sums the buses, filters the music bus through an automated low-pass, ducks the music, bass
    and reverb under a sidechain, runs the sends through the delay and reverb, and masters the result:
    a rumble high-pass, soft saturation, a limiter and a fade.  The recursive parts (filters,
@@ -26,8 +27,18 @@ cycleSecondsNow[] := 1 / $CyclesPerSecond;
 (* ::Subsection:: *)
 (*Compiled kernels*)
 
+(* a compiled kernel, cached per system and version under $UserBaseDirectory: compiling all of them takes
+   some twenty seconds, which a live player should pay once per machine, not once per session *)
+compiled[name_String, f_Function] := Module[{file = FileNameJoin[{$UserBaseDirectory, "ApplicationData", "WAnim", "Kernels",
+        StringRiffle[{name, $SystemID, ToString[$VersionNumber], IntegerString[Hash[f], 36]}, "-"] <> ".wxf"}], k},
+    k = If[FileExistsQ[file], Quiet @ Check[Import[file], $Failed], $Failed];
+    If[Head[k] =!= CompiledCodeFunction,
+        k = FunctionCompile[f];
+        Quiet[CreateDirectory[DirectoryName[file], CreateIntermediateDirectories -> True]; Export[file, k]]];
+    k];
+
 (* a state-variable filter (Zavalishin's TPT) over a signal with a cutoff per sample: {lp, bp, hp} *)
-svfKernel := svfKernel = FunctionCompile[Function[{Typed[x, "PackedArray"::["Real64", 1]], Typed[fc, "PackedArray"::["Real64", 1]], Typed[q, "Real64"], Typed[sr, "Real64"]},
+svfKernel := svfKernel = compiled["svf", Function[{Typed[x, "PackedArray"::["Real64", 1]], Typed[fc, "PackedArray"::["Real64", 1]], Typed[q, "Real64"], Typed[sr, "Real64"]},
     Module[{n = Length[x], lp = ConstantArray[0., Length[x]], bp = ConstantArray[0., Length[x]], hp = ConstantArray[0., Length[x]],
             ic1 = 0., ic2 = 0., g = 0., k = 1. / q, a1 = 0., a2 = 0., a3 = 0., v1 = 0., v2 = 0., v3 = 0., f = 0., last = -1.},
         Do[
@@ -40,7 +51,7 @@ svfKernel := svfKernel = FunctionCompile[Function[{Typed[x, "PackedArray"::["Rea
         {lp, bp, hp}]]];
 
 (* a band-limited (PolyBLEP) sawtooth with a phase increment per sample *)
-sawKernel := sawKernel = FunctionCompile[Function[{Typed[inc, "PackedArray"::["Real64", 1]], Typed[ph0, "Real64"]},
+sawKernel := sawKernel = compiled["saw", Function[{Typed[inc, "PackedArray"::["Real64", 1]], Typed[ph0, "Real64"]},
     Module[{n = Length[inc], out = ConstantArray[0., Length[inc]], ph = ph0, t = 0., v = 0., d = 0., y = 0.},
         Do[
             t = ph; d = inc[[i]]; ph = ph + d; If[ph >= 1., ph = ph - 1.];
@@ -52,7 +63,7 @@ sawKernel := sawKernel = FunctionCompile[Function[{Typed[inc, "PackedArray"::["R
 
 (* Freeverb: eight damped combs and four allpasses per channel, fed the mono sum after a predelay;
    all the delay lines live in one flat buffer, each at its own offset *)
-reverbKernel := reverbKernel = FunctionCompile[Function[{Typed[l, "PackedArray"::["Real64", 1]], Typed[r, "PackedArray"::["Real64", 1]],
+reverbKernel := reverbKernel = compiled["reverb", Function[{Typed[l, "PackedArray"::["Real64", 1]], Typed[r, "PackedArray"::["Real64", 1]],
         Typed[room, "Real64"], Typed[damp, "Real64"], Typed[pd, "MachineInteger"], Typed[spread, "MachineInteger"]},
     Module[{n = Length[l], lens, starts, pos, store, buf, outL = ConstantArray[0., Length[l]], outR = ConstantArray[0., Length[l]],
             x = 0., y = 0., yl = 0., yr = 0., b = 0., p = 0, total = 0},
@@ -84,7 +95,7 @@ reverbKernel := reverbKernel = FunctionCompile[Function[{Typed[l, "PackedArray":
         {outL, outR}]]];
 
 (* a ping-pong delay whose feedback runs through a low-pass *)
-delayKernel := delayKernel = FunctionCompile[Function[{Typed[l, "PackedArray"::["Real64", 1]], Typed[r, "PackedArray"::["Real64", 1]],
+delayKernel := delayKernel = compiled["delay", Function[{Typed[l, "PackedArray"::["Real64", 1]], Typed[r, "PackedArray"::["Real64", 1]],
         Typed[m, "MachineInteger"], Typed[fb, "Real64"], Typed[lpHz, "Real64"], Typed[sr, "Real64"]},
     Module[{n = Length[l], bl = ConstantArray[0., m], br = ConstantArray[0., m], outL = ConstantArray[0., Length[l]], outR = ConstantArray[0., Length[l]],
             g = Tan[Pi lpHz / sr], k = Sqrt[2.], a1 = 0., a2 = 0., a3 = 0., p1 = 0., p2 = 0., q1 = 0., q2 = 0., dl = 0., dr = 0., v1 = 0., v2 = 0., v3 = 0., fl = 0., fr = 0., j = 1},
@@ -101,7 +112,7 @@ delayKernel := delayKernel = FunctionCompile[Function[{Typed[l, "PackedArray"::[
         {outL, outR}]]];
 
 (* a look-ahead limiter with a smooth release: the gain for each sample *)
-limiterKernel := limiterKernel = FunctionCompile[Function[{Typed[peak, "PackedArray"::["Real64", 1]], Typed[ceiling, "Real64"], Typed[la, "MachineInteger"], Typed[rel, "Real64"]},
+limiterKernel := limiterKernel = compiled["limiter", Function[{Typed[peak, "PackedArray"::["Real64", 1]], Typed[ceiling, "Real64"], Typed[la, "MachineInteger"], Typed[rel, "Real64"]},
     Module[{n = Length[peak], need = ConstantArray[1., Length[peak]], gmin = ConstantArray[1., Length[peak]], out = ConstantArray[1., Length[peak]], m = 1., g = 1., tg = 1.},
         Do[need[[i]] = If[peak[[i]] > ceiling, ceiling / peak[[i]], 1.], {i, n}];
         Do[m = 1.; Do[If[need[[j]] < m, m = need[[j]]], {j, i, Min[n, i + la]}]; gmin[[i]] = m, {i, n}];
@@ -239,77 +250,123 @@ instrument[wave : "Sine" | "Triangle" | "Square" | "Sawtooth" | "Supersaw", _][f
     note["Music", mono[x], mono[0.2 x]]];
 instrument[name_, _][___] := (Message[Instrument::unknown, name]; note["Music", {{0.}, {0.}}]);
 
-Instrument::unknown = "`1` is not an instrument; Instrument[] lists them.";
-Instrument[] = {"Kick", "SoftKick", "Clap", "Hat", "OpenHat", "Crash", "Riser", "Roll", "Impact", "Tick", "Blip",
-    "Pluck", "Arp", "Pad", "Bass", "LongBass", "Stab", "Lead", "Bell", "Voice", "Sine", "Triangle", "Square", "Sawtooth", "Supersaw"};
+(* ::Subsection:: *)
+(*The kit: samples played by name*)
 
-(* the notes of events played on an instrument, dry, as one Audio (a Track played as it is): d cycles
-   shorten every note when given *)
-instrumentAudio[_, {}, _] := Nothing;
-instrumentAudio[name_String, events_List, dec_] := Module[{cs = cycleSecondsNow[], notes, n, buf},
-    notes = Flatten[Table[With[{hold = If[dec === None, #, Min[#, dec cs]] &[(ev["Whole"][[2]] - ev["Whole"][[1]]) cs], onset = ev["Whole"][[1]] cs},
-        {samples[onset] + 1, instrument[name, name][midiFreq[m], Lookup[ev, "Velocity", 1], hold, onset, Mod[Hash[{name, onset, m}], 2^31]]["Dry"]}],
-        {ev, events}, {m, valuePitches[ev["Value"]]}], 1];
-    n = Max[#[[1]] + Length[#[[2, 1]]] & /@ notes];
-    buf = ConstantArray[0., {2, n}];
-    Do[buf[[All, x[[1]] ;; x[[1]] + Length[x[[2, 1]]] - 1]] += x[[2]], {x, notes}];
-    Audio[buf, SampleRate -> studioRate[]]];
+(* Instrument["Kit"] plays each event's value as a sample of WAnim's own drum kit (bd sd cp hh oh cr rim
+   lt, synthesized by scripts/make_drums.wls into the paclet's Drums asset, with the usual aliases:
+   kick, snare, clap, hat, ...); Instrument[<|"name" -> audio, ...|>] and Instrument[File[dir]] (every
+   .wav of a directory, by file name) play your own.  "bd:3" falls back to "bd", and an event whose
+   value is an Audio plays that. *)
+drumKit[] := drumKit[] = With[{dir = PacletObject["WolframInstitute/WAnim"]["AssetLocation", "Drums"]},
+    Association[FileBaseName[#] -> Import[#] & /@ FileNames["*.wav", dir]]];
+kitSounds["Kit"] := drumKit[];
+kitSounds[a_Association] := a;
+kitSounds[File[dir_String]] := kitSounds[File[dir]] = Association[FileBaseName[#] -> Import[#] & /@ FileNames["*.wav", dir]];
+kitQ[name_] := MatchQ[name, "Kit" | _Association | File[_String]];
+drumAlias[v_String] := Replace[ToLowerCase[v], {"kick" | "bass" | "b" -> "bd", "sn" | "snare" -> "sd", "clap" | "hc" -> "cp", "ch" | "hat" | "h" -> "hh",
+    "open" -> "oh", "crash" | "ride" | "rd" -> "cr", "rs" | "cl" -> "rim", "tom" | "mt" | "ht" | "t" -> "lt"}];
+drumAlias[v_] := v;
+kitSample[_, a_Audio] := sampleArray[a];
+kitSample[kit_, v_] := With[{sounds = kitSounds[kit], base = If[StringQ[v], First[StringSplit[v, ":"], v], v]},
+    Replace[SelectFirst[{v, base, drumAlias[base]}, KeyExistsQ[sounds, #] &, None], {None -> None, k_ :> sampleArray[sounds[k]]}]];
+(* a sample as a peak-normalized mono array at the studio's rate *)
+sampleArray[a_Audio] := sampleArray[a] = With[{x = Mean[AudioData[AudioResample[a, studioRate[]]]]}, Developer`ToPackedArray[N[x / Max[Abs[x], 10.^-6]]]];
+kitNote[kit_, v_, vel_, decay_] := With[{x = kitSample[kit, v]}, If[x === None, None,
+    With[{y = If[NumericQ[decay] && samples[decay] < Length[x], x[[;; samples[decay]]] Clip[(samples[decay] - Range[samples[decay]]) / samples[0.02], {0, 1}], x]},
+        note["Drums", mono[0.6 vel y]]]]];
 
 
 (* ::Subsection:: *)
-(*Voices and the mix*)
+(*Instruments on voices*)
 
-(* Instrument[name][track] is a voice playing track's events on the instrument: notes are MIDI numbers
-   (or names), an event's velocity is its fourth element in an EventTrack (default 1). *)
-Instrument[name_String][p_] := Instrument[name, p];
-instrumentVoiceQ[v_] := MatchQ[stripGain[v], Instrument[_String, _]];
-stripGain[v_] := v //. HoldPattern[GainVoice[_, x_]] :> x;
-voiceGain[v_] := Times @@ Cases[{v}, HoldPattern[GainVoice[g_, _]] :> g, Infinity];
+(* Instrument[name, opts][track] plays the track on an instrument; Instrument[opts][track] changes only
+   how it sounds.  Both are metadata on the Track, so every operation keeps them; on a stack they apply to
+   every voice.  A voice without one plays pitched values on "Sawtooth" and drum names on "Kit".
+     "Gain"    level, multiplying any gain already set
+     "Pan"     stereo place, -1 (left) to 1 (right)
+     "Reverb"  the send to the shared reverb, relative to the dry sound (Automatic: the instrument's own)
+     "Delay"   the send to the shared ping-pong delay, likewise
+     "Decay"   cut every sound to this many cycles
+   Each has a mini-notation form, appended to the source: "// sound pluck", "// gain 0.5", "// pan -1",
+   "// room 0.3", "// delay 0.4", "// dec 0.1". *)
+Instrument::unknown = "`1` is not an instrument; Instrument[] lists them.";
+Options[Instrument] = {"Gain" -> 1, "Pan" -> 0, "Reverb" -> Automatic, "Delay" -> Automatic, "Decay" -> None};
+Instrument[] = {"Kit", "Kick", "SoftKick", "Clap", "Hat", "OpenHat", "Crash", "Riser", "Roll", "Impact", "Tick", "Blip",
+    "Pluck", "Arp", "Pad", "Bass", "LongBass", "Stab", "Lead", "Bell", "Voice", "Sine", "Triangle", "Square", "Sawtooth", "Supersaw"};
+Instrument[opts : (_Rule | _RuleDelayed) ..][t_Track] := setInstrument[t, <||>, Association[opts]];
+Instrument[name : _String | _Association | File[_String], opts : (_Rule | _RuleDelayed) ...][t_Track] := setInstrument[t, <|"Name" -> name|>, Association[opts]];
+setInstrument[Track[vs_List, m___], new_, opts_] := Track[setInstrument[#, new, opts] & /@ vs, m];
+setInstrument[t : Track[q_, ___], new_, opts_] := With[{m = metaOf[t], old = Lookup[metaOf[t], "Instrument", <||>]},
+    With[{spec = Join[old, new, opts, If[KeyExistsQ[opts, "Gain"], <|"Gain" -> Lookup[old, "Gain", 1] opts["Gain"]|>, <||>]], s = patSource[t], frags = soundFrags[new, opts]},
+        Track[q, If[s === None || frags === $Failed, KeyDrop[<|m, "Instrument" -> spec|>, "Source"],
+            <|m, "Instrument" -> spec, "Source" -> StringRiffle[Prepend[frags, s], " // "]|>]]]];
+soundFrags[new_, opts_] := If[KeyExistsQ[new, "Name"] && ! StringQ[new["Name"]], $Failed, Join[
+    If[KeyExistsQ[new, "Name"], {"sound " <> ToLowerCase[new["Name"]]}, {}],
+    KeyValueMap[Function[{k, v}, Replace[k, {"Gain" -> "gain ", "Pan" -> "pan ", "Reverb" -> "room ", "Delay" -> "delay ", "Decay" -> "dec ", _ -> Nothing}] <> chainNum[v]],
+        KeySelect[opts, MemberQ[{"Gain", "Pan", "Reverb", "Delay", "Decay"}, #] &]]]];
+instrumentSpec[v_Track] := Join[<|"Name" -> Automatic|>, Association[Options[Instrument]], Lookup[metaOf[v], "Instrument", <||>]];
+instrumentName[Automatic, value_] := If[valuePitches[value] === {}, "Kit", "Sawtooth"];
+instrumentName[name_String, _] := Replace[SelectFirst[Instrument[], ToLowerCase[#] === ToLowerCase[name] &, None], None -> name];
+instrumentName[name_, _] := name;
 
-(* Mixer[opts][track] sets how a track of instruments is mixed:
+(* Mixer[opts][track] sets how the whole track is mixed:
      "Sidechain" -> kickTrack    duck the music (0.55), bass (0.8) and reverb (0.35) under its onsets
      "Cutoff" -> f               the music bus runs through a low-pass at f[cycle] Hz
      "DelayTime" -> 3/16         the ping-pong delay, in cycles; "DelayFeedback" -> 0.42
-     "Master" -> True            rumble high-pass, soft saturation, limiter; "FadeOut" -> cycles *)
-Options[Mixer] = {"Sidechain" -> None, "Cutoff" -> None, "DelayTime" -> 3/16, "DelayFeedback" -> 0.42, "Master" -> True, "FadeOut" -> 5/4};
-Mixer[opts : OptionsPattern[]][Track[vs_List, m_Association : <||>]] := Track[vs, Append[m, "Mixer" -> {opts}]];
-studioQ[t_] := MatchQ[t, Track[vs_List, ___] /; AnyTrue[vs, instrumentVoiceQ] || MatchQ[t, Track[_, KeyValuePattern["Mixer" -> _]]]];
-mixerOption[t_, name_] := OptionValue[Mixer, Replace[t, {Track[_, m_Association] :> Lookup[m, "Mixer", {}], _ -> {}}], name];
+     "Master" -> True            rumble high-pass, soft saturation, limiter
+     "FadeOut" -> cycles         fade the end out *)
+Options[Mixer] = {"Sidechain" -> None, "Cutoff" -> None, "DelayTime" -> 3/16, "DelayFeedback" -> 0.42, "Master" -> True, "FadeOut" -> None};
+Mixer[opts : OptionsPattern[]][t_Track] := setMeta[t, "Mixer", Join[{opts}, Lookup[metaOf[t], "Mixer", {}]]];
+mixerOption[t_, name_] := OptionValue[Mixer, Lookup[metaOf[t], "Mixer", {}], name];
 
-(* render every voice into the buses, then mix *)
-studioRender[t : Track[vs_List, ___], nCycles_] := Module[{sr = studioRate[], cs = cycleSecondsNow[], n, drums, music, bass, verb, delay, addAt},
-    n = samples[nCycles cs];
-    {drums, music, bass, verb, delay} = ConstantArray[0., {5, 2, n}];
-    SetAttributes[addAt, HoldFirst];
-    addAt[b_, i0_, x_] := With[{m = Min[Length[x[[1]]], n - i0 + 1]}, If[m > 0, b[[All, i0 ;; i0 + m - 1]] += x[[All, ;; m]]]];
-    Do[If[instrumentVoiceQ[v],
-        With[{name = stripGain[v][[1]], p = stripGain[v][[2]], g = voiceGain[v]},
-            Do[With[{onset = ev["Whole"][[1]] cs, vel = g Lookup[ev, "Velocity", 1]},
-                Do[With[{nt = instrument[name, name][midiFreq[m], vel, (ev["Whole"][[2]] - ev["Whole"][[1]]) cs, onset, Mod[Hash[{name, onset, m}], 2^31]], i0 = samples[onset] + 1},
-                    Switch[nt["Bus"], "Drums", addAt[drums, i0, nt["Dry"]], "Bass", addAt[bass, i0, nt["Dry"]], _, addAt[music, i0, nt["Dry"]]];
-                    addAt[verb, i0, nt["Verb"]]; addAt[delay, i0, nt["Delay"]]],
-                    {m, Replace[valuePitches[ev["Value"]], {} -> {0}]}]],
-                {ev, Select[p["Query", 0, nCycles], hasOnset]}]],
-        (* any other voice (a track played as it is, samples, an Audio) is rendered as usual and joins the music bus *)
-        With[{a = voiceRendered[v, nCycles]},
-            If[Head[a] === Audio, With[{d = AudioData[AudioResample[a, sr]]}, addAt[music, 1, If[Length[d] == 1, {d[[1]], d[[1]]}, d[[;; 2]]]]]]]],
-        {v, vs}];
-    mixBuses[<|"Drums" -> drums, "Music" -> music, "Bass" -> bass, "Verb" -> verb, "Delay" -> delay|>, n, t]];
 
-mixBuses[bus0_, n_, t_] := Module[{bus = bus0, sr = studioRate[], cs = cycleSecondsNow[], duck, kicks, cutoff, del, verb, mix, pre, peak, gain, fade},
+(* ::Subsection:: *)
+(*Rendering*)
+
+(* every note of every voice into the buses, then the mix.  A loop renders a few seconds more and folds
+   the delay and reverb tails back onto its start, so it repeats seamlessly. *)
+renderAudio[t_Track, nCycles_, loop_ : False] := Module[{cs = cycleSecondsNow[], n, len, bus, addAt, spec, name, nt, mix},
+    n = samples[nCycles cs]; len = n + If[loop, samples[3.], 0];
+    bus = AssociationThread[{"Drums", "Music", "Bass", "Verb", "Delay"} -> ConstantArray[0., {5, 2, len}]];
+    addAt[k_, i0_, x_] := With[{m = Min[Length[x[[1]]], len - i0 + 1]}, If[m > 0 && i0 >= 1, bus[[k, All, i0 ;; i0 + m - 1]] += x[[All, ;; m]]]];
+    Do[spec = instrumentSpec[v];
+        Do[With[{onset = ev["Whole"][[1]] cs, hold = (ev["Whole"][[2]] - ev["Whole"][[1]]) cs, vel = spec["Gain"] Lookup[ev, "Velocity", 1],
+                decay = If[NumericQ[spec["Decay"]], spec["Decay"] cs, None]},
+            name = instrumentName[spec["Name"], ev["Value"]];
+            Do[nt = If[kitQ[name], kitNote[name, ev["Value"], vel, decay],
+                    instrument[name, name][midiFreq[m], vel, If[decay === None, hold, Min[hold, decay]], onset, Mod[Hash[{name, onset, m}], 2^31]]];
+                If[nt =!= None, nt = shapeNote[nt, spec]; With[{i0 = samples[onset] + 1},
+                    addAt[Replace[nt["Bus"], Except["Drums" | "Bass"] -> "Music"], i0, nt["Dry"]]; addAt["Verb", i0, nt["Verb"]]; addAt["Delay", i0, nt["Delay"]]]],
+                {m, If[kitQ[name], {0}, Replace[valuePitches[ev["Value"]], {} -> {0}]]}]],
+            {ev, Select[v["Query", 0, nCycles], hasOnset[#] && ! restQ[#["Value"]] &]}],
+        {v, voicesOf[t]}];
+    mix = mixBuses[bus, len, n, t];
+    If[loop, mix[[All, ;; len - n]] += mix[[All, n + 1 ;;]]];
+    Audio[mix[[All, ;; n]], SampleRate -> studioRate[]]];
+
+(* a voice's pan and sends on a note *)
+shapeNote[nt_, spec_] := Module[{dry = nt["Dry"], a},
+    If[spec["Pan"] != 0, a = (Clip[spec["Pan"], {-1, 1}] + 1) Pi / 4; dry = Sqrt[2.] {Cos[a] dry[[1]], Sin[a] dry[[2]]}];
+    <|"Bus" -> nt["Bus"], "Dry" -> dry, "Verb" -> If[NumericQ[spec["Reverb"]], spec["Reverb"] dry, nt["Verb"]],
+        "Delay" -> If[NumericQ[spec["Delay"]], spec["Delay"] dry, nt["Delay"]]|>];
+
+mixBuses[bus0_, len_, n_, t_] := Module[{bus = bus0, sr = studioRate[], cs = cycleSecondsNow[], duck, kicks, cutoff, del, verb, mix, pre, peak, gain, fade},
     (* the sidechain envelope: under each kick the gain dips and recovers *)
-    duck = ConstantArray[1., n];
-    kicks = Replace[mixerOption[t, "Sidechain"], {None -> {}, k_ :> (#["Whole"][[1]] cs & /@ Select[k["Query", 0, n / sr / cs], hasOnset])}];
-    Do[With[{i0 = samples[k] + 1, len = samples[0.28]}, With[{m = Min[len, n - i0 + 1]},
-        If[m > 0, duck[[i0 ;; i0 + m - 1]] = MapThread[Min, {duck[[i0 ;; i0 + m - 1]], 1 - Exp[-times[m] / 0.085]}]]]], {k, kicks}];
+    duck = ConstantArray[1., len];
+    kicks = Replace[mixerOption[t, "Sidechain"], {None -> {}, k_ :> (#["Whole"][[1]] cs & /@ k["Onsets", 0, len / sr / cs])}];
+    Do[With[{i0 = samples[k] + 1, l = samples[0.28]}, With[{m = Min[l, len - i0 + 1]},
+        If[m > 0 && i0 >= 1, duck[[i0 ;; i0 + m - 1]] = MapThread[Min, {duck[[i0 ;; i0 + m - 1]], 1 - Exp[-times[m] / 0.085]}]]]], {k, kicks}];
     (* the music bus through its automated low-pass *)
     cutoff = mixerOption[t, "Cutoff"];
-    If[cutoff =!= None, With[{fc = stepped[cutoff[# / cs] &, n, 32]}, bus["Music"] = svf[#, fc, 0.9][[1]] & /@ bus["Music"]]];
+    If[cutoff =!= None, With[{fc = stepped[cutoff[# / cs] &, len, 32]}, bus["Music"] = svf[#, fc, 0.9][[1]] & /@ bus["Music"]]];
     bus["Music"] = (1 - 0.55 (1 - duck)) # & /@ bus["Music"];
     bus["Bass"] = (1 - 0.8 (1 - duck)) # & /@ bus["Bass"];
-    del = delayKernel[bus["Delay"][[1]], bus["Delay"][[2]], samples[mixerOption[t, "DelayTime"] cs], N[mixerOption[t, "DelayFeedback"]], 3200., N[sr]];
-    verb = reverbKernel[bus["Verb"][[1]] + 0.25 del[[1]], bus["Verb"][[2]] + 0.25 del[[2]], 0.88, 0.3, samples[0.025], 23];
-    verb = (1 - 0.35 (1 - duck)) # & /@ verb;
+    (* the delay and reverb only when something is sent to them *)
+    del = If[Max[Abs[bus["Delay"]]] > 0,
+        delayKernel[bus["Delay"][[1]], bus["Delay"][[2]], samples[mixerOption[t, "DelayTime"] cs], N[mixerOption[t, "DelayFeedback"]], 3200., N[sr]], 0 bus["Delay"]];
+    verb = If[Max[Abs[bus["Verb"]]] > 0 || Max[Abs[del]] > 0,
+        (1 - 0.35 (1 - duck)) # & /@ reverbKernel[bus["Verb"][[1]] + 0.25 del[[1]], bus["Verb"][[2]] + 0.25 del[[2]], 0.88, 0.3, samples[0.025], 23], 0 bus["Verb"]];
     mix = bus["Drums"] + bus["Music"] + bus["Bass"] + 0.45 del + 0.9 verb;
     If[TrueQ[mixerOption[t, "Master"]],
         mix = svf[#, 28][[3]] & /@ mix;
@@ -319,5 +376,10 @@ mixBuses[bus0_, n_, t_] := Module[{bus = bus0, sr = studioRate[], cs = cycleSeco
         gain = limiterKernel[Developer`ToPackedArray[MapThread[Max, Abs[mix]]], 0.891, samples[0.005], Exp[-1. / (0.12 sr)]];
         mix = gain # & /@ mix];
     fade = mixerOption[t, "FadeOut"];
-    If[NumericQ[fade] && fade > 0, With[{m = Min[n, samples[fade cs]]}, mix[[All, n - m + 1 ;;]] = (Cos[Range[0, m - 1] / m Pi / 2] #) & /@ mix[[All, n - m + 1 ;;]]]];
-    Audio[mix, SampleRate -> sr]];
+    If[NumericQ[fade] && fade > 0, With[{m = Min[n, samples[fade cs]]}, mix[[All, n - m + 1 ;; n]] = (Cos[Range[0, m - 1] / m Pi / 2] #) & /@ mix[[All, n - m + 1 ;; n]]]];
+    mix];
+
+(* Audio[track, n] is n cycles of it (by default its "Cycles"), at "CyclesPerSecond" *)
+Options[trackAudio] = {"CyclesPerSecond" :> $CyclesPerSecond};
+Track /: Audio[t_Track, n : (_ ? NumericQ | Automatic) : Automatic, opts : OptionsPattern[trackAudio]] :=
+    Block[{$CyclesPerSecond = OptionValue[trackAudio, {opts}, "CyclesPerSecond"]}, renderAudio[t, Replace[n, Automatic :> cyclesOf[t]]]];

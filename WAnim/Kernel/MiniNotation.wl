@@ -1,14 +1,9 @@
 (* ::Package:: *)
 
-(* WolframInstitute`WAnim`MiniNotation`  --  a proper AST parser for the mini-notation, built on the
-   Wolfram`Parser` paclet.  It makes Track HOLD its source string + AST (as the
-   pattern's 2nd metadata arg), and renders an EDITABLE, event-highlighting TraditionalForm:
-   the input string is reconstructed as boxes, each atom's characters light up the instant
-   its events sound, and editing the field re-parses + re-plays live.
-
-   Requires the Wolfram`Parser` paclet.  Load AFTER WAnim:
-       PacletDirectoryLoad["<.../WolframParser/Parser>"];   (* or install the paclet *)
-       Get["<.../WAnim/MiniNotation.wl>"]                                          *)
+(* Mini-notation: Track["bd [~ bd] sd, hh*8"] parsed with the Wolfram`Parser` paclet into an AST whose
+   atoms keep their character spans.  The Track holds its source and AST, so its TraditionalForm is the
+   source itself, editable, each atom lighting up the instant its events sound; editing re-parses and
+   re-plays it live. *)
 
 
 
@@ -30,6 +25,7 @@ $grammar := $grammar = Module[
     element = ParseChoice[sub, alt, atom];
     modifier = ParseChoice[
         ParseAction[ParseLiteral["*"] ~~ number, Function[{st, num}, {"Fast", FromDigits[num]}]],
+        ParseAction[ParseLiteral["/"] ~~ number, Function[{st, num}, {"Slow", FromDigits[num]}]],
         ParseAction[ParseLiteral["!"] ~~ number, Function[{st, num}, {"Repl", FromDigits[num]}]],
         ParseAction[ParseLiteral["@"] ~~ number, Function[{st, num}, {"Weight", FromDigits[num]}]],
         ParseAction[ParseLiteral["("] ~~ number ~~ ParseLiteral[","] ~~ number ~~ ParseLiteral[")"], Function[{lp, k, cm, n, rp}, {"Euclid", FromDigits[k], FromDigits[n]}]]];
@@ -49,8 +45,7 @@ parseMini[str_String] := With[{r = Quiet @ Check[Parse[$grammar, str], $Failed]}
 tagSpan[span_][cp_] := With[{q = First[cp]}, Track[Function[sp, (Append[#, "Source" -> span] &) /@ q[sp]]]]
 (* a rest "~" is still an EVENT: tag it like any atom so its step highlights in the source and
    occupies the cycle, but it carries the value "~" which the audio + roll skip (see restQ). *)
-ap[LeafNode["Atom", "~", m_]]  := tagSpan[m["Source"]][Steady["~"]]
-ap[LeafNode["Atom", v_, m_]]   := tagSpan[m["Source"]][Steady[v]]
+ap[LeafNode["Atom", v_, m_]]   := tagSpan[m["Source"]][steady[v]]
 (* a sequence is a WEIGHTED cat (Tidal timecat): x@3 takes 3 slots, `_` (hold) extends the
    previous step by one slot, everything else weighs 1 *)
 holdQ[LeafNode["Atom", "_", _]] := True
@@ -64,54 +59,55 @@ seqItems[nodes_] := Fold[Function[{acc, nd},
 ap[GroupNode["Seq", st_, _]]   := timecat[{#[[1]], ap[#[[2]]]} & /@ seqItems[st]]
 ap[GroupNode["Weight", {x_}, _]] := ap[x]   (* a lone x@n outside a seq is just x *)
 ap[GroupNode["Sub", {x_}, _]]  := ap[x]
-ap[GroupNode["Stack", ss_, _]] := Layer @@ (ap /@ ss)
-ap[GroupNode["Alt", st_, _]]   := Alternate @@ (ap /@ st)
+ap[GroupNode["Stack", ss_, _]] := layer @@ (ap /@ ss)
+ap[GroupNode["Alt", st_, _]]   := TrackAlternate @@ (ap /@ st)
 (* replicate: hh!8 = eight hh as eight separate steps in the cycle (unlike hh*8 = speed up) *)
-ap[GroupNode["Repl", {x_}, m_]]   := Fastcat @@ ConstantArray[ap[x], m["Args"][[1]]]
-ap[GroupNode["Fast", {x_}, m_]]   := Fast[m["Args"][[1]]] @ ap[x]
-ap[GroupNode["Euclid", {x_}, m_]] := Euclidean[m["Args"][[1]], m["Args"][[2]]] @ ap[x]
-ap[_] := Silence
+ap[GroupNode["Repl", {x_}, m_]]   := TrackSequence @@ ConstantArray[ap[x], m["Args"][[1]]]
+ap[GroupNode["Fast", {x_}, m_]]   := TrackSpeed[m["Args"][[1]]] @ ap[x]
+ap[GroupNode["Slow", {x_}, m_]]   := TrackSpeed[1 / m["Args"][[1]]] @ ap[x]
+ap[GroupNode["Euclid", {x_}, m_]] := TrackEuclid[m["Args"][[1]], m["Args"][[2]]] @ ap[x]
+ap[_] := silence
 
 (* override the string constructor: parse to AST, derive the query, HOLD source + AST *)
-(* A source string is mini-notation, optionally followed by a postfix " // <op>" chain
-   (fast/slow/rev/degrade/euclid/every/late/early).  This is the inverse of the combinators'
-   source-building (Pattern.wl `chain`), so Fast[2][p] and Track["... // fast 2"] are
-   the same pattern -- the bijection. *)
-WolframInstitute`WAnim`Track[str0_String] := With[{str = StringTrim[str0]},
+(* A source string is mini-notation, optionally followed by a postfix " // <op>" chain (fast, slow,
+   rev, degrade, euclid, every, late, early, sc, and the sound: sound, gain, pan, room, delay, dec).
+   It is the inverse of the source the operations append (Track.wl `chain`), so TrackSpeed[2][p] and
+   Track["... // fast 2"] are the same pattern. *)
+Track[str0_String] := With[{str = StringTrim[str0]},
     If[StringContainsQ[str, "//"],
         Fold[applyChainStep, Track[StringTrim @ First @ StringSplit[str, "//"]],
             StringTrim /@ Rest @ StringSplit[str, "//"]],
         With[{ast = parseMini[str]},
             (* a typo must not fail silently while live coding: say so, and play nothing *)
-            If[ast === $Failed, Message[Track::parse, str]; Silence, Append[ap[ast], <|"Source" -> str, "AST" -> ast|>]]]]]
+            If[ast === $Failed, Message[Track::parse, str]; silence, Track[First[ap[ast]], <|"Source" -> str, "AST" -> ast|>]]]]]
 Track::parse = "Could not parse the mini-notation \"`1`\"; the track is silent.";
 
 parseChainNum[s_] := Which[
     StringContainsQ[s, "/"], With[{ab = ToExpression /@ StringSplit[s, "/"]}, ab[[1]]/ab[[2]]],
     True, ToExpression[s]]   (* handles ints, decimals AND negatives (FromDigits chokes on "-") *)
-chainFnOf[name_] := Switch[name, "rev", Reverse, "degrade", Degrade, _, Identity]
+chainFnOf[name_] := Switch[name, "rev", Reverse, _, Identity]
 applyChainStep[pat_, stepStr_] := With[{toks = StringSplit[stepStr]},
     Switch[First[toks, ""],
-        "fast", Fast[parseChainNum[toks[[2]]]][pat],
-        "slow", Slow[parseChainNum[toks[[2]]]][pat],
+        "fast", TrackSpeed[parseChainNum[toks[[2]]]][pat],
+        "slow", TrackSpeed[1 / parseChainNum[toks[[2]]]][pat],
         "rev", Reverse[pat],
-        "degrade", If[Length[toks] >= 2, Degrade[parseChainNum[toks[[2]]]][pat], Degrade[pat]],
-        "euclid", Euclidean[FromDigits[toks[[2]]], FromDigits[toks[[3]]]][pat],
-        "every", Every[FromDigits[toks[[2]]], chainFnOf[toks[[3]]]][pat],
-        "late", Late[parseChainNum[toks[[2]]]][pat],
-        "early", Early[parseChainNum[toks[[2]]]][pat],
-        "gain", Gain[parseChainNum[toks[[2]]]][pat],
-        "pan", Pan[parseChainNum[toks[[2]]]][pat],
-        "delay", Delay[parseChainNum[toks[[2]]], If[Length[toks] >= 3, parseChainNum[toks[[3]]], 0.5]][pat],
-        "room", Room[parseChainNum[toks[[2]]]][pat],
-        "dec", Dec[parseChainNum[toks[[2]]]][pat],
-        "sc", InScale[toks[[2]]][pat],
+        "degrade", TrackDegrade[If[Length[toks] >= 2, parseChainNum[toks[[2]]], 0.5]][pat],
+        "euclid", TrackEuclid[FromDigits[toks[[2]]], FromDigits[toks[[3]]], If[Length[toks] >= 4, FromDigits[toks[[4]]], 0]][pat],
+        "every", TrackEvery[FromDigits[toks[[2]]], chainFnOf[toks[[3]]]][pat],
+        "late", TrackShift[parseChainNum[toks[[2]]]][pat],
+        "early", TrackShift[-parseChainNum[toks[[2]]]][pat],
+        "sc", TrackScale[toks[[2]]][pat],
+        "sound", Instrument[toks[[2]]][pat],
+        "gain", Instrument["Gain" -> parseChainNum[toks[[2]]]][pat],
+        "pan", Instrument["Pan" -> parseChainNum[toks[[2]]]][pat],
+        "room", Instrument["Reverb" -> parseChainNum[toks[[2]]]][pat],
+        "delay", Instrument["Delay" -> parseChainNum[toks[[2]]]][pat],
+        "dec", Instrument["Decay" -> parseChainNum[toks[[2]]]][pat],
         _, pat]]
 
 
 (* ---------- editable, event-highlighting TraditionalForm ---------- *)
-onsetQ[ev_] := ev["Whole"] =!= None && ev["Part"][[1]] == ev["Whole"][[1]]
-scheduleOf[pat_, n_] := GroupBy[Select[pat["Query", 0, n], onsetQ], #["Source"] &, Function[es, #["Whole"] & /@ es]]
+scheduleOf[pat_, n_] := GroupBy[Select[pat["Query", 0, n], hasOnset], #["Source"] &, Function[es, #["Whole"] & /@ es]]
 (* light each atom for EXACTLY its event's duration: lit while the phase is within a note's
    [onset, offset).  A token whose several hits share one source span (e.g. bd*4) stays lit
    across them -- its span is genuinely sounding the whole time. *)
@@ -125,13 +121,13 @@ highlightedString[str_, active_] := Row[Table[
 
 (* The editable TraditionalForm: the highlighted source IS the editor -- click it to enter
    text mode (a stable InputField), click the Visual below to play/pause (right-click resets).
-   The Visual (visualOf[pat]: Bar/PianoRoll/Oscilloscope) is the SAME one StandardForm shows,
+   The view (visualsOf[pat]: PianoRoll/Punchcard/Oscilloscope/Bar) is the SAME one StandardForm shows,
    rendered from `renderVisual` (shared from Pattern.wl).  Two states via `editing`:
      - editing=False: ONE refreshing Dynamic draws [highlight] over [visual], 30 ms ticks.
      - editing=True : a stable InputField (no refresh, so the cursor survives) over the visual.
    `curPat` tracks the live-parsed pattern so an edit also updates the piano-roll visual. *)
 miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat], solo = soloFlagQ[pat]},
-    DynamicModule[{id = Unique[], src = source, curPat = pat, stream = AudioStream[Audio[pat, n], Looping -> True],
+    DynamicModule[{id = Unique[], src = source, curPat = pat, stream = AudioStream[renderAudio[pat, n, True], Looping -> True],
                    editing = False, lastClick = 0., sched = scheduleOf[pat, n]},
         (* The apply (re-parse) action is INLINED into the apply Button + Enter handler below.
            A DynamicModule-local f[]:= and Method->"Queued" both write to the wrong (un-localized)
@@ -151,12 +147,12 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]
                                     BaseStyle -> {FontFamily -> "Source Code Pro", FontSize -> 16, FontColor -> GrayLevel[0.9]}],
                                 {"ReturnKeyDown" :> (
                                     curPat = Track[src]; sched = scheduleOf[curPat, n];
-                                    Quiet @ AudioStop[stream]; stream = AudioStream[Audio[curPat, n], Looping -> True];
+                                    Quiet @ AudioStop[stream]; stream = AudioStream[renderAudio[curPat, n, True], Looping -> True];
                                     registerStream[id, stream, n]; editing = False)}],
                             Spacer[8],
                             Button[Style["\:25b6 apply", 13], (
                                 curPat = Track[src]; sched = scheduleOf[curPat, n];
-                                Quiet @ AudioStop[stream]; stream = AudioStream[Audio[curPat, n], Looping -> True];
+                                Quiet @ AudioStop[stream]; stream = AudioStream[renderAudio[curPat, n, True], Looping -> True];
                                 registerStream[id, stream, n]; editing = False)]
                         }, Alignment -> Center],
                         Dynamic[Style["\:2192 " <> src, 11, GrayLevel[0.5], FontFamily -> "Source Code Pro"]]
@@ -190,19 +186,19 @@ miniDisplay[pat_, n_ : 2] := With[{source = pat["Source"], viss = visualsOf[pat]
    correspondence is fully inspectable without a front end. *)
 traceText[src_, span_] := If[ListQ[span] && span =!= None, StringTake[src, {span[[1]], span[[2]] - 1}], Missing[]]
 traceOf[pat_, n_, steps_] := Module[{src = pat["Source"], events, sched, cs = N[1/$CyclesPerSecond]},
-    events = SortBy[Select[pat["Query", 0, n], onsetQ], #["Whole"][[1]] &];
+    events = SortBy[Select[pat["Query", 0, n], hasOnset], #["Whole"][[1]] &];
     sched = scheduleOf[pat, n];
     <|
-        "Source" -> src, "Visual" -> visualOf[pat], "Cycles" -> n, "CycleSeconds" -> cs,
+        "Source" -> src, "Visual" -> visualsOf[pat][[1, 1]], "Cycles" -> n, "CycleSeconds" -> cs,
         "Events" -> (<|"Token" -> #["Value"], "Cycle" -> N[#["Whole"]], "AudioTime" -> N[#["Whole"][[1]] cs],
                        "Span" -> #["Source"], "Text" -> traceText[src, #["Source"]]|> & /@ events),
         "Highlight" -> Table[With[{ph = N[n k/steps]},
             <|"Phase" -> ph, "Lit" -> (traceText[src, #] & /@ activeSpans[sched, ph, n])|>], {k, 0, steps - 1}]
     |>
 ]
-WolframInstitute`WAnim`Track[q_, m___]["Trace", n_ : 2, steps_ : 32] := traceOf[Track[q, m], n, steps]
+(t_Track)["Trace", n_ : 2, steps_ : 32] := traceOf[t, n, steps]
 
-WolframInstitute`WAnim`Track /: MakeBoxes[p : WolframInstitute`WAnim`Track[_, meta_Association] /; KeyExistsQ[meta, "Source"], TraditionalForm] :=
+Track /: MakeBoxes[p : Track[_, meta_Association] /; KeyExistsQ[meta, "Source"], TraditionalForm] :=
     With[{boxes = ToBoxes[miniDisplay[p, cyclesOf[p]]]}, InterpretationBox[boxes, p]]
 
 

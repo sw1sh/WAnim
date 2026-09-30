@@ -63,7 +63,7 @@ Table[Spikey[{0, 2}, "Version" -> 1, "Display" -> s, Position -> {960, 540}, "Ra
 Dancing to a kick drum Track, just after a kick:
 
 ```wl
-Spikey[{0, 4}, "Pulse" -> EventTrack[Table[{b / 4, 1 / 4, "bd"}, {b, 0, 15}]], Position -> {960, 540}, "Radius" -> 300][0.26, ImageSize -> 200]
+Spikey[{0, 4}, "Pulse" -> Track["bd*4"], Position -> {960, 540}, "Radius" -> 300][0.26, ImageSize -> 200]
 ```
 
 <!-- => Spikey squashed, its spikes extended -->

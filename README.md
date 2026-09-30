@@ -27,8 +27,9 @@ Export["film.mp4", film]     (* rendered in parallel, with its sound *)
 - **Drum kit**: synthesized by `scripts/make_drums.wls` into the paclet's `Drums` asset (`$DrumKit`); no downloads.
 - **Fonts**: the creation tools default to Source Sans 3 / Serif 4 / Code Pro, VT323, Arimo and Courier Prime;
   the front end only sees installed fonts.
-- Research notes on the design are in `docs/*.md`; the Manim gallery reproductions are in `Notebooks/`
-  ([published](https://www.wolframcloud.com/obj/murzin.nikolay/Published/WolfAnimGallery.nb)).
+- **Tutorials**: the Manim gallery and a music gallery, in `docs/en/Tutorials`, built with the documentation.
+- **Publishing**: `scripts/submit.wls` submits the paclet to the Wolfram Paclet Repository (see its header).
+- Research notes on the design are in `docs/*.md`.
 
 ## AnimatedGraphics and Canvas
 
@@ -60,7 +61,7 @@ g["Dynamic"]
 - **Era screens**: `CanvasScreen` draws a scene at a low logical resolution and
   quantize it like an old display (1-bit threshold, NeXT four greys, colour), upscaled
   nearest-neighbour; `OrderedDither` gives pictures the 4x4 Bayer look of a 1-bit display.
-- **Sound to picture**: `EventTrack[{{onset, dur, value}, ...}]` writes a linear score as a `Track`;
+- **Sound to picture**: `Track[{{onset, dur, value}, ...}]` writes a linear score as a `Track`;
   `TrackPulse[track, decay][t]` is 1 on each onset and decays, the kick that makes a picture hop.
 - **Easing**: `Easing["OutCubic" | "InOutExpo" | "OutBack" | ...]`, also accepted as an
   `AnimationEffect` `"Easing"`.

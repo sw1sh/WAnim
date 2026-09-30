@@ -12,7 +12,6 @@ AnimatedGraphics[\"tex\"] and AnimatedGraphics[{\"tex1\", \"tex2\", \[Ellipsis]}
 Backdrop::usage = "Backdrop[colour] fills the canvas with colour; Backdrop[colour, {t0, t1}] only between t0 and t1. The colour may be a function of time, and it can fade in and out.";
 Easing::usage = "Easing[name] is an easing curve on [0, 1], such as \"Linear\", \"Smooth\", \"InOutCubic\", \"OutExpo\" or \"OutBack\".
 Easing[name, s] gives a curve with parameter s; Easing[\"Names\"] lists them.";
-EventTrack::usage = "EventTrack[{{onset, duration, value}, \[Ellipsis]}] is a Track of written-out events: notes (MIDI numbers or names) or drum sounds, times in cycles.";
 TrackPulse::usage = "TrackPulse[track, decay][t] is 1 at each onset of track and decays exponentially by decay per cycle until the next, to lock motion to sound.";
 CanvasScreen::usage = "CanvasScreen[{x, y, w, h}, f] draws f[lw, lh] on an old display placed in a canvas rectangle, at its own logical resolution (\"Pixel\") and colour depth (\"Depth\").";
 
@@ -87,52 +86,31 @@ BraceLabel::usage = "BraceLabel[g] is a curly brace under an AnimatedGraphics, t
 (* ::Subsection:: *)
 (*Music*)
 
-Track::usage = "Track[\"mini-notation\"] is a cyclic pattern of events, such as Track[\"bd [~ bd] sd, hh*8\"]; Track[{voice1, voice2, \[Ellipsis]}] stacks voices; Track[f] queries f[{start, end}] for events.
-Audio[track, n] renders n cycles; track[\"Query\", a, b] gives the events between a and b.";
-Silence::usage = "Silence is the empty Track.";
-Steady::usage = "Steady[value] is a Track playing value once every cycle.";
-Fast::usage = "Fast[r][track] plays track r times faster.";
-Slow::usage = "Slow[r][track] plays track r times slower.";
-Late::usage = "Late[t][track] shifts track t cycles later.";
-Early::usage = "Early[t][track] shifts track t cycles earlier.";
-Fastcat::usage = "Fastcat[track1, track2, \[Ellipsis]] plays the tracks one after another within each cycle.";
-Layer::usage = "Layer[track1, track2, \[Ellipsis]] plays the tracks together.";
-Alternate::usage = "Alternate[track1, track2, \[Ellipsis]] plays one track per cycle, in turn.";
-Every::usage = "Every[n, f][track] applies f to track every nth cycle.";
-Euclidean::usage = "Euclidean[k, n][track] plays track on k of n steps, spread as evenly as possible; Euclidean[k, n, rot] rotates the rhythm.";
-Degrade::usage = "Degrade[track] drops half of the events at random, the same way every time; Degrade[fraction][track] drops that fraction.";
-Superimpose::usage = "Superimpose[f][track] plays track together with f[track].";
-Stagger::usage = "Stagger[t, f][track] plays track together with f[track] shifted t cycles later.";
-Beat::usage = "Beat[positions, steps][track] plays track at the given step positions of a cycle divided into steps.";
-Struct::usage = "Struct[\"1 ~ 1 1\"][track] plays track on the steps marked 1.";
-InScale::usage = "InScale[\"C:minor\"][track] maps scale degrees in track to notes of the scale.";
-Gain::usage = "Gain[g][track] scales the level of track by g.";
-Pan::usage = "Pan[x][track] places track in the stereo field, from -1 (left) to 1 (right).";
-Delay::usage = "Delay[t][track] adds an echo t cycles later; Delay[t, feedback] sets its feedback.";
-Room::usage = "Room[m][track] adds reverb, m from 0 to 1.";
-Dec::usage = "Dec[d][track] shortens each sound to d cycles.";
-Duck::usage = "Duck[trigger][track] dips track on every onset of the trigger track, a sidechain pump; Duck[trigger, depth, attack] sets its depth and recovery.";
-Bars::usage = "Bars[n][track] shows and plays n cycles of track.";
-Solo::usage = "Solo[track] plays only this track among those playing live.";
-TrackPlay::usage = "TrackPlay[] starts the live clock of playing tracks.";
-TrackPause::usage = "TrackPause[] pauses the live clock.";
-TrackReset::usage = "TrackReset[] rewinds the live clock to the start.";
-TrackSeek::usage = "TrackSeek[pos] moves the live clock to cycle pos.";
-LoadSamples::usage = "LoadSamples[\"dir\"] loads every .wav file of a directory into the sample bank, named by file.";
-LiveCode::usage = "LiveCode[expr] shows the code of a Track with each mini-notation atom lighting up as it plays.";
-PianoRoll::usage = "PianoRoll[track] shows track as a piano roll while it plays; PianoRoll[opts][track] sets its look.";
-Punchcard::usage = "Punchcard[track] shows track as a punch card of its events while it plays.";
-Oscilloscope::usage = "Oscilloscope[track] shows the waveform of track while it plays.";
+Track::usage = "Track[\"mini-notation\"] is a cyclic pattern of events, such as Track[\"bd [~ bd] sd, hh*8\"].
+Track[{{onset, duration, value}, \[Ellipsis]}] plays exactly those events, a fourth element being the velocity; Track[{track1, track2, \[Ellipsis]}] stacks voices; Track[] is silence.
+Audio[track, n] renders n cycles; track[\"Query\", a, b] gives the events between a and b; it shows itself as a live player.";
+TrackSpeed::usage = "TrackSpeed[r][track] plays track r times faster; r < 1 plays it slower.";
+TrackShift::usage = "TrackShift[t][track] plays track t cycles later; t < 0 plays it earlier.";
+TrackSequence::usage = "TrackSequence[track1, track2, \[Ellipsis]] plays the tracks one after another within each cycle.";
+TrackAlternate::usage = "TrackAlternate[track1, track2, \[Ellipsis]] plays one track per cycle, in turn.";
+TrackEvery::usage = "TrackEvery[n, f][track] applies f to track on every nth cycle.";
+TrackEuclid::usage = "TrackEuclid[k, n][track] plays track on k of n steps spread as evenly as possible; TrackEuclid[k, n, rot] rotates the rhythm.";
+TrackDegrade::usage = "TrackDegrade[x][track] drops a fraction x of the events, the same ones every time.";
+TrackSuperimpose::usage = "TrackSuperimpose[f][track] plays track together with f[track]; TrackSuperimpose[f, t] shifts f[track] t cycles later.";
+TrackStruct::usage = "TrackStruct[\"1 ~ 1 1\"][track] plays the value of track on the steps marked 1; TrackStruct[positions, steps][track] on the given step positions of a cycle cut into steps.";
+TrackScale::usage = "TrackScale[\"C:minor\"][track] reads integer values of track as degrees of the scale; TrackScale[] lists the scales.";
+TrackPulse::usage = "TrackPulse[track, decay][t] is 1 at each onset of track and decays exponentially by decay per cycle until the next, to lock motion to sound.";
+TrackView::usage = "TrackView[view, \[Ellipsis], opts][track] sets what track shows while it plays: \"PianoRoll\", \"Punchcard\", \"Oscilloscope\" or \"Bar\"; \"Cycles\" -> n shows and loops n cycles, \"Solo\" -> True silences the other tracks.
+track[\"PianoRoll\", n] and track[\"Punchcard\", n] are still views.";
+TrackPlay::usage = "TrackPlay[] starts the shared clock of the tracks playing live.";
+TrackPause::usage = "TrackPause[] pauses the shared clock.";
+TrackSeek::usage = "TrackSeek[pos] moves the shared clock to cycle pos.";
 $CyclesPerSecond::usage = "$CyclesPerSecond is the tempo of live tracks, in cycles per second.";
-$DrumKit::usage = "$DrumKit is WAnim's own synthesized drum kit: bd, sd, hh, oh, cp, cr, lt and rim.";
-$SampleBank::usage = "$SampleBank holds the samples loaded with LoadSamples, by name.";
-$Scales::usage = "$Scales gives the scales InScale knows, as semitone steps.";
 $AudioLatency::usage = "$AudioLatency is the delay, in seconds, between the live clock and the sound.";
-$LiveAtomHeads::usage = "$LiveAtomHeads lists the heads whose string arguments LiveCode treats as mini-notation.";
 
 (* ::Subsection:: *)
 (*The studio*)
 
-Instrument::usage = "Instrument[name][track] is a voice playing the events of track on an instrument synthesized sample by sample: \"Kick\", \"SoftKick\", \"Clap\", \"Hat\", \"OpenHat\", \"Crash\", \"Riser\", \"Roll\", \"Impact\", \"Tick\", \"Blip\", \"Pluck\", \"Arp\", \"Pad\", \"Bass\", \"LongBass\", \"Stab\", \"Lead\", \"Bell\", \"Voice\", or a plain oscillator: \"Sine\", \"Triangle\", \"Square\", \"Sawtooth\" or \"Supersaw\". Instrument[] lists them.
-A track of Instruments is mixed through drums, music and bass buses with a shared reverb and delay.";
-Mixer::usage = "Mixer[opts][track] sets how a track of Instruments is mixed: \"Sidechain\" -> a track to duck under, \"Cutoff\" -> f for a low-pass on the music bus at f[cycle] Hz, \"DelayTime\", \"DelayFeedback\", \"Master\" and \"FadeOut\", times in cycles.";
+Instrument::usage = "Instrument[name][track] plays track on an instrument synthesized sample by sample: \"Kit\" (drum samples by name), \"Kick\", \"Clap\", \"Hat\", \"Pluck\", \"Pad\", \"Bass\", \"Lead\", \"Bell\", \"Voice\", \"Sawtooth\", \[Ellipsis]; Instrument[] lists them. Instrument[<|name -> audio, \[Ellipsis]|>] and Instrument[File[dir]] play your own samples.
+Instrument[opts][track] sets how it sounds: \"Gain\", \"Pan\", \"Reverb\" and \"Delay\" sends, and \"Decay\" in cycles.";
+Mixer::usage = "Mixer[opts][track] sets how track is mixed: \"Sidechain\" -> a track to duck under, \"Cutoff\" -> f for a low-pass on the music bus at f[cycle] Hz, \"DelayTime\", \"DelayFeedback\", \"Master\" and \"FadeOut\", times in cycles.";

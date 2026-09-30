@@ -55,17 +55,30 @@ VerificationTest[With[{w = WordWall[{{"alpha", 1., 0}, {"beta", 0.1, 0}}, {0, 1}
     "Camera" -> (CanvasScale[3, w["Places"]["alpha"]] &), "Emphasis" -> ({# === "beta" &, 1} &)][0.5]]}], {{"alpha", "beta"}, Graphics}, TestID -> "WordWall-camera"]
 
 (* sound *)
-VerificationTest[Sort[Keys[$DrumKit]], {"bd", "cp", "cr", "hh", "lt", "oh", "rim", "sd"}, TestID -> "DrumKit-names"]
-VerificationTest[Length[EventTrack[{{0, 1/2, 60}, {1/2, 1/2, 64}, {1, 1, 67}}]["Query", 0, 1]], 2, TestID -> "EventTrack-query"]
-VerificationTest[TrackPulse[EventTrack[{{0, 1/4, "bd"}}], 18][0], 1., TestID -> "TrackPulse-onset"]
+VerificationTest[Length[Track[{{0, 1/2, 60}, {1/2, 1/2, 64}, {1, 1, 67}}]["Query", 0, 1]], 2, TestID -> "Track-events-query"]
+VerificationTest[TrackPulse[Track[{{0, 1/4, "bd"}}], 18][0], 1., TestID -> "TrackPulse-onset"]
 VerificationTest[Track["bd sd, hh*4"]["Query", 0, 1][[All, "Value"]], {"bd", "sd", "hh", "hh", "hh", "hh"}, TestID -> "Track-top-level-stack"]
-VerificationTest[Track["bd [sd"], Silence, {Track::parse}, TestID -> "Track-parse-message"]
+VerificationTest[Track["bd [sd"]["Query", 0, 1], {}, {Track::parse}, TestID -> "Track-parse-message"]
+VerificationTest[Length[Track["bd sd/2"]["Query", 0, 2]], 4, TestID -> "Track-slow-modifier"]
+VerificationTest[{TrackSpeed[2][Track["a b"]]["Source"], TrackSpeed[1/2][Track["a b"]]["Source"], TrackShift[-1/4][Track["a"]]["Source"]},
+    {"a b // fast 2", "a b // slow 2", "a // early 1/4"}, TestID -> "Track-source-chain"]
+VerificationTest[Track["c4 e4 // fast 2 // sound pluck // gain 0.5"]["Query", 0, 1] === TrackSpeed[2][Track["c4 e4"]]["Query", 0, 1], True, TestID -> "Track-source-parses-back"]
+VerificationTest[Instrument["Pluck", "Gain" -> 0.5][Track["c4 e4"]]["Source"], "c4 e4 // sound pluck // gain 0.5", TestID -> "Instrument-source"]
+VerificationTest[Lookup[WolframInstitute`WAnim`PackageScope`metaOf[Instrument["Gain" -> 0.5][Instrument["Gain" -> 0.5][Track["c4"]]]]["Instrument"], "Gain"], 0.25, TestID -> "Instrument-gain-multiplies"]
+VerificationTest[Length[TrackEuclid[3, 8][Track["bd"]]["Onsets", 0, 1]], 3, TestID -> "TrackEuclid"]
+VerificationTest[TrackScale["c:minor"][Track["0 2 4"]]["Query", 0, 1][[All, "Value"]], {60, 63, 67}, TestID -> "TrackScale"]
+VerificationTest[Length[TrackStruct["1 ~ 1 1"][Track["c4"]]["Query", 0, 1]], 3, TestID -> "TrackStruct"]
+VerificationTest[Length[Reverse[Track[{Track["a b"], Track["c"]}]]["Voices"]], 2, TestID -> "Reverse-stack"]
 VerificationTest[Block[{$CyclesPerSecond = 1/2}, Max[Abs[AudioData[Audio[Track["bd sd, hh*4"], 1]]]] > 0.5], True, TestID -> "Track-stack-sounds"]
 VerificationTest[Round[QuantityMagnitude[Duration[Audio[Track["bd*4"], 2, "CyclesPerSecond" -> 1/2]], "Seconds"], 0.01], 4., TestID -> "Audio-tempo-option"]
 VerificationTest[Max[Abs[AudioData[Audio[Track["c4 e4"], 1]]]] > 0.1, True, TestID -> "Pitched-track-sounds"]
 VerificationTest[Round[QuantityMagnitude[Duration[Audio[AnimatedGraphics[{Backdrop[Black], Track["bd*4"]}, "Duration" -> 1, "CyclesPerSecond" -> 1/2]]], "Seconds"], 0.01], 2., TestID -> "AnimatedGraphics-sound-tempo"]
-VerificationTest[Length[Instrument[]], 25, TestID -> "Instrument-list"]
-VerificationTest[With[{a = Audio[Mixer["Sidechain" -> EventTrack[{{0, 1/4, "bd"}}]][Track[{Instrument["Kick"][EventTrack[{{0, 1/4, "bd"}}]], Instrument["Pluck"][EventTrack[{{1/2, 1/8, 69, 0.8}}]]}]], 1, "CyclesPerSecond" -> 1/2]},
+VerificationTest[Length[Instrument[]], 26, TestID -> "Instrument-list"]
+VerificationTest[With[{a = Audio[Mixer["Sidechain" -> Track[{{0, 1/4, "bd"}}]][Track[{Instrument["Kick"][Track[{{0, 1/4, "bd"}}]], Instrument["Pluck"][Track[{{1/2, 1/8, 69, 0.8}}]]}]], 1, "CyclesPerSecond" -> 1/2]},
     {AudioChannels[a], Round[QuantityMagnitude[Duration[a], "Seconds"], 0.01], AudioMeasurements[a, "Max"] > 0.1}], {2, 2., True}, TestID -> "Instrument-mix"]
-VerificationTest[Round[QuantityMagnitude[Duration[Audio[Track[{Instrument["Sine"][EventTrack[{{0, 2, 60}}]]}], 2, "CyclesPerSecond" -> 1/2]], "Seconds"], 0.01], 4., TestID -> "Oscillator-instrument"]
+VerificationTest[Block[{$CyclesPerSecond = 1}, With[{a = Audio[Track[{{0, 1/4, "bd", 1}, {1/2, 1/4, "bd", 0.1}}], 1, "CyclesPerSecond" -> 1]},
+    With[{d = Abs[First[AudioData[a]]]}, Max[d[[;; 20000]]] > 3 Max[d[[22051 ;; 42000]]]]]], True, TestID -> "Kit-velocity"]
+VerificationTest[With[{a = Audio[Instrument["Pan" -> -1][Track["c4"]], 1, "CyclesPerSecond" -> 1]}, Max[Abs[AudioData[a][[1]]]] > 2 Max[Abs[AudioData[a][[2]]]]], True, TestID -> "Instrument-pan"]
+VerificationTest[Head[TrackView["Punchcard", "Cycles" -> 4][Track["bd*4"]]["Punchcard"]], Graphics, TestID -> "TrackView-punchcard"]
+VerificationTest[TrackView["Cycles" -> 4][Track["bd*4"]]["Cycles"], 4, TestID -> "TrackView-cycles"]
 VerificationTest[Length[Cases[WolframInstitute`WAnim`AnimatedGraphics`Private`foley[AnimatedGraphics[{Typewriter["abc", {0, 1}, "TypeTime" -> 0.5]}], 0], {_, "Tick", _}]], 3, TestID -> "Foley-keystrokes"]

@@ -8,75 +8,69 @@
        Needs["WolframInstitute`WAnim`Strudel`"]
 
    Then:  stack[s["bd*4"], note["<c4 e4 g4>"] // fast[2] // every[4, rev]]
-   Chain transforms postfix with //  (x // f  ==  f[x]).
-   Loading this also registers s/note/n/sound as LiveCode atom heads so they highlight. *)
+   Chain transforms postfix with //  (x // f  ==  f[x]). *)
 
 BeginPackage["WolframInstitute`WAnim`Strudel`", {"WolframInstitute`WAnim`"}]
 
-s::usage          = "s[str] = Track[str] -- a sample/sound pattern.";
-sound::usage      = "sound[str] = Track[str].";
-note::usage       = "note[str] = Track[str] -- a melodic pattern.";
-n::usage          = "n[str] = Track[str].";
-fast::usage       = "fast = Fast (compress time).";
-slow::usage       = "slow = Slow (stretch time).";
-rev::usage        = "rev = Reverse (a pattern within each cycle).";
-stack::usage      = "stack = Layer (play together as one voice).";
-cat::usage        = "cat = Alternate (one sub-pattern per cycle).";
-seq::usage        = "seq = Fastcat (a sequence within one cycle).";
-every::usage      = "every = Every.";
-euclid::usage     = "euclid = Euclidean.";
-degrade::usage    = "degrade = Degrade.";
-off::usage        = "off = Stagger (a time-shifted, transformed copy).";
-superimpose::usage = "superimpose = Superimpose.";
-late::usage       = "late = Late.";
-early::usage      = "early = Early.";
-gain::usage       = "gain = Gain.";
-beat::usage       = "beat = Beat (value on given step positions).";
-struct::usage     = "struct = Struct (value on each '1'/'t' step of a boolean mask).";
-punchcard::usage  = "punchcard = Punchcard (scrolling bar visual).";
-pan::usage        = "pan = Pan (-1..1 stereo position).";
-dly::usage        = "dly = Delay (echo: time in cycles, feedback).";
-room::usage       = "room = Room (reverb wet mix).";
-dec::usage        = "dec = Dec (note decay, in cycles).";
-duck::usage       = "duck = Duck (sidechain to a trigger pattern's onsets).";
-sc::usage         = "sc = InScale (integer values as scale degrees: sc[\"c:minor\"]).";
-scale::usage      = "scale = InScale.";
-silence::usage    = "silence = Silence.";
+s::usage = "s[str] is Track[str], a pattern of sounds.";
+sound::usage = "sound[str] is Track[str].";
+note::usage = "note[str] is Track[str], a pattern of notes.";
+n::usage = "n[str] is Track[str].";
+fast::usage = "fast[r] is TrackSpeed[r].";
+slow::usage = "slow[r] is TrackSpeed[1/r].";
+rev::usage = "rev is Reverse.";
+stack::usage = "stack[a, b, ...] is Track[{a, b, ...}].";
+cat::usage = "cat is TrackAlternate.";
+seq::usage = "seq is TrackSequence.";
+every::usage = "every is TrackEvery.";
+euclid::usage = "euclid is TrackEuclid.";
+degrade::usage = "degrade is TrackDegrade[0.5]; degrade[x] is TrackDegrade[x].";
+off::usage = "off[t, f] is TrackSuperimpose[f, t].";
+superimpose::usage = "superimpose is TrackSuperimpose.";
+late::usage = "late[t] is TrackShift[t].";
+early::usage = "early[t] is TrackShift[-t].";
+struct::usage = "struct is TrackStruct.";
+beat::usage = "beat[positions, steps] is TrackStruct[positions, steps].";
+sc::usage = "sc is TrackScale.";
+scale::usage = "scale is TrackScale.";
+silence::usage = "silence is Track[].";
+punchcard::usage = "punchcard is TrackView[\"Punchcard\"].";
+gain::usage = "gain[g] is Instrument[\"Gain\" -> g].";
+pan::usage = "pan[x] is Instrument[\"Pan\" -> x].";
+room::usage = "room[r] is Instrument[\"Reverb\" -> r].";
+dly::usage = "dly[d] is Instrument[\"Delay\" -> d].";
+dec::usage = "dec[d] is Instrument[\"Decay\" -> d], in cycles.";
+instrument::usage = "instrument[name] is Instrument[name].";
 
-(* atom constructors: down-values so the heads stay introspectable for LiveCode highlighting *)
-s[a_]     := Track[a]
-sound[a_] := Track[a]
-note[a_]  := Track[a]
-n[a_]     := Track[a]
-
-(* combinator aliases *)
-fast        = Fast
-slow        = Slow
-rev         = Reverse
-stack       = Layer
-cat         = Alternate
-seq         = Fastcat
-every       = Every
-euclid      = Euclidean
-degrade     = Degrade
-off         = Stagger
-superimpose = Superimpose
-late        = Late
-early       = Early
-gain        = Gain
-beat        = Beat
-struct      = Struct
-punchcard   = Punchcard
-pan         = Pan
-dly         = Delay
-room        = Room
-dec         = Dec
-duck        = Duck
-sc          = InScale
-scale       = InScale
-silence     = Silence
-
-(* let LiveCode treat these atom heads as highlightable single-token leaves *)
-WolframInstitute`WAnim`$LiveAtomHeads = DeleteDuplicates @ Join[WolframInstitute`WAnim`$LiveAtomHeads, {s, sound, note, n}]
+s[a_] := Track[a];
+sound[a_] := Track[a];
+note[a_] := Track[a];
+n[a_] := Track[a];
+fast[r_] := TrackSpeed[r];
+slow[r_] := TrackSpeed[1 / r];
+rev = Reverse;
+stack[ps__] := Track[{ps}];
+cat = TrackAlternate;
+seq = TrackSequence;
+every = TrackEvery;
+euclid = TrackEuclid;
+degrade[p_Track] := TrackDegrade[0.5][p];
+degrade[x_] := TrackDegrade[x];
+off[t_, f_] := TrackSuperimpose[f, t];
+superimpose = TrackSuperimpose;
+late[t_] := TrackShift[t];
+early[t_] := TrackShift[-t];
+struct = TrackStruct;
+beat = TrackStruct;
+sc = TrackScale;
+scale = TrackScale;
+silence = Track[];
+punchcard = TrackView["Punchcard"];
+gain[g_] := Instrument["Gain" -> g];
+pan[x_] := Instrument["Pan" -> x];
+room[r_] := Instrument["Reverb" -> r];
+dly[d_] := Instrument["Delay" -> d];
+dec[d_] := Instrument["Decay" -> d];
+instrument[name_] := Instrument[name];
 
 EndPackage[]

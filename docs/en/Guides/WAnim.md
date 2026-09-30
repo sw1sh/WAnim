@@ -7,6 +7,7 @@ Paclet: WolframInstitute/WAnim
 URI: WolframInstitute/WAnim/guide/WAnim
 Description: Live audiovisual coding: films as animated graphics built from creation tools, drawn with a canvas kit, scored with cyclic-time music patterns
 Keywords: [animation, motion graphics, timeline, live coding, music, patterns, Strudel, TidalCycles, video, kinetic typography, retro computing, Manim]
+RelatedTutorials: [ManimGallery, MusicGallery]
 ---
 
 ## Abstract
@@ -28,7 +29,6 @@ places text exactly where a browser canvas would, so designs port from web tools
 - `AnimationEffect` an effect as a function of time: creation, transforms, fades
 - `BraceLabel` a curly brace spanning an object, with a label
 - `Backdrop` a solid fill of the canvas, a colour or a function of time
-- `EventTrack` a written-out score (onset, duration, value) as a Track
 - `TrackPulse` a decaying pulse on every onset of a Track, to lock motion to sound
 - `Easing` the standard easing curves (OutCubic, InOutExpo, OutBack, ...)
 
@@ -82,24 +82,21 @@ places text exactly where a browser canvas would, so designs port from web tools
 - `CanvasFont`, `CanvasText`, `CanvasTextWidth`, `CanvasWrap` text on its baseline, measured and wrapped the way a canvas does
 - `TypedText` the part of a text typed by a given fraction of the way through
 
+### Music: tracks in cyclic time
+
+- `Track` a pattern of events: mini-notation ("bd [~ bd] sd, hh*8"), events written out note by note, a query function, or a stack of voices; a live player in the notebook
+- `TrackSpeed`, `TrackShift`, `TrackSequence`, `TrackAlternate` time: speed, shift, one after another within a cycle, one per cycle
+- `TrackEvery`, `TrackEuclid`, `TrackDegrade`, `TrackSuperimpose`, `TrackStruct`, `TrackScale` structure: every nth cycle, Euclidean rhythms, random drops, echoes, rhythm masks, scale degrees
+- `TrackPulse` a decaying pulse on every onset of a Track, to lock motion to sound
+- `$CyclesPerSecond` the tempo of live tracks
+
 ### The studio
 
-- `Instrument` a voice on an instrument synthesized sample by sample: the basic waves, drums, pads, leads, a bell, a singing voice, key clicks
-- `Mixer` how a track of instruments is mixed: sidechain, an automated low-pass, reverb and delay, the master
+- `Instrument` how a voice sounds: the drum kit or your samples, synthesized drums, pads, leads, a bell, a singing voice, plain waves, key clicks; its gain, pan, sends and decay
+- `Mixer` how a track is mixed: sidechain, an automated low-pass, the delay and reverb, the master
 
-### Music: cyclic-time patterns
+### Playing live
 
-- `Track` a pattern: mini-notation ("bd [~ bd] sd, hh*8"), a query function, or a stack of voices
-- `Silence`, `Steady` the empty pattern and a constant one
-- `Fast`, `Slow`, `Late`, `Early`, `Fastcat` time: speed, shift, concatenation
-- `Layer`, `Alternate`, `Every`, `Euclidean`, `Degrade`, `Stagger`, `Superimpose` structure: stack, alternate, every n cycles, Euclidean rhythms, random drops, echoes
-- `Beat`, `Struct`, `InScale`, `$Scales` rhythm and pitch helpers after Strudel
-- `Gain`, `Pan`, `Delay`, `Room`, `Dec`, `Duck` sound: level, stereo, effects (their times in cycles), sidechain; `Audio[track, n, "CyclesPerSecond" -> c]` renders at a tempo
-- `$DrumKit`, `LoadSamples`, `$SampleBank` the built-in synthesized drum kit, and your own samples
-- `$CyclesPerSecond`, `Bars`, `Solo` tempo, display length, soloing
-
-### Live playback
-
-- `TrackPlay`, `TrackPause`, `TrackSeek`, `TrackReset` one transport for every playing Track
-- `PianoRoll`, `Punchcard`, `Oscilloscope` live views of a Track
-- `LiveCode`, `$AudioLatency`, `$LiveAtomHeads` live-coding display and synchronization
+- `TrackView` what a playing track shows: a piano roll, a scrolling punch card, an oscilloscope; how many cycles it loops, solo
+- `TrackPlay`, `TrackPause`, `TrackSeek` one clock for every playing track
+- `$AudioLatency` the delay between the clock and the sound, to keep pictures on the beat
