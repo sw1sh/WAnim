@@ -326,7 +326,7 @@ frameImage[g_, t_] := Rasterize[g[t, ImageSize -> agOption[g, "CanvasSize"][[1]]
    "KernelInitialization" -- then encodes them with ffmpeg together with the sound.  "From"/"To"
    select a range in cycles; a .gif is an AnimatedImage. *)
 Options[agExport] = {"From" -> 0, "To" -> Automatic, FrameRate -> Automatic, "KernelInitialization" :> Null,
-    "Parallel" -> True, "FrameDirectory" -> Automatic, "CRF" -> 18, "Chunk" -> 60};
+    "Parallel" -> True, "Kernels" -> 4, "FrameDirectory" -> Automatic, "CRF" -> 18, "Chunk" -> 60};
 AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts___] /; ToLowerCase[FileExtension[file]] === "gif" :=
     Export[file, AnimatedImage[g, opts]];
 AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts : OptionsPattern[agExport]] := Module[{
@@ -337,7 +337,9 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts 
     n = Round[(to - from) fps / cps];
     times = from + Range[0, n - 1] cps / fps;
     (* in parallel when kernels can be had; otherwise (none launched, none licensed) here, in order *)
-    If[TrueQ @ OptionValue[agExport, {opts}, "Parallel"] && (Length[Kernels[]] > 0 || Length[Quiet[LaunchKernels[]]] > 0 || Length[Quiet[LaunchKernels[$ProcessorCount]]] > 0),
+    (* at most "Kernels" subkernels: each holds the whole film and a front end of its own, so a kernel per core
+       can take all the memory there is *)
+    If[TrueQ @ OptionValue[agExport, {opts}, "Parallel"] && (Length[Kernels[]] > 0 || Length[Quiet[LaunchKernels[Min[OptionValue[agExport, {opts}, "Kernels"], $ProcessorCount]]]] > 0),
         With[{root = ParentDirectory[PacletObject["WolframInstitute/WAnim"]["Location"]]},
             ParallelEvaluate[Block[{$Output = {}}, PacletDirectoryLoad[root]; Quiet @ Needs["WolframInstitute`WAnim`"]]; Null]];
         With[{init = Unevaluated @@ {OptionValue[agExport, {opts}, "KernelInitialization"]}}, ParallelEvaluate[ReleaseHold[Hold[init]]]];
