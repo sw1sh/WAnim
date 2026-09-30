@@ -34,6 +34,7 @@ RelatedGuides: [WAnim]
 - A nested AnimatedGraphics with a [PlotRange]() or a "Screen" of its own is drawn into its screen: a canvas rectangle {x, y, w, h} of the enclosing frame, the whole frame by default. The screen may also be a function of time.
 - Sizes are pixels of the canvas and scale with it: `FontSize -> n`, <code>[Style]()[*s*, *n*]</code>, <code>[AbsoluteThickness]()[*n*]</code>, <code>[AbsolutePointSize]()[*n*]</code>. An [Inset]() of a [Graphics]() takes them relative to its own width.
 - String-named options in [BaseStyle](), such as `"Pulse" -> track`, pass to every element inside that does not set them itself.
+- [PlotTheme]() sets the look a scene takes when it says nothing: "Manim" (black, white ink, Manim's colours), "Paper" (warm paper, dark ink) or "Night". A plot inset in the scene is drawn in it: its default colours become the theme's, its axes, ticks and labels take the theme's ink unless it sets them, and it fills its inset. Each is a [PlotTheme]() for any plot too.
 - Effects:
   - <code>*g*["Play", *effect*]</code> plays an [AnimationEffect]() after the effects before it; <code>*g*["Play", "*name*", *args*]</code> names one.
   - <code>*g*["Wait", "Duration" -> *d*]</code> holds.
@@ -52,7 +53,8 @@ RelatedGuides: [WAnim]
 | PlotRange | Automatic | the coordinates the frame shows |
 | "CanvasSize" | {1920, 1080} | canvas size in pixels |
 | "Screen" | Automatic | where a nested one is drawn, {x, y, w, h} in the parent's canvas |
-| Background | Black | the colour behind everything |
+| PlotTheme | Automatic | "Manim", "Paper" or "Night": background, ink and plot styles; `Automatic` is the enclosing one's, else "Manim" |
+| Background | Automatic | the colour behind everything; `Automatic` is the theme's |
 | BaseStyle | white Source Sans 3 at 72 | text style, and options passed to the elements |
 | "CyclesPerSecond" | 1 | tempo: cycles per second of sound and video |
 | FrameRate | 60 | frames per second for video |
@@ -176,6 +178,17 @@ Duration[Audio[AnimatedGraphics[{Backdrop[Black], Track["bd [~ bd] sd ~, hh*8"]}
 ```
 
 <!-- => 16 s -->
+
+### PlotTheme
+
+A plot inset in a scene takes the scene's theme; here Manim's, and the film's paper:
+
+```wl
+Table[AnimatedGraphics[{Inset[Plot[{Sin[x], Cos[x]}, {x, 0, 2 Pi}], {0, 0}, Center, {6, 3}]}, PlotRange -> {{-4, 4}, {-2.25, 2.25}},
+    PlotTheme -> th, "Duration" -> 1][0, ImageSize -> 320], {th, {"Manim", "Paper"}}]
+```
+
+<!-- => two plots: blue and red curves on black with white axes, and red and blue on warm paper with dark axes -->
 
 ### BaseStyle
 

@@ -39,8 +39,8 @@ PackageScoped[{directiveQ, summaryIcon, encodeVideo}]
    its sound; Video[g], AnimatedImage[g] and Audio[g] give it as those. *)
 
 Options[AnimatedGraphics] = {
-    PlotRange -> Automatic, "CanvasSize" -> {1920, 1080}, "Screen" -> Automatic, Background -> Black, ImageSize -> Automatic,
-    PlotRangePadding -> Automatic, BaseStyle -> {FontFamily -> "Source Sans 3", FontSize -> 72, FontColor -> White},
+    PlotRange -> Automatic, "CanvasSize" -> {1920, 1080}, "Screen" -> Automatic, PlotTheme -> Automatic, Background -> Automatic, ImageSize -> Automatic,
+    PlotRangePadding -> Automatic, BaseStyle -> {FontFamily -> "Source Sans 3", FontSize -> 72},
     "CyclesPerSecond" -> 1, FrameRate -> 60, "Foley" -> False, "Duration" -> Automatic
 };
 
@@ -208,17 +208,21 @@ plotRange[g_, t_, content_] := With[{pr = atT[agOption[g, PlotRange], t], cs = a
         True, With[{b = Quiet[g["Bounds"]]}, If[MatchQ[b, {{x0_, x1_}, {y0_, y1_}} /; x1 > x0 && y1 > y0], b, {{-64/9, 64/9}, {-4, 4}}]]]];
 
 (* the frame of an updated object (g at time t of its own clock) *)
-frameGraphics[g : AnimatedGraphics[a_], t_, opts_List] := Module[{cs = agOption[g, "CanvasSize"], content, pr, auto, bg, prims, w = agOption[g, "CanvasSize"][[1]],
+(* the theme: its own, else the enclosing one's, else "Manim" *)
+$theme = "Manim";
+frameGraphics[g : AnimatedGraphics[a_], t_, opts_List] := Block[{$theme = Replace[agGiven[g, PlotTheme], _Missing | Automatic :> $theme]},
+    frameGraphics0[g, t, opts, themeData[$theme]]];
+frameGraphics0[g : AnimatedGraphics[a_], t_, opts_List, th_] := Module[{cs = agOption[g, "CanvasSize"], content, pr, auto, bg, prims, w = agOption[g, "CanvasSize"][[1]],
         base = Join[Flatten[{Replace[agGiven[g, BaseStyle], _Missing -> {}]}], OptionValue[AnimatedGraphics, BaseStyle]]},
     (* string-named options in the BaseStyle are passed on to the elements *)
     Block[{$inheritedOptions = Join[Cases[base, _[_String, _]], $inheritedOptions], $canvasSize = cs},
         content = drawContent[g];
         auto = ! MatchQ[atT[agOption[g, PlotRange], t], {{_ ? NumericQ, _ ? NumericQ}, {_ ? NumericQ, _ ? NumericQ}}] && ! canvasPrimitiveQ[content];
         pr = plotRange[g, t, content];
-        Block[{$frame = <|"Canvas" -> cs, "PlotRange" -> pr|>},
+        Block[{$frame = <|"Canvas" -> cs, "PlotRange" -> pr, "Theme" -> th|>},
             prims = placeCanvas[drawInsets[sizeRules[content, w, pr]], cs, pr]];
-        bg = FirstCase[opts, (Rule | RuleDelayed)[Background, v_] :> v, agOption[g, Background]];
-        Graphics[{Replace[ov[base, FontColor], _Missing -> White], Thickness[4 / w], prims},
+        bg = Replace[FirstCase[opts, (Rule | RuleDelayed)[Background, v_] :> v, agOption[g, Background]], Automatic :> th["Background"]];
+        Graphics[{Replace[ov[base, FontColor], _Missing :> th["Ink"]], Thickness[4 / w], prims},
             Sequence @@ FilterRules[opts, Except[Background]],
             PlotRange -> pr, Background -> bg, ImageSize -> Replace[agOption[g, ImageSize], Automatic -> 480],
             AspectRatio -> (pr[[2, 2]] - pr[[2, 1]]) / (pr[[1, 2]] - pr[[1, 1]]),
@@ -264,8 +268,9 @@ canvasInset[x_, cs_, pr_] := Inset[Graphics[canvasResolve[cs, x], PlotRange -> {
    size; an inset Graphics (a Plot, axes) gets the same treatment relative to its own width *)
 sizeRules[prims_, w_, pr_] := prims /. Join[{c_AnimatedGraphics :> c,
     Inset[gr_Graphics, pos_, opos_, size : (_ ? NumericQ | {_ ? NumericQ, _}), rest___] :>
-        With[{px = w First[Flatten[{size}]] / (pr[[1, 2]] - pr[[1, 1]])}, Inset[Show[gr /. sizeRuleList[px],
-            BaseStyle -> Join[{FontSize -> Scaled[36 / px]}, Flatten[{Lookup[Options[gr /. sizeRuleList[px]], BaseStyle, {}]}]]], pos, opos, size, rest]]},
+        With[{px = w First[Flatten[{size}]] / (pr[[1, 2]] - pr[[1, 1]]), gt = themeInset[gr, Lookup[$frame, "Theme", themeData["Manim"]]]},
+            Inset[Show[gt /. sizeRuleList[px], BaseStyle -> Join[{FontSize -> Scaled[36 / px]}, Flatten[{Lookup[Options[gt /. sizeRuleList[px]], BaseStyle, {}]}]]],
+                pos, opos, size, rest]]},
     sizeRuleList[w]];
 sizeRuleList[w_] := {
     c_AnimatedGraphics :> c,

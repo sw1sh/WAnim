@@ -3,7 +3,7 @@
 PacletObject[<|
   "Name" -> "WolframInstitute/WAnim",
   "PublisherID" -> "WolframInstitute",
-  "Version" -> "1.0.0",
+  "Version" -> "1.0.1",
   "WolframVersion" -> "15.0+",
   "Description" -> "Live audiovisual coding: Manim-style scenes, films and Strudel-style music as graphics and patterns in time",
   "Creator" -> "Nikolay Murzin, Claude (Anthropic)",
@@ -137,6 +137,7 @@ PacletObject[<|
       "Root" -> "Assets",
       "Assets" -> {
         {"Drums", "Drums"},
+        {"Spikeys", "Spikeys"},
         {"Hero", "hero.png"}
       }
     }

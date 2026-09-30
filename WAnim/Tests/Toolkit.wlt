@@ -81,6 +81,9 @@ VerificationTest[Block[{$CyclesPerSecond = 1}, With[{a = Audio[Track[{{0, 1/4, "
 VerificationTest[With[{a = Audio[Instrument["Pan" -> -1][Track["c4"]], 1, "CyclesPerSecond" -> 1]}, Max[Abs[AudioData[a][[1]]]] > 2 Max[Abs[AudioData[a][[2]]]]], True, TestID -> "Instrument-pan"]
 VerificationTest[Head[TrackView["Punchcard", "Cycles" -> 4][Track["bd*4"]]["Punchcard"]], Graphics, TestID -> "TrackView-punchcard"]
 VerificationTest[TrackView["Cycles" -> 4][Track["bd*4"]]["Cycles"], 4, TestID -> "TrackView-cycles"]
+VerificationTest[{Options[AnimatedGraphics[{Disk[]}, PlotTheme -> "Paper", "Duration" -> 1][0], Background], Options[AnimatedGraphics[{Disk[]}, "Duration" -> 1][0], Background]},
+    {{Background -> RGBColor["#F4F1EA"]}, {Background -> Black}}, TestID -> "PlotTheme-background"]
+VerificationTest[Head[Plot[x, {x, 0, 1}, PlotTheme -> "Manim"]], Graphics, TestID -> "PlotTheme-registered"]
 VerificationTest[With[{v = Track["bd sd"]["Video", 1, FrameRate -> 4, ImageSize -> 200, "View" -> "Punchcard", "CyclesPerSecond" -> 1]},
     {Head[v], Round[QuantityMagnitude[Information[v, "Duration"], "Seconds"]]}], {Video, 1}, TestID -> "Track-video"]
 VerificationTest[Length[Cases[WolframInstitute`WAnim`AnimatedGraphics`Private`foley[AnimatedGraphics[{Typewriter["abc", {0, 1}, "TypeTime" -> 0.5]}], 0], {_, "Tick", _}]], 3, TestID -> "Foley-keystrokes"]

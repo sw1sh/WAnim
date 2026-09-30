@@ -32,21 +32,15 @@ mc = <|"Blue" -> RGBColor["#58C4DD"], "BlueD" -> RGBColor["#29ABCA"], "Green" ->
     "Grey" -> RGBColor["#888888"], "Gold" -> RGBColor["#F0AC5F"]|>
 ```
 
-A scene of a given length in Manim's frame, 14.2 by 8 about the origin, on black; played as an animated image, or its last frame for Manim's still scenes; and Manim's dot:
+A scene of a given length in Manim's frame, 14.2 by 8 about the origin; played as an animated image, or its last frame for Manim's still scenes; and Manim's dot. A scene's PlotTheme is "Manim" unless it says otherwise: black, white text, and plots inset in it drawn as Manim draws its axes:
 
 ```wl
-scene[content_, dur_, opts___] := AnimatedGraphics[Flatten[{content}], opts, PlotRange -> {{-64/9, 64/9}, {-4, 4}}, Background -> Black, "Duration" -> dur];
+scene[content_, dur_, opts___] := AnimatedGraphics[Flatten[{content}], opts, PlotRange -> {{-64/9, 64/9}, {-4, 4}}, "Duration" -> dur];
 play[g_] := AnimatedImage[g, FrameRate -> 12, ImageSize -> 360];
 still[g_] := g[g["Duration"] - 10^-3, ImageSize -> 480];
 dot[p_, col_ : White, r_ : 0.08] := {col, Disk[p, r]};
 ```
 
-Plots styled like Manim's axes, for insetting in a scene (Plot holds its arguments, so the options go in evaluated, last, after a plot's own):
-
-```wl
-manimPlot = Sequence[AxesStyle -> Directive[White, AbsoluteThickness[2]], TicksStyle -> Directive[White, FontSize -> 30], LabelStyle -> Directive[White, FontSize -> 40], Background -> None,
-    PlotRangePadding -> None, AspectRatio -> Full];
-```
 
 ## Basic Concepts
 
@@ -208,7 +202,7 @@ sinCos = {Inset[Plot[{Sin[x], Cos[x]}, {x, -10, 10.3}, PlotStyle -> {Directive[m
     Ticks -> {Range[-10, 10, 2], {-1, 1}}, AxesLabel -> {"x", "y"}, PlotRange -> {-1.5, 1.5}, AxesStyle -> Directive[mc["Green"], AbsoluteThickness[2]],
     Epilog -> {mc["Yellow"], AbsoluteThickness[4], Line[{{2 Pi, 0}, {2 Pi, 1}}],
         Text[Style[TraditionalForm[x == 2 \[Pi]], White, 48], {2 Pi, 1.25}], Text[Style[TraditionalForm[Sin[x]], mc["Blue"], 48], {-10, 0.8}, {-1, 0}],
-        Text[Style[TraditionalForm[Cos[x]], mc["Red"], 48], {10.3, -0.6}, {1, 0}]}, Evaluate[manimPlot]], {0, 0}, Center, {10, 6}]};
+        Text[Style[TraditionalForm[Cos[x]], mc["Red"], 48], {10.3, -0.6}, {1, 0}]}], {0, 0}, Center, {10, 6}]};
 still[scene[sinCos, 1]]
 ```
 
@@ -219,7 +213,7 @@ A dot slides down a parabola to its minimum:
 ```wl
 argMin = Function[t, With[{x = Tween[{0, 1}, {0, 5}][t]},
     Inset[Plot[2 (u - 5)^2, {u, 0, 10}, PlotStyle -> Directive[mc["Maroon"], AbsoluteThickness[4]], AxesLabel -> {"x", "f(x)"}, Ticks -> None,
-        Epilog -> {White, AbsolutePointSize[16], Point[{x, 2 (x - 5)^2}]}, Evaluate[manimPlot]], {0, 0}, Center, {12, 6}]]];
+        Epilog -> {White, AbsolutePointSize[16], Point[{x, 2 (x - 5)^2}]}], {0, 0}, Center, {12, 6}]]];
 play[scene[argMin, 2]]
 ```
 
@@ -233,7 +227,7 @@ graphArea = {Inset[Plot[{c1[x], c2[x]}, {x, 0, 4}, PlotStyle -> {Directive[mc["B
     PlotRange -> {{0, 5}, {0, 6}}, Ticks -> {{2, 3}, None}, AxesLabel -> {"x", "y"},
     Epilog -> {{mc["Yellow"], AbsoluteThickness[4], Line[{{2, 0}, {2, c1[2]}}], Line[{{3, 0}, {3, c1[3]}}]},
         {EdgeForm[Black], FaceForm[Opacity[0.5, mc["Blue"]]], Table[Rectangle[{x, 0}, {x + 0.03, c1[x]}], {x, 0.3, 0.57, 0.03}]},
-        {FaceForm[Opacity[0.5, mc["Grey"]]], Polygon[Join[Table[{x, c2[x]}, {x, 2, 3, 0.02}], Table[{x, c1[x]}, {x, 3, 2, -0.02}]]]}}, Evaluate[manimPlot]], {0, 0}, Center, {12, 6}]};
+        {FaceForm[Opacity[0.5, mc["Grey"]]], Polygon[Join[Table[{x, c2[x]}, {x, 2, 3, 0.02}], Table[{x, c1[x]}, {x, 3, 2, -0.02}]]]}}], {0, 0}, Center, {12, 6}]};
 still[scene[graphArea, 1]]
 ```
 
@@ -245,7 +239,7 @@ A rectangle from the origin to a point on y = 25/x keeps its area as the point m
 xt = Tween[{{1, 5}, {2, 10}, {3, 2.5}, {4, 5}}];
 polygonOnAxes = Function[t, With[{x = xt[t]}, Inset[Plot[25 / u, {u, 2.5, 10}, PlotStyle -> Directive[mc["YellowD"], AbsoluteThickness[4]], PlotRange -> {{0, 10}, {0, 10}},
     Ticks -> None, Epilog -> {{FaceForm[Opacity[0.5 Tween[{0, 1}][t], mc["Blue"]]], EdgeForm[], Rectangle[{0, 0}, {x, 25 / x}]},
-        {mc["YellowB"], AbsoluteThickness[1], PartialPath[Rectangle[{0, 0}, {x, 25 / x}], Tween[{0, 1}][t]]}, {White, AbsolutePointSize[16], Point[{x, 25 / x}]}}, Evaluate[manimPlot]],
+        {mc["YellowB"], AbsoluteThickness[1], PartialPath[Rectangle[{0, 0}, {x, 25 / x}], Tween[{0, 1}][t]]}, {White, AbsolutePointSize[16], Point[{x, 25 / x}]}}],
     {0, 0}, Center, {6, 6}]]];
 play[scene[polygonOnAxes, 4]]
 ```
@@ -256,7 +250,7 @@ A line graph with its vertices, labelled axes:
 
 ```wl
 heat = {Inset[ListLinePlot[{{0, 20}, {8, 0}, {38, 0}, {39, -5}}, Mesh -> All, MeshStyle -> AbsolutePointSize[12], PlotStyle -> Directive[mc["Yellow"], AbsoluteThickness[4]],
-    PlotRange -> {{0, 40}, {-8, 32}}, Ticks -> {Range[0, 35, 5], Range[-5, 30, 5]}, AxesLabel -> {"\[CapitalDelta]Q", "T[\[Degree]C]"}, Evaluate[manimPlot]], {0, 0}, Center, {9, 6}]};
+    PlotRange -> {{0, 40}, {-8, 32}}, Ticks -> {Range[0, 35, 5], Range[-5, 30, 5]}, AxesLabel -> {"\[CapitalDelta]Q", "T[\[Degree]C]"}], {0, 0}, Center, {9, 6}]};
 still[scene[heat, 1]]
 ```
 
@@ -273,7 +267,7 @@ camera[t_] := With[{c = Which[t < 1, Tween[{0, 1}, {{0, 0}, onStage[{0, 0}]}][t]
         s = Which[t < 1, Tween[{0, 1}, {1, 0.5}][t], t < 2, 0.5, True, Tween[{2, 3}, {0.5, 1}][t]]},
     {c[[1]] + s {-64/9, 64/9}, c[[2]] + s {-4, 4}}];
 following = Function[t, Inset[Plot[Sin[x], {x, 0, 3 Pi}, PlotStyle -> Directive[mc["Blue"], AbsoluteThickness[4]], PlotRange -> {{-1, 10}, {-1, 10}}, Ticks -> None,
-    Epilog -> {White, AbsolutePointSize[16], Point[{{0, 0}, {3 Pi, 0}}], mc["Orange"], Point[dotAt[t]]}, Evaluate[manimPlot]], {0, 0}, Center, {12, 6}]];
+    Epilog -> {White, AbsolutePointSize[16], Point[{{0, 0}, {3 Pi, 0}}], mc["Orange"], Point[dotAt[t]]}], {0, 0}, Center, {12, 6}]];
 play[scene[following, 3, PlotRange -> camera]]
 ```
 

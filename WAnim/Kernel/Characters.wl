@@ -9,83 +9,60 @@ PackageExported[{Spikey, AutomatonTape, WordWall}]
 (* ::Section:: *)
 (*Spikey*)
 
-Options[Spikey] = elementOptions[{Position -> {1790, 930}, "Radius" -> 46, "Version" -> 15, "Form" -> Automatic, "Display" -> Automatic, "Pulse" -> None,
+Options[Spikey] = elementOptions[{Position -> {1790, 930}, "Radius" -> 46, "Version" -> 15, "Display" -> Automatic, "Pulse" -> None,
     "BeatsPerCycle" -> 4, "Dance" -> 1, "Spin" -> 1.8, "Face" -> False, "Raise" -> 0, "Blink" -> False, "Enter" -> "Pop", "EnterTime" -> 0.3}];
 
 (* Spikey[{t0, t1}] is the Wolfram mascot, dancing: it spins, sways each beat ("BeatsPerCycle" beats per
-   cycle), hops, and squashes on each onset of "Pulse" (a Track, e.g. the kick).  It looks as it
-   did in its "Version": the stellated icosahedron of 1.0 in its four colours; from 2 to 12 the concave
-   "hyperbolic dodecahedron", lilac in 2, glassy violet in 3, rainbow in 4, gold in 5, then the reds and
-   oranges of 6 to 11 and the grey of 12; from 13 the flat red Wolfram Spikey of PolyhedronData.  "Form"
-   ("Stellated", "Hyperbolic", "Wolfram") overrides the shape; "Display" -> "1Bit" or "Gray" draws it as a
-   one-bit or greyscale display would.  "Version" and "Display" may be functions of time, so one Spikey
-   lives through the eras.  "Face" -> True gives it eyes, a smile, arms and legs; "Raise" (0-1) lifts
-   its right hand and "Blink" -> True shuts its eyes.  Position, "Radius", "Dance", "Raise" and "Blink"
-   may be functions of time too: Spikey can walk, grow and wave. *)
+   cycle), hops, and squashes on each onset of "Pulse" (a Track, e.g. the kick).  It is the Spikey of its
+   "Version", exactly as Mathematica drew it: the stellated icosahedron of 1.0, the hyperbolic dodecahedra
+   of 2 to 13 and the rhombic ones since, from the paclet's Spikeys asset (scripts/make_spikeys.wls, from
+   MathematicaSpikey.wl).  A version without a model of its own shows the nearest one.  "Display" -> "1Bit"
+   or "Gray" draws it as a one-bit or greyscale display would.  "Version" and "Display" may be functions
+   of time, so one Spikey lives through the eras.  "Face" -> True gives it eyes, a smile, arms and legs;
+   "Raise" (0-1) lifts its right hand and "Blink" -> True shuts its eyes.  Position, "Radius", "Dance",
+   "Raise" and "Blink" may be functions of time too: Spikey can walk, grow and wave. *)
 Spikey[{t0_, t1_}, opts : OptionsPattern[]] := With[{o = toolOptions[{opts}, Spikey]},
     makeElement["Spikey", {t0, t1}, Function[t, spikeyDraw[t, {t0, t1}, drawOptions[{opts}, Spikey, t]]]]];
 
-(* the shapes, as triangles {a, b, c} with a tag (the face they came from), spikes reaching radius 1.4 *)
-spikeyForm[v_] := Which[v < 2, "Stellated", v < 13, "Hyperbolic", True, "Wolfram"];
-spikeyMesh[form_] := spikeyMesh[form] = With[{m = spikeyMesh0[form]}, With[{s = 1.4 / Max[Norm /@ Flatten[m[[1]], 1]]}, {s m[[1]], m[[2]]}]];
-spikeyMesh0["Stellated"] := With[{v = N[PolyhedronData["Icosahedron", "VertexCoordinates"]], fs = PolyhedronData["Icosahedron", "FaceIndices"]},
-    With[{u = v / Norm[v[[1]]]}, Transpose[Flatten[Table[With[{pts = u[[fs[[f]]]], c = Mean[u[[fs[[f]]]]]},
-        Table[{{pts[[k]], pts[[Mod[k, 3] + 1]], 1.9 Norm[c] Normalize[c]}, f}, {k, 3}]], {f, Length[fs]}], 1]]]];
-(* each pentagon of a dodecahedron sucked in towards the centre, its corners left as spikes: a flat
-   point q goes to radius 0.4 + 0.6 (1 - d)^2.1 along its direction, d its distance to the nearest
-   corner (1 at the pentagon's centre); neighbouring faces agree along their edges *)
-spikeyMesh0["Hyperbolic"] := Module[{v = N[PolyhedronData["Dodecahedron", "VertexCoordinates"]], fs = PolyhedronData["Dodecahedron", "FaceIndices"], n = 6, tris = {}},
-    v = Normalize /@ v;
-    Do[With[{vs = v[[fs[[f]]]], c = Mean[v[[fs[[f]]]]]}, With[{L = Norm[vs[[1]] - c],
-            lift = Function[q, Normalize[q] (0.4 + 0.6 (1 - Min[Norm[q - #] & /@ vs] / Norm[vs[[1]] - Mean[vs]])^2.1)]},
-        Do[With[{a = vs[[k]] - c, b = vs[[Mod[k, 5] + 1]] - c}, With[{P = Function[{i, j}, lift[c + (i a + j b) / n]]},
-            Do[AppendTo[tris, {{P[i, j], P[i + 1, j], P[i, j + 1]}, f}];
-                If[i + j <= n - 2, AppendTo[tris, {{P[i + 1, j], P[i + 1, j + 1], P[i, j + 1]}, f}]], {i, 0, n - 1}, {j, 0, n - 1 - i}]]], {k, 5}]]], {f, Length[fs]}];
-    Transpose[tris]];
-spikeyMesh0["Wolfram"] := With[{v = N[PolyhedronData["WolframSpikey", "VertexCoordinates"]], fs = PolyhedronData["WolframSpikey", "FaceIndices"]},
-    {v[[#]] & /@ fs, Range[Length[fs]]}];
+(* the models: <|"Graphics", "Options", "Period"|>, centred, of radius 1, a five-fold axis vertical, their
+   coordinates packed as Integer16 in units of 1/10000 *)
+spikeyDirectory[] := PacletObject["WolframInstitute/WAnim"]["AssetLocation", "Spikeys"];
+spikeyVersions[] := spikeyVersions[] = Sort[ToExpression /@ FileBaseName /@ FileNames["*.wxf", spikeyDirectory[]]];
+spikeyVersion[v_] := First[Nearest[spikeyVersions[], Round[v]]];
+spikeyModel[v_Integer] := spikeyModel[v] = With[{file = FileNameJoin[{spikeyDirectory[], ToString[v] <> ".wxf"}]}, With[{m = Import[file, "WXF"]},
+    <|m, "Graphics" -> (m["Graphics"] /. na_NumericArray :> Normal[na] / 10000.), "Key" -> IntegerString[FileHash[file, "CRC32"], 36]|>]];
 
-(* each version's colours: dark, mid and light by how much light a facet catches, an inner colour the
-   hollows turn towards (by how deep they are), and whether the facets' mesh lines show *)
-spikeyLook[v_] := Lookup[<|
-    2 -> {{"#4B2C9A", "#9A74E0", "#F2C4EE"}, "#6FB4F0", 0.5, False}, 3 -> {{"#26215E", "#6C63C4", "#D9CEF8"}, "#9FD0F5", 0.45, True},
-    4 -> "Rainbow", 5 -> {{"#8A3C00", "#E8820E", "#FFD24A"}, "#B85C00", 0.3, True}, 6 -> {{"#7A1600", "#D94A1E", "#F7A070"}, "#FFE0C0", 0.5, False},
-    7 -> {{"#6A0020", "#D02648", "#F090B0"}, "#A8A8F0", 0.8, False}, 8 -> {{"#7A0000", "#E0301E", "#FF9A84"}, "#FFE0D8", 0.4, True},
-    9 -> {{"#8A0A1A", "#E0404A", "#F6A0A0"}, "#FFF0F0", 0.5, False}, 10 -> {{"#9A3A00", "#F28A14", "#FFC83C"}, "#FFF4C0", 0.6, False},
-    11 -> {{"#6A0000", "#D02414", "#F46A48"}, "#FFC0A0", 0.3, True}, 12 -> {{"#8A8A8A", "#B4B4B4", "#E6E6E6"}, "#FAFAFA", 0.5, False}|>,
-    Clip[Floor[v], {1, 13}], {{"#7A0800", "#DD1100", "#FF6A4A"}, "#FF9A80", 0, False}];
-$stellatedColors = RGBColor /@ {"#F4655B", "#F7D96B", "#9C8FE6", "#2FB8D6"};
-spikeyShade["1Bit", lam_, _, _, _] := Which[lam > 0.66, White, lam > 0.4, GrayLevel[0.54], True, Black];
-spikeyShade["Gray", lam_, _, _, _] := Which[lam > 0.7, White, lam > 0.45, GrayLevel[0.72], lam > 0.25, GrayLevel[0.41], True, Black];
-spikeyShade[v_ /; v < 2, lam_, tag_, _, _] := Blend[{Blend[{Black, $stellatedColors[[Mod[tag, 4] + 1]]}, 0.55 + 0.45 lam], White}, 0.3 lam^8];
-spikeyShade[v_, lam_, tag_, depth_, n_] := With[{look = spikeyLook[v]}, If[look === "Rainbow",
-    Blend[{Blend[{Black, Hue[Mod[ArcTan[n[[1]], n[[2]]] / (2 Pi) + 0.3 depth, 1], 0.8, 1]}, 0.5 + 0.5 lam], White}, 0.3 lam^8],
-    Blend[{Blend[RGBColor /@ look[[1]], lam], RGBColor[look[[2]]]}, look[[3]] Clip[(1.1 - depth) / 0.6, {0, 1}]]]];
+(* a view of a model, turned by spin degrees about the vertical and tilted towards the viewer, as an image
+   px wide: rendered once, and kept on disk, so every kernel of a render shares it *)
+spikeySprite[v_Integer, spin_Integer, tilt_Integer, px_Integer] := spikeySprite[v, spin, tilt, px] = Module[{file, m, img},
+    (* named by the model's file and the view, so a changed model is drawn anew *)
+    file = FileNameJoin[{$UserBaseDirectory, "ApplicationData", "WAnim", "Spikeys", StringRiffle[{ToString[v], spikeyModel[v]["Key"], "2", ToString[spin], ToString[tilt], ToString[px]}, "-"] <> ".png"}];
+    If[FileExistsQ[file], Import[file],
+        m = spikeyModel[v];
+        img = Rasterize[Graphics3D[GeometricTransformation[m["Graphics"], RotationTransform[tilt Degree, {1, 0, 0}] . RotationTransform[spin Degree, {0, 1, 0}]],
+            Sequence @@ m["Options"], Boxed -> False, SphericalRegion -> True, PlotRange -> 1.05 {{-1, 1}, {-1, 1}, {-1, 1}}, ViewPoint -> {0, 0, 100},
+            ViewVertical -> {0, 1, 0}, ViewAngle -> 2 ArcTan[0.5 / 100], ImageSize -> px, Background -> None], "Image", Background -> None, ImageResolution -> 72];
+        Quiet[CreateDirectory[DirectoryName[file], CreateIntermediateDirectories -> True]; Export[file, img]];
+        img]];
+(* as a one-bit or a four-grey display would show it *)
+spikeyDisplay[img_, "1Bit"] := SetAlphaChannel[Binarize[ColorConvert[RemoveAlphaChannel[img, White], "Grayscale"], 0.5], AlphaChannel[img]];
+spikeyDisplay[img_, "Gray"] := SetAlphaChannel[ImageApply[Round[3 #] / 3 &, ColorConvert[RemoveAlphaChannel[img, White], "Grayscale"]], AlphaChannel[img]];
+spikeyDisplay[img_, _] := img;
 
-spikeyDraw[t_, {t0_, t1_}, o_] := Module[{p = layerPoint[ov[o, Position]], r, kick, beat, d = ov[o, "Dance"], ay, ax, R, light = Normalize[{-0.5, 0.7, 0.9}],
-        style = ov[o, "Display"], v = ov[o, "Version"], form, mesh, tris, e1, e2, nrm, keep, look, mesh3},
-    r = ov[o, "Radius"] envelope[t, {t0, t1}, o]["Scale"];
+spikeyDraw[t_, {t0_, t1_}, o_] := Module[{p = layerPoint[ov[o, Position]], r, kick, beat, d = ov[o, "Dance"], v, m, spin, px, img, env = envelope[t, {t0, t1}, o]},
+    r = ov[o, "Radius"] env["Scale"];
     kick = If[ov[o, "Pulse"] === None, 0, d TrackPulse[ov[o, "Pulse"], 14][t]];
-    beat = ov[o, "BeatsPerCycle"] t; ay = ov[o, "Spin"] t; ax = 0.45 + 0.15 Sin[1.3 t];
-    R = {{1, 0, 0}, {0, Cos[ax], -Sin[ax]}, {0, Sin[ax], Cos[ax]}} . {{Cos[ay], 0, Sin[ay]}, {0, 1, 0}, {-Sin[ay], 0, Cos[ay]}};
-    form = Replace[ov[o, "Form"], Automatic -> spikeyForm[v]];
-    mesh = spikeyMesh[form];
-    (* the kick pushes the spikes out further than the body *)
-    tris = Map[# (1 + 0.18 kick Clip[(Norm[#] - 0.6) / 0.8, {0, 1}]) &, mesh[[1]], {2}] . Transpose[R];
-    e1 = tris[[All, 2]] - tris[[All, 1]]; e2 = tris[[All, 3]] - tris[[All, 1]];
-    nrm = Normalize /@ Transpose[{e1[[All, 2]] e2[[All, 3]] - e1[[All, 3]] e2[[All, 2]], e1[[All, 3]] e2[[All, 1]] - e1[[All, 1]] e2[[All, 3]], e1[[All, 1]] e2[[All, 2]] - e1[[All, 2]] e2[[All, 1]]}];
-    keep = Pick[Range[Length[tris]], Thread[nrm[[All, 3]] > -0.02]];
-    keep = SortBy[keep, Mean[tris[[#, All, 3]]] &];
-    look = If[form === "Hyperbolic" && MemberQ[{"1Bit", "Gray"}, style] =!= True, spikeyLook[v], None];
+    beat = ov[o, "BeatsPerCycle"] t;
+    v = spikeyVersion[ov[o, "Version"]]; m = spikeyModel[v];
+    (* the spin, to 2 degrees, within the model's symmetry period; the image a little larger than drawn *)
+    spin = 2 Round[Mod[ov[o, "Spin"] t / Degree, m["Period"]] / 2];
+    px = 32 Ceiling[2.2 r / 32];
     If[r <= 0.5, {}, {
         If[TrueQ[ov[o, "Face"]], spikeyLimbs[p, r, t, ov[o, "Raise"]], {}],
+        img = spikeyDisplay[spikeySprite[v, spin, 26, px], ov[o, "Display"]];
         CanvasTransform[CanvasTranslate[{p[[1]], p[[2]] - 0.12 r d Abs[Sin[Pi beat]]}] . CanvasRotate[0.22 d Sin[Pi beat]] . CanvasScale[{1 + 0.08 kick, 1 - 0.1 kick}],
-            Map[With[{lam = Clip[0.25 + 0.75 Max[0, nrm[[#]] . light], {0, 1}], pts = {r #[[1]], -r #[[2]]} & /@ tris[[#]]}, With[{c = spikeyShade[Replace[style, Automatic -> v], lam, mesh[[2, #]],
-                    Mean[Norm /@ mesh[[1, #]]], nrm[[#]]]},
-                Which[
-                    MemberQ[{"1Bit", "Gray"}, style], {CanvasPolygon[pts, c], CanvasPolygon[pts, Black, "Stroke" -> If[style === "1Bit", 1.2, 0.8]]},
-                    form === "Hyperbolic", CanvasPolygon[pts, c, "Edge" -> If[ListQ[look] && TrueQ[look[[4]]], Blend[{c, Black}, 0.18], c]],
-                    True, CanvasPolygon[pts, c, "Edge" -> Blend[{c, Black}, 0.35]]]]] &, keep]],
+            (* the image spans the model's box, 2.1 radii *)
+            CanvasImage[img, {-1.05 r, -1.05 r, 2.1 r, 2.1 r}, Opacity -> env["Alpha"]]],
         If[TrueQ[ov[o, "Face"]], spikeyFace[p, r, TrueQ[ov[o, "Blink"]]], {}]}]];
 
 (* legs stepping, the left arm relaxed, the right arm rising as "Raise" goes to 1 *)
