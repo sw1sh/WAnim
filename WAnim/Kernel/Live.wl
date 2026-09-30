@@ -194,7 +194,9 @@ punchcard[patsOrTrack_, nCycles_ : 1, phase_ : None, opts : OptionsPattern[]] :=
     live = OptionValue["LiveCycles"] =!= None;
     ph = If[phase === None, 0., N @ phase];
     w = OptionValue["Window"] /. Automatic -> nCycles;
-    x0 = 0.5 w;   (* the fixed now-line down the MIDDLE: past scrolls off left, future enters right *)
+    (* live, the fixed now-line runs down the middle: the past scrolls off left, the future enters right;
+       a still starts at the cycle given *)
+    x0 = If[live, 0.5 w, 0];
     lanes = voicesOf[patsOrTrack];
     nl = Length[lanes];
     fs = OptionValue[FontSize];  blk = OptionValue["BlockColor"];
@@ -209,8 +211,11 @@ punchcard[patsOrTrack_, nCycles_ : 1, phase_ : None, opts : OptionsPattern[]] :=
          Rectangle[{x1, band[[1]] + 0.05}, {x2, band[[2]] - 0.05}],
          Text[Style[labelOf[val], fs, FontFamily -> "Source Code Pro", FontWeight -> Bold, FontColor -> labCol], {Mean[{x1, x2}], Mean[band]}]}];
     span = If[live, {-(nCycles + 1), w + nCycles + 1}, {ph - x0 - 1, ph + w - x0}];
-    prims = MapIndexed[Function[{lane, i}, bar[Lookup[Lookup[metaOf[lane], "Instrument", <||>], "Gain", 1], {nl - First[i], nl - First[i] + 1}] /@
-        Select[lane["Query", span[[1]], span[[2]]], hasOnset[#] && ! restQ[#["Value"]] &]], lanes];
+    (* each voice a band, cut into a row for each sound it plays at once (a stack "bd sd, hh*4" in one voice) *)
+    prims = MapIndexed[Function[{lane, i}, With[{evs = Select[lane["Query", span[[1]], span[[2]]], hasOnset[#] && ! restQ[#["Value"]] &]},
+        With[{rows = DeleteDuplicates[#["Value"] & /@ SortBy[evs, #["Whole"][[1]] &]], lo = nl - First[i]},
+            With[{k = Max[1, Length[rows]]},
+                bar[Lookup[Lookup[metaOf[lane], "Instrument", <||>], "Gain", 1], lo + {k - #, k - # + 1} / k &[First[FirstPosition[rows, #["Value"], {1}]]]][#] & /@ evs]]]], lanes];
     moving = If[live,
         With[{nn = OptionValue["LiveCycles"], xx0 = x0, pr = prims},
             Dynamic[GeometricTransformation[pr, TranslationTransform[{xx0 - visPhase[nn], 0}]],
@@ -219,7 +224,7 @@ punchcard[patsOrTrack_, nCycles_ : 1, phase_ : None, opts : OptionsPattern[]] :=
     Graphics[{
         EdgeForm[LightDarkSwitched[GrayLevel[0.7, 0.5], GrayLevel[0.05, 0.5]]],
         moving,
-        {lineCol, Thickness[0.011], Line[{{x0, 0}, {x0, Max[nl, 1]}}]}
+        If[live, {lineCol, Thickness[0.011], Line[{{x0, 0}, {x0, Max[nl, 1]}}]}, {}]
     },
         PlotRange -> {{0, w}, {0, Max[nl, 1]}}, PlotRangeClipping -> True,
         AspectRatio -> OptionValue[AspectRatio], Background -> bg,

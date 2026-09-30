@@ -4,7 +4,7 @@ ResourceType: Paclet
 Name: WolframInstitute/WAnim
 Context: WolframInstitute`WAnim`
 Paclet: WolframInstitute/WAnim
-Description: Live audiovisual coding: graphics with a time axis for Manim-style scenes and whole films, drawn with a canvas kit and scored with Strudel/Tidal-style cyclic-time music patterns
+Description: Live audiovisual coding: Manim-style scenes, films and Strudel-style music as graphics and patterns in time
 ContributedBy: Nikolay Murzin, Claude (Anthropic)
 Keywords: [animation, Manim, motion graphics, film, video, live coding, music, Strudel, TidalCycles, patterns, audio]
 MainGuide: Documentation/English/Guides/WAnim.nb
