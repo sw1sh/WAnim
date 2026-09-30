@@ -18,8 +18,9 @@ Options[Spikey] = elementOptions[{Position -> {1790, 930}, "Radius" -> 46, "Vers
    of 2 to 13 and the rhombic ones since, from the paclet's Spikeys asset (scripts/make_spikeys.wls, from
    MathematicaSpikey.wl).  A version without a model of its own shows the nearest one.  "Display" -> "1Bit"
    or "Gray" draws it as a one-bit or greyscale display would.  "Version" and "Display" may be functions
-   of time, so one Spikey lives through the eras.  "Face" -> True gives it eyes, a smile, arms and legs;
-   "Raise" (0-1) lifts its right hand and "Blink" -> True shuts its eyes.  Position, "Radius", "Dance",
+   of time, so one Spikey lives through the eras.  "Face" -> True gives it the face of the personified Spikey
+   of "The Story of Spikey": glasses, eyebrows, an open smile; "Raise" (0-1) lifts its right hand and
+   "Blink" -> True shuts its eyes happily.  Position, "Radius", "Dance",
    "Raise" and "Blink" may be functions of time too: Spikey can walk, grow and wave. *)
 Spikey[{t0_, t1_}, opts : OptionsPattern[]] := With[{o = toolOptions[{opts}, Spikey]},
     makeElement["Spikey", {t0, t1}, Function[t, spikeyDraw[t, {t0, t1}, drawOptions[{opts}, Spikey, t]]]]];
@@ -63,20 +64,30 @@ spikeyDraw[t_, {t0_, t1_}, o_] := Module[{p = layerPoint[ov[o, Position]], r, ki
         CanvasTransform[CanvasTranslate[{p[[1]], p[[2]] - 0.12 r d Abs[Sin[Pi beat]]}] . CanvasRotate[0.22 d Sin[Pi beat]] . CanvasScale[{1 + 0.08 kick, 1 - 0.1 kick}],
             (* the image spans the model's box, 2.1 radii *)
             CanvasImage[img, {-1.05 r, -1.05 r, 2.1 r, 2.1 r}, Opacity -> env["Alpha"]]],
-        If[TrueQ[ov[o, "Face"]], spikeyFace[p, r, TrueQ[ov[o, "Blink"]]], {}]}]];
+        If[TrueQ[ov[o, "Face"]], spikeyFace[p, 1.2 r, TrueQ[ov[o, "Blink"]]], {}]}]];
 
-(* legs stepping, the left arm relaxed, the right arm rising as "Raise" goes to 1 *)
-spikeyLimbs[{cx_, cy_}, r_, t_, raise_] := With[{ink = RGBColor["#8A0A00"], w = 0.09 r, step = 0.08 r Sin[4 Pi t], hx = cx + r * (0.95 + 0.25 raise), hy = cy + r * (0.5 - 1.25 raise)},
-    {CanvasLine[{{cx - 0.25 r, cy + 0.6 r}, {cx - 0.3 r, cy + 1.05 r + step}}, ink, "Thickness" -> w], CanvasLine[{{cx + 0.25 r, cy + 0.6 r}, {cx + 0.3 r, cy + 1.05 r - step}}, ink, "Thickness" -> w],
-     CanvasLine[BezierFunction[{{cx - 0.7 r, cy + 0.1 r}, {cx - 1.05 r, cy + 0.35 r}, {cx - r, cy + 0.65 r}}] /@ Subdivide[0., 1., 12], ink, "Thickness" -> w],
-     CanvasLine[BezierFunction[{{cx + 0.7 r, cy + 0.05 r}, {cx + 1.1 r, cy - 0.1 r raise}, {hx, hy}}] /@ Subdivide[0., 1., 12], ink, "Thickness" -> w],
-     CanvasDisk[{hx, hy}, 0.11 r, ink]}];
-(* two eyes (shut in a blink), a smile and blushing cheeks *)
-spikeyFace[{cx_, cy_}, r_, blink_] := With[{ey = cy - 0.08 r, ex = 0.28 r, line = RGBColor["#3A0400"]},
-    {Table[{CanvasTransform[CanvasTranslate[{cx + s ex, ey}] . CanvasScale[{1, If[blink, 0.13, 1.15]}], {CanvasDisk[{0, 0}, 0.2 r, White], CanvasDisk[{0, 0}, 0.2 r, line, "Stroke" -> 0.03 r]}],
-        If[blink, {}, {CanvasDisk[{cx + s ex + 0.06 r, ey + 0.03 r}, 0.1 r, RGBColor["#111111"]], CanvasDisk[{cx + s ex + 0.1 r, ey - 0.02 r}, 0.035 r, White]}],
-        CanvasTransform[CanvasTranslate[{cx + 0.5 s r, cy + 0.2 r}] . CanvasScale[{1, 0.6}], CanvasDisk[{0, 0}, 0.1 r, RGBColor[1, 0.47, 0.47], Opacity -> 0.55]]}, {s, {-1, 1}}],
-     CanvasLine[Table[{cx, cy + 0.2 r} + 0.2 r {Cos[a], Sin[a]}, {a, 0.15 Pi, 0.85 Pi, 0.05 Pi}], line, "Thickness" -> 0.05 r]}];
+(* the right arm, only while it is raised (a wave, a high five) *)
+spikeyLimbs[{cx_, cy_}, r_, t_, raise_] := If[raise <= 0.02, {}, With[{ink = RGBColor["#8A0A00"], w = 0.09 r, hx = cx + r * (0.95 + 0.25 raise), hy = cy + r * (0.5 - 1.25 raise)},
+    {CanvasLine[BezierFunction[{{cx + 0.7 r, cy + 0.05 r}, {cx + 1.1 r, cy - 0.1 r raise}, {hx, hy}}] /@ Subdivide[0., 1., 12], ink, "Thickness" -> w, Opacity -> Min[1, 3 raise]],
+     CanvasDisk[{hx, hy}, 0.11 r, ink, Opacity -> Min[1, 3 raise]]}]];
+(* the face of the personified Spikey (Wolfram|Alpha's, in "The Story of Spikey"): black rectangular glasses
+   with the eyes behind them, eyebrows, and an open smile; a blink is a happy squint *)
+spikeyFace[{cx_, cy_}, r_, blink_] := With[{ink = RGBColor["#1B1B1B"], mouth = RGBColor["#5A0A06"], ey = cy - 0.1 r, ex = 0.2 r, gw = 0.34 r, gh = 0.26 r},
+    {Table[{
+        (* a lens: white, the eye inside it, the frame over it *)
+        CanvasRectangle[{cx + s ex - gw / 2, ey - gh / 2, gw, gh}, White, "Radius" -> 0.06 r],
+        If[blink,
+            CanvasLine[{{cx + s ex - 0.09 r, ey + 0.03 r}, {cx + s ex, ey - 0.05 r}, {cx + s ex + 0.09 r, ey + 0.03 r}}, ink, "Thickness" -> 0.035 r],
+            {CanvasDisk[{cx + s ex + 0.02 r, ey + 0.01 r}, 0.075 r, ink], CanvasDisk[{cx + s ex + 0.045 r, ey - 0.025 r}, 0.025 r, White]}],
+        CanvasRectangle[{cx + s ex - gw / 2, ey - gh / 2, gw, gh}, ink, "Stroke" -> 0.05 r, "Radius" -> 0.06 r],
+        (* an eyebrow *)
+        CanvasLine[{{cx + s (ex - 0.12 r), ey - 0.27 r}, {cx + s (ex + 0.1 r), ey - 0.3 r}}, ink, "Thickness" -> 0.045 r]}, {s, {-1, 1}}],
+     (* the bridge *)
+     CanvasLine[{{cx - ex + gw / 2, ey - 0.02 r}, {cx + ex - gw / 2, ey - 0.02 r}}, ink, "Thickness" -> 0.04 r],
+     (* an open smile, teeth along its top *)
+     CanvasPolygon[Join[{{cx - 0.2 r, cy + 0.14 r}, {cx + 0.2 r, cy + 0.14 r}}, Table[{cx + 0.2 r Cos[a], cy + 0.14 r + 0.17 r Sin[a]}, {a, 0, Pi, Pi / 16}]], mouth],
+     CanvasRectangle[{cx - 0.15 r, cy + 0.14 r, 0.3 r, 0.045 r}, White],
+     CanvasPolygon[Table[{cx + 0.2 r Cos[a], cy + 0.14 r + 0.17 r Sin[a]}, {a, 0, Pi, Pi / 16}], ink, "Stroke" -> 0.03 r]}];
 
 
 (* ::Section:: *)

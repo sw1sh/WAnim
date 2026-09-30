@@ -19,7 +19,7 @@ RelatedGuides: [WAnim]
 - The models ship with the paclet; each view Spikey dances through is drawn once and kept on disk, so the first appearance of a version takes a moment.
 - "Display" -> "1Bit" or "Gray" draws it as a one-bit or greyscale display would.
 - "Version" and "Display" may be functions of time, so one Spikey lives through the eras without restarting its dance.
-- "Face" -> True gives it eyes, a smile, arms and legs; "Raise" (0 to 1) lifts its right hand and "Blink" -> True shuts its eyes.
+- "Face" -> True gives it the face of the personified Spikey of "The Story of Spikey": glasses, eyebrows and an open smile; "Raise" (0 to 1) lifts its right hand and "Blink" -> True shuts its eyes happily.
 - Position, "Radius", "Dance", "Raise" and "Blink" may be functions of time too, so Spikey can walk, grow and wave.
 - "Pulse" -> *track* squashes it on each onset of *track* (see [TrackPulse]()); "BeatsPerCycle" sets the sway.
 
@@ -31,7 +31,7 @@ RelatedGuides: [WAnim]
 | "Pulse" | None | a Track to dance to |
 | "BeatsPerCycle" | 4 | sway beats per timeline unit |
 | "Dance" | 1 | how much it moves |
-| "Face" | False | eyes, a smile, arms and legs |
+| "Face" | False | glasses, eyebrows and a smile |
 | "Raise" | 0 | how high the right hand is |
 | "Blink" | False | eyes shut |
 | Position | {1790, 930} | centre |
