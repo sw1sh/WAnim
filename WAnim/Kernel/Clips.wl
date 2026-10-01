@@ -54,7 +54,7 @@ clipDuration[file_] := QuantityMagnitude[Duration[Video[file]], "Seconds"];
 (* the moment's frames, at the clip's frame rate, no wider than drawn (nor than 960 pixels), read once per
    kernel; only the last two clips are kept, as a film's frames are drawn in order *)
 clipFrames[file_, {in_, out_}, fps_, px0_] := With[{key = {file, in, out, fps, Min[px0, 960]}},
-    Lookup[$clipCache, Key[key], With[{f = readFrames[file, {in, out}, fps, Min[px0, 960]]}, $clipCache = Append[KeyTake[$clipCache, Take[Keys[$clipCache], -1]], key -> f]; f]]];
+    Lookup[$clipCache, Key[key], With[{f = readFrames[file, {in, out}, fps, Min[px0, 960]]}, $clipCache = Append[KeyTake[$clipCache, Take[Keys[$clipCache], -Min[1, Length[$clipCache]]]], key -> f]; f]]];
 $clipCache = <||>;
 readFrames[file_, {in_, out_}, fps_, px_] := Module[{v = Video[file], times = Range[N[in] + 0.5 / fps, N[out], 1. / fps], n, frames = $Failed},
     (* each frame is read at the middle of its moment: a video track often starts a little after its
