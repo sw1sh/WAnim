@@ -87,3 +87,14 @@ VerificationTest[Head[Plot[x, {x, 0, 1}, PlotTheme -> "Manim"]], Graphics, TestI
 VerificationTest[With[{v = Track["bd sd"]["Video", 1, FrameRate -> 4, ImageSize -> 200, "View" -> "Punchcard", "CyclesPerSecond" -> 1]},
     {Head[v], Round[QuantityMagnitude[Information[v, "Duration"], "Seconds"]]}], {Video, 1}, TestID -> "Track-video"]
 VerificationTest[Length[Cases[WolframInstitute`WAnim`AnimatedGraphics`Private`foley[AnimatedGraphics[{Typewriter["abc", {0, 1}, "TypeTime" -> 0.5]}], 0], {_, "Tick", _}]], 3, TestID -> "Foley-keystrokes"]
+
+(* GPUGraphics: drawn on the GPU, the size ImageSize and the plot range say; what it cannot draw, a Failure saying what *)
+VerificationTest[
+    With[{img = GPUGraphics[{Red, Disk[{0, 0}, 1]}, PlotRange -> {{-1, 1}, {-1, 1}}, ImageSize -> 64]},
+        {ImageDimensions[img], Round[PixelValue[img, {32, 32}][[;; 3]], 0.1]}],
+    {{64, 64}, {1., 0., 0.}},
+    TestID -> "GPUGraphics-draws"]
+VerificationTest[
+    GPUGraphics[{Arrow[{{0, 0}, {1, 1}}]}, PlotRange -> {{0, 1}, {0, 1}}]["Message"],
+    "unsupported: Arrow",
+    TestID -> "GPUGraphics-unsupported"]

@@ -319,14 +319,17 @@ AnimatedGraphics /: Audio[g : AnimatedGraphics[a_ ? agDataQ]] := Module[{cps = a
 (*Rendering: video, animated image, live player*)
 
 (* a frame as an Image at the canvas size *)
-frameImage[g_, t_] := Rasterize[g[t, ImageSize -> agOption[g, "CanvasSize"][[1]]], "Image", ImageResolution -> 72];
+(* a frame as an image: drawn on the GPU (GPUGraphics), or by the front end when it holds something the GPU
+   renderer does not draw, or when told "Renderer" -> "FrontEnd" *)
+frameImage[g_, t_, renderer_ : Automatic] := With[{gr = g[t, ImageSize -> agOption[g, "CanvasSize"][[1]]]},
+    Replace[If[renderer === "FrontEnd", None, gpuRasterize[gr, Round[agOption[g, "CanvasSize"]]]], Except[_Image] :> Rasterize[gr, "Image", ImageResolution -> 72]]];
 
 (* Export["film.mp4", g] renders the frames in parallel -- each subkernel loads WAnim, receives the
    definitions the content uses (a notebook's own functions just work) and runs any extra
    "KernelInitialization" -- then encodes them with ffmpeg together with the sound.  "From"/"To"
    select a range in cycles; a .gif is an AnimatedImage. *)
 Options[agExport] = {"From" -> 0, "To" -> Automatic, FrameRate -> Automatic, "KernelInitialization" :> Null,
-    "Parallel" -> True, "Kernels" -> 4, "FrameDirectory" -> Automatic, "CRF" -> 18, "Chunk" -> 60};
+    "Parallel" -> True, "Kernels" -> 4, "Renderer" -> Automatic, "FrameDirectory" -> Automatic, "CRF" -> 18, "Chunk" -> 60};
 AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts___] /; ToLowerCase[FileExtension[file]] === "gif" :=
     Export[file, AnimatedImage[g, opts]];
 AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts : OptionsPattern[agExport]] := Module[{
@@ -346,19 +349,20 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts 
         (* the film can be large (rasterized outputs, photos, a laid-out wall), so it goes to each kernel
            ONCE, inside the definition of a frame function made there directly; frames are then dealt out
            in contiguous chunks, so a kernel's caches (a wall's settled words) keep being reused *)
-        With[{frame = Unique["WAnimVideoFrame"], sound = Unique["WAnimVideoSound"], times = times, dir = dir, chunks = Partition[Range[n], UpTo[OptionValue[agExport, {opts}, "Chunk"]]]},
+        With[{frame = Unique["WAnimVideoFrame"], sound = Unique["WAnimVideoSound"], times = times, dir = dir, from = from, to = to, renderer = OptionValue[agExport, {opts}, "Renderer"], chunks = Partition[Range[n], UpTo[OptionValue[agExport, {opts}, "Chunk"]]]},
             (* rasterizing needs a front end; subkernels do not always come with one *)
-            ParallelEvaluate[frame[i_] := UsingFrontEnd[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]]]]];
+            ParallelEvaluate[frame[i_] := UsingFrontEnd[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]], renderer]]];
                 sound[] := soundtrack[g, from, to, dir]];
             (* the content's own functions (a notebook's colours, tracks, helpers), and only those: the package
                and its caches (Spikey models, sprites, sounds) stay out, each kernel has WAnim of its own *)
             With[{defs = userDefinitions[g]}, ParallelEvaluate[restoreDefinitions[defs]]];
             (* the soundtrack (a minute for a whole film) is the first job, on one kernel while the others draw;
-               a front end grows with every picture it rasterizes, so each kernel starts a fresh one after
-               every chunk: memory stays bounded however long the film *)
-            wav = First @ ParallelMap[If[# === "Sound", sound[], Scan[frame, #]; Developer`UninstallFrontEnd[]] &, Prepend[chunks, "Sound"], Method -> "FinestGrained"];
+               a front end drawing the frames grows with every picture, so then each kernel starts a fresh one
+               after every chunk, keeping memory bounded however long the film (with the GPU drawing them, the
+               front end is hardly used, and restarting it only risks a start that hangs) *)
+            wav = First @ ParallelMap[If[# === "Sound", sound[], Scan[frame, #]; If[renderer === "FrontEnd", Developer`UninstallFrontEnd[]]] &, Prepend[chunks, "Sound"], Method -> "FinestGrained"];
             ParallelEvaluate[Remove[frame, sound]]; Remove[frame, sound]],
-        Do[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]]]], {i, n}];
+        Do[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]], renderer]], {i, n}];
         wav = soundtrack[g, from, to, dir]];
     encodeVideo[dir, fps, wav, file, OptionValue[agExport, {opts}, "CRF"]]];
 (* the film's sound from "From" to "To", as a WAV file in dir, or None for a silent film *)

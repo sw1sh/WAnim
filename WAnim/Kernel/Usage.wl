@@ -50,7 +50,7 @@ PhotoPrint::usage = "PhotoPrint[image, \"caption\", {t0, t1}] pins a photo like 
 NumberCounter::usage = "NumberCounter[f, {t0, t1}] shows the number f[t], flashing while it changes, with a \"Label\".";
 YearRuler::usage = "YearRuler[{{t, year}, \[Ellipsis]}, {t0, t1}] is a ruler of years along the bottom of the frame whose marker jumps from date to date.";
 WordWall::usage = "WordWall[{{\"word\", weight, t}, \[Ellipsis]}, {t0, t1}] lays a whole vocabulary out like a dictionary page, each word sized by its weight and popping in at its time t; \"Camera\" moves the page, \"Emphasis\" picks words out, and wall[\"Places\"] says where each word sits.";
-Spikey::usage = "Spikey[{t0, t1}] is the Wolfram mascot, dancing, as the \"Version\" of an era drew it, squashing on the onsets of a \"Pulse\" track; with \"Face\" -> True it has eyes, arms and legs, and can \"Raise\" a hand.";
+Spikey::usage = "Spikey[{t0, t1}] is the Wolfram mascot as the \"Version\" of an era drew it, turning about its centre and pulsing on the onsets of a \"Pulse\" track; with \"Face\" -> True it wears the glasses and smile of the personified Spikey, and can \"Raise\" a hand.";
 AutomatonTape::usage = "AutomatonTape[rule, track, {t0, t1}] feeds a cellular automaton sideways into a read head and names the notes track plays from it.";
 TreeDiagram::usage = "TreeDiagram[Hold[expr], {t0, t1}] grows the tree of expr from its head down, level by level.";
 TileGrid::usage = "TileGrid[{{\"label\", content, \"note\"}, \[Ellipsis]}, {t0, t1}] deals out cards on the beat, each showing content, a plot or a picture, or a function u |-> expr played as a loop.";
@@ -114,3 +114,4 @@ $AudioLatency::usage = "$AudioLatency is the delay, in seconds, between the live
 Instrument::usage = "Instrument[name][track] plays track on an instrument synthesized sample by sample: \"Kit\" (drum samples by name), \"Kick\", \"Clap\", \"Hat\", \"Pluck\", \"Pad\", \"Bass\", \"Lead\", \"Bell\", \"Voice\", \"Sawtooth\", \[Ellipsis]; Instrument[] lists them. Instrument[<|name -> audio, \[Ellipsis]|>] and Instrument[File[dir]] play your own samples.
 Instrument[opts][track] sets how it sounds: \"Gain\", \"Pan\", \"Reverb\" and \"Delay\" sends, and \"Decay\" in cycles.";
 Mixer::usage = "Mixer[opts][track] sets how track is mixed: \"Sidechain\" -> a track to duck under, \"Cutoff\" -> f for a low-pass on the music bus at f[cycle] Hz, \"DelayTime\", \"DelayFeedback\", \"Master\" and \"FadeOut\", times in cycles.";
+GPUGraphics::usage = "GPUGraphics[graphics] draws a Graphics on the GPU, without the front end, into an Image; GPUGraphics[primitives, options] takes what Graphics takes.";

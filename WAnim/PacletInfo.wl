@@ -13,6 +13,7 @@ PacletObject[<|
   "PrimaryContext" -> "WolframInstitute`WAnim`",
   "Dependencies" -> {"Wolfram/Parser" -> ">=1.1"},
   "Extensions" -> {
+    {"LibraryLink", "Root" -> "LibraryResources"},
     {
       "Kernel",
       "Root" -> "Kernel",
@@ -43,6 +44,7 @@ PacletObject[<|
         "WolframInstitute`WAnim`CaptionText",
         "WolframInstitute`WAnim`DictionaryCard",
         "WolframInstitute`WAnim`Easing",
+        "WolframInstitute`WAnim`GPUGraphics",
         "WolframInstitute`WAnim`Instrument",
         "WolframInstitute`WAnim`Mixer",
         "WolframInstitute`WAnim`Morph",
