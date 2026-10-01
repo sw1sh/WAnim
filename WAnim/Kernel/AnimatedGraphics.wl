@@ -332,7 +332,7 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts_
 AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts : OptionsPattern[agExport]] := Module[{
     from = OptionValue[agExport, {opts}, "From"], to = Replace[OptionValue[agExport, {opts}, "To"], Automatic :> g["Duration"]],
     fps = Replace[OptionValue[agExport, {opts}, FrameRate], Automatic :> agOption[g, FrameRate]],
-    cps = agOption[g, "CyclesPerSecond"], dir, n, times, aud, wav},
+    cps = agOption[g, "CyclesPerSecond"], dir, n, times, wav},
     dir = Replace[OptionValue[agExport, {opts}, "FrameDirectory"], Automatic :> CreateDirectory[]];
     n = Round[(to - from) fps / cps];
     times = from + Range[0, n - 1] cps / fps;
@@ -346,20 +346,24 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts 
         (* the film can be large (rasterized outputs, photos, a laid-out wall), so it goes to each kernel
            ONCE, inside the definition of a frame function made there directly; frames are then dealt out
            in contiguous chunks, so a kernel's caches (a wall's settled words) keep being reused *)
-        With[{frame = Unique["WAnimVideoFrame"], times = times, dir = dir, chunks = Partition[Range[n], UpTo[OptionValue[agExport, {opts}, "Chunk"]]]},
+        With[{frame = Unique["WAnimVideoFrame"], sound = Unique["WAnimVideoSound"], times = times, dir = dir, chunks = Partition[Range[n], UpTo[OptionValue[agExport, {opts}, "Chunk"]]]},
             (* rasterizing needs a front end; subkernels do not always come with one *)
-            ParallelEvaluate[frame[i_] := UsingFrontEnd[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]]]]]];
+            ParallelEvaluate[frame[i_] := UsingFrontEnd[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]]]]];
+                sound[] := soundtrack[g, from, to, dir]];
             (* the content's own functions (a notebook's colours, tracks, helpers), and only those: the package
                and its caches (Spikey models, sprites, sounds) stay out, each kernel has WAnim of its own *)
             With[{defs = userDefinitions[g]}, ParallelEvaluate[restoreDefinitions[defs]]];
-            (* a front end grows with every picture it rasterizes, so each kernel starts a fresh one
-               after every chunk: memory stays bounded however long the film *)
-            ParallelDo[Scan[frame, c]; Developer`UninstallFrontEnd[], {c, chunks}, Method -> "FinestGrained"];
-            ParallelEvaluate[Remove[frame]]; Remove[frame]],
-        Do[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]]]], {i, n}]];
-    aud = Audio[g];
-    wav = If[aud === None, None, Export[FileNameJoin[{dir, "soundtrack.wav"}], AudioTrim[aud, Quantity[{from, to} / cps, "Seconds"]]]];
+            (* the soundtrack (a minute for a whole film) is the first job, on one kernel while the others draw;
+               a front end grows with every picture it rasterizes, so each kernel starts a fresh one after
+               every chunk: memory stays bounded however long the film *)
+            wav = First @ ParallelMap[If[# === "Sound", sound[], Scan[frame, #]; Developer`UninstallFrontEnd[]] &, Prepend[chunks, "Sound"], Method -> "FinestGrained"];
+            ParallelEvaluate[Remove[frame, sound]]; Remove[frame, sound]],
+        Do[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]]]], {i, n}];
+        wav = soundtrack[g, from, to, dir]];
     encodeVideo[dir, fps, wav, file, OptionValue[agExport, {opts}, "CRF"]]];
+(* the film's sound from "From" to "To", as a WAV file in dir, or None for a silent film *)
+soundtrack[g_, from_, to_, dir_] := With[{aud = Audio[g]},
+    If[aud === None, None, Export[FileNameJoin[{dir, "soundtrack.wav"}], AudioTrim[aud, Quantity[{from, to} / agOption[g, "CyclesPerSecond"], "Seconds"]]]]];
 
 (* frames f000001.png, ... in dir, and a sound or None, encoded by ffmpeg into file *)
 encodeVideo[dir_, fps_, wav_, file_, crf_] := Module[{ffmpeg, res},
