@@ -310,7 +310,8 @@ foleyVoices[ev_] := Join[
             MapAt[Replace[#, {0, t_Track} :> {0, Track[Join[{Track[First[t], KeyDrop[metaOf[t], "Mixer"]]}, fv], KeyTake[metaOf[t], "Mixer"]]}] &, ss, k]]];
     If[ss === {}, Return[None]];
     rendered = Map[With[{au = Switch[#[[2]], _Audio, #[[2]], _clipVoice, #[[2, 1]], _, #[[2]]["Audio", Max[1, Ceiling[dur - #[[1]]]], "CyclesPerSecond" -> cps]]},
-        If[#[[1]] > 0, AudioPad[au, {#[[1]] / cps, 0}], au]] &, ss];
+        (* one sample rate for all: overlaying sounds of different rates misplaces every later one *)
+        With[{r = AudioResample[au, 44100]}, If[#[[1]] > 0, AudioPad[r, {#[[1]] / cps, 0}], r]]] &, ss];
     (* an ArchiveClip's sound is a voice: the rest ducks beneath it *)
     With[{voice = MatchQ[#[[2]], _clipVoice] & /@ ss}, mix = fitTo[duckUnder[Pick[rendered, voice, False], Pick[ss, voice], cps], dur / cps];
         If[Or @@ voice, fitTo[AudioOverlay[Prepend[Pick[rendered, voice], mix]], dur / cps], mix]]];
