@@ -32,7 +32,7 @@ VerificationTest[Length[AnimatedGraphics[{"a", "+", "b"}]["Primitives"]], 3, Tes
 VerificationTest[AnimatedGraphics[Disk[]]["Play", "Wait", "Duration" -> 2]["Play", "Rotate", Pi]["Duration"], 3, TestID -> "Effects-duration"]
 VerificationTest[Head[AnimatedGraphics[{AnimatedGraphics[Disk[]]["Play", "Transform", AnimatedGraphics[Rectangle[]]]}, PlotRange -> {{-2, 2}, {-2, 2}}][0.5]], Graphics, TestID -> "Transform-plays"]
 VerificationTest[Head[AnimatedGraphics[{Backdrop[Black], {0, 1} -> AnimatedGraphics[Function[t, {White, Disk[{t, 0}, 0.5]}], PlotRange -> {{-4, 4}, {-2, 2}}, "Screen" -> {100, 100, 800, 400}]}][0.5]], Graphics, TestID -> "Screen-inset"]
-VerificationTest[Head[AnimatedImage[AnimatedGraphics[{Backdrop[Red]}, "Duration" -> 0.2, "CanvasSize" -> {160, 90}], FrameRate -> 10]], AnimatedImage, TestID -> "AnimatedImage"]
+VerificationTest[Head[AnimatedGraphics[{Backdrop[Red]}, "Duration" -> 0.2, "CanvasSize" -> {160, 90}]["AnimatedImage", FrameRate -> 10]], AnimatedImage, TestID -> "AnimatedImage"]
 VerificationTest[Tween[{0, 1}] /@ {-1, 0.5, 2}, {0, 0.5, 1}, SameTest -> (Norm[N[#1 - #2]] < 10^-6 &), TestID -> "Tween-clamped"]
 VerificationTest[Tween[{{1, 110}, {2, 40}, {3, 180}}] /@ {0, 2, 5}, {110, 40, 180}, TestID -> "Tween-keyframes"]
 VerificationTest[Length[First[Morph[Rectangle[{-1, -1}, {1, 1}], Disk[]][0.5]]], 120, TestID -> "Morph-points"]
@@ -69,16 +69,16 @@ VerificationTest[Length[TrackEuclid[3, 8][Track["bd"]]["Onsets", 0, 1]], 3, Test
 VerificationTest[TrackScale["c:minor"][Track["0 2 4"]]["Query", 0, 1][[All, "Value"]], {60, 63, 67}, TestID -> "TrackScale"]
 VerificationTest[Length[TrackStruct["1 ~ 1 1"][Track["c4"]]["Query", 0, 1]], 3, TestID -> "TrackStruct"]
 VerificationTest[Length[Reverse[Track[{Track["a b"], Track["c"]}]]["Voices"]], 2, TestID -> "Reverse-stack"]
-VerificationTest[Block[{$CyclesPerSecond = 1/2}, Max[Abs[AudioData[Audio[Track["bd sd, hh*4"], 1]]]] > 0.5], True, TestID -> "Track-stack-sounds"]
-VerificationTest[Round[QuantityMagnitude[Duration[Audio[Track["bd*4"], 2, "CyclesPerSecond" -> 1/2]], "Seconds"], 0.01], 4., TestID -> "Audio-tempo-option"]
-VerificationTest[Max[Abs[AudioData[Audio[Track["c4 e4"], 1]]]] > 0.1, True, TestID -> "Pitched-track-sounds"]
-VerificationTest[Round[QuantityMagnitude[Duration[Audio[AnimatedGraphics[{Backdrop[Black], Track["bd*4"]}, "Duration" -> 1, "CyclesPerSecond" -> 1/2]]], "Seconds"], 0.01], 2., TestID -> "AnimatedGraphics-sound-tempo"]
+VerificationTest[Block[{$CyclesPerSecond = 1/2}, Max[Abs[AudioData[Track["bd sd, hh*4"]["Audio", 1]]]] > 0.5], True, TestID -> "Track-stack-sounds"]
+VerificationTest[Round[QuantityMagnitude[Duration[Track["bd*4"]["Audio", 2, "CyclesPerSecond" -> 1/2]], "Seconds"], 0.01], 4., TestID -> "Audio-tempo-option"]
+VerificationTest[Max[Abs[AudioData[Track["c4 e4"]["Audio", 1]]]] > 0.1, True, TestID -> "Pitched-track-sounds"]
+VerificationTest[Round[QuantityMagnitude[Duration[AnimatedGraphics[{Backdrop[Black], Track["bd*4"]}, "Duration" -> 1, "CyclesPerSecond" -> 1/2]["Audio"]], "Seconds"], 0.01], 2., TestID -> "AnimatedGraphics-sound-tempo"]
 VerificationTest[Length[Instrument[]], 26, TestID -> "Instrument-list"]
-VerificationTest[With[{a = Audio[Mixer["Sidechain" -> Track[{{0, 1/4, "bd"}}]][Track[{Instrument["Kick"][Track[{{0, 1/4, "bd"}}]], Instrument["Pluck"][Track[{{1/2, 1/8, 69, 0.8}}]]}]], 1, "CyclesPerSecond" -> 1/2]},
+VerificationTest[With[{a = Mixer["Sidechain" -> Track[{{0, 1/4, "bd"}}]][Track[{Instrument["Kick"][Track[{{0, 1/4, "bd"}}]], Instrument["Pluck"][Track[{{1/2, 1/8, 69, 0.8}}]]}]]["Audio", 1, "CyclesPerSecond" -> 1/2]},
     {AudioChannels[a], Round[QuantityMagnitude[Duration[a], "Seconds"], 0.01], AudioMeasurements[a, "Max"] > 0.1}], {2, 2., True}, TestID -> "Instrument-mix"]
-VerificationTest[Block[{$CyclesPerSecond = 1}, With[{a = Audio[Track[{{0, 1/4, "bd", 1}, {1/2, 1/4, "bd", 0.1}}], 1, "CyclesPerSecond" -> 1]},
+VerificationTest[Block[{$CyclesPerSecond = 1}, With[{a = Track[{{0, 1/4, "bd", 1}, {1/2, 1/4, "bd", 0.1}}]["Audio", 1, "CyclesPerSecond" -> 1]},
     With[{d = Abs[First[AudioData[a]]]}, Max[d[[;; 20000]]] > 3 Max[d[[22051 ;; 42000]]]]]], True, TestID -> "Kit-velocity"]
-VerificationTest[With[{a = Audio[Instrument["Pan" -> -1][Track["c4"]], 1, "CyclesPerSecond" -> 1]}, Max[Abs[AudioData[a][[1]]]] > 2 Max[Abs[AudioData[a][[2]]]]], True, TestID -> "Instrument-pan"]
+VerificationTest[With[{a = Instrument["Pan" -> -1][Track["c4"]]["Audio", 1, "CyclesPerSecond" -> 1]}, Max[Abs[AudioData[a][[1]]]] > 2 Max[Abs[AudioData[a][[2]]]]], True, TestID -> "Instrument-pan"]
 VerificationTest[Head[TrackView["Punchcard", "Cycles" -> 4][Track["bd*4"]]["Punchcard"]], Graphics, TestID -> "TrackView-punchcard"]
 VerificationTest[TrackView["Cycles" -> 4][Track["bd*4"]]["Cycles"], 4, TestID -> "TrackView-cycles"]
 VerificationTest[{Options[AnimatedGraphics[{Disk[]}, PlotTheme -> "Paper", "Duration" -> 1][0], Background], Options[AnimatedGraphics[{Disk[]}, "Duration" -> 1][0], Background]},

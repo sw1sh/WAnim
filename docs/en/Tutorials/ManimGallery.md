@@ -36,7 +36,7 @@ A scene of a given length in Manim's frame, 14.2 by 8 about the origin; played a
 
 ```wl
 scene[content_, dur_, opts___] := AnimatedGraphics[Flatten[{content}], opts, PlotRange -> {{-64/9, 64/9}, {-4, 4}}, "Duration" -> dur];
-play[g_] := AnimatedImage[g, FrameRate -> 12, ImageSize -> 360];
+play[g_] := g["AnimatedImage", FrameRate -> 12, ImageSize -> 360];
 still[g_] := g[g["Duration"] - 10^-3, ImageSize -> 480];
 dot[p_, col_ : White, r_ : 0.08] := {col, Disk[p, r]};
 ```

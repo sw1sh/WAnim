@@ -48,7 +48,7 @@ Track["bd [~ bd] sd ~, hh*8"]["Query", 0, 1/2][[All, "Value"]]
 Rendered for a cycle at 120 BPM:
 
 ```wl
-Audio[Track["bd [~ bd] sd ~, hh*8"], 1, "CyclesPerSecond" -> 1/2]
+Track["bd [~ bd] sd ~, hh*8"]["Audio", 1, "CyclesPerSecond" -> 1/2]
 ```
 
 <!-- => two seconds of a drum beat -->
@@ -108,7 +108,7 @@ Track[{Instrument["Kick"][Track["bd*4"]], Instrument["Pluck"][Track["<c4 e4> g4 
 Notation:
 
 ```wl
-MusicPlot[Track["c4 e4 g4 [a4 b4]"]]
+Track["c4 e4 g4 [a4 b4]"]["MusicPlot"]
 ```
 
 <!-- => a bar of notes on a staff -->

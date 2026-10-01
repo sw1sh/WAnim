@@ -266,7 +266,7 @@ Mixer["Sidechain" -> kick, "Cutoff" -> (600 20^(Mod[#, 4] / 4) &)][trance]["Vide
 The same structure as a score:
 
 ```wl
-MusicPlot[Track["<[c4,eb4,g4] [ab3,c4,eb4]> [g4 f4 eb4 d4]"], 2]
+Track["<[c4,eb4,g4] [ab3,c4,eb4]> [g4 f4 eb4 d4]"]["MusicPlot", 2]
 ```
 
 ## Pictures That Listen
@@ -284,7 +284,7 @@ In an [AnimatedGraphics]() the Track is the sound, and its pulse moves the pictu
 ```wl
 g = AnimatedGraphics[{Function[t, {Orange, Disk[{0, 0}, 1 + 0.4 TrackPulse[Track["bd*4"], 12][t]]}], Track["bd*4, ~ cp"]},
     PlotRange -> {{-2, 2}, {-2, 2}}, "Duration" -> 2, "CyclesPerSecond" -> 1/2];
-Video[g, FrameRate -> 30]
+g["Video", FrameRate -> 30]
 ```
 
 ## Strudel Shortcuts

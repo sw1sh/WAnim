@@ -42,6 +42,9 @@ dly::usage = "dly[d] is Instrument[\"Delay\" -> d].";
 dec::usage = "dec[d] is Instrument[\"Decay\" -> d], in cycles.";
 instrument::usage = "instrument[name] is Instrument[name].";
 
+(* the definitions in a private context: their pattern variables (a, x, t, f, ...) must not become public symbols *)
+Begin["`Private`"]
+
 s[a_] := Track[a];
 sound[a_] := Track[a];
 note[a_] := Track[a];
@@ -72,5 +75,7 @@ room[r_] := Instrument["Reverb" -> r];
 dly[d_] := Instrument["Delay" -> d];
 dec[d_] := Instrument["Decay" -> d];
 instrument[name_] := Instrument[name];
+
+End[]
 
 EndPackage[]

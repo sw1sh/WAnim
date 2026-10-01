@@ -199,7 +199,7 @@ labelOf[v_] := With[{ps = valuePitches[v]}, If[ps === {}, ToString[v, InputForm]
 (* ::Subsection:: *)
 (*Notation*)
 
-(* MusicPlot[track, n] and Sound[track, n]: each voice as a MusicVoice, simultaneous notes as chords *)
+(* track["MusicPlot", n] and track["Sound", n]: each voice as a MusicVoice, simultaneous notes as chords *)
 eventsToVoice[events_, n_] := Module[{items = {}, t = 0, dur, pitches},
     KeyValueMap[(dur = Min[#2[[All, "Whole"]] /. {b_, e_} :> e - b];
         If[#1 > t, AppendTo[items, MusicRest[#1 - t]]];
@@ -210,8 +210,8 @@ eventsToVoice[events_, n_] := Module[{items = {}, t = 0, dur, pitches},
     MusicVoice[If[items === {}, {MusicRest[n]}, items]]];
 trackScore[t_, n_] := MusicScore[eventsToVoice[Select[#["Query", 0, n], hasOnset[#] && ! restQ[#["Value"]] &], n] & /@ voicesOf[t],
     MusicTimeSignature[4, 4], MusicTempo -> 240 $CyclesPerSecond];
-Track /: MusicPlot[t_Track, n_ : Automatic, opts___] := MusicPlot[trackScore[t, Replace[n, Automatic :> cyclesOf[t]]], opts];
-Track /: Sound[t_Track, n_ : Automatic] := Sound[trackScore[t, Replace[n, Automatic :> cyclesOf[t]]]];
+(t_Track)["MusicPlot", n : (_ ? NumericQ | Automatic) : Automatic, opts___] := MusicPlot[trackScore[t, Replace[n, Automatic :> cyclesOf[t]]], opts];
+(t_Track)["Sound", n : (_ ? NumericQ | Automatic) : Automatic] := Sound[trackScore[t, Replace[n, Automatic :> cyclesOf[t]]]];
 
 
 (* ::Section:: *)

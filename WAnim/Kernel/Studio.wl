@@ -379,7 +379,7 @@ mixBuses[bus0_, len_, n_, t_] := Module[{bus = bus0, sr = studioRate[], cs = cyc
     If[NumericQ[fade] && fade > 0, With[{m = Min[n, samples[fade cs]]}, mix[[All, n - m + 1 ;; n]] = (Cos[Range[0, m - 1] / m Pi / 2] #) & /@ mix[[All, n - m + 1 ;; n]]]];
     mix];
 
-(* Audio[track, n] is n cycles of it (by default its "Cycles"), at "CyclesPerSecond" *)
+(* track["Audio", n] is n cycles of it (by default its "Cycles"), at "CyclesPerSecond" *)
 Options[trackAudio] = {"CyclesPerSecond" :> $CyclesPerSecond};
-Track /: Audio[t_Track, n : (_ ? NumericQ | Automatic) : Automatic, opts : OptionsPattern[trackAudio]] :=
+(t_Track)["Audio", n : (_ ? NumericQ | Automatic) : Automatic, opts : OptionsPattern[trackAudio]] :=
     Block[{$CyclesPerSecond = OptionValue[trackAudio, {opts}, "CyclesPerSecond"]}, renderAudio[t, Replace[n, Automatic :> cyclesOf[t]]]];

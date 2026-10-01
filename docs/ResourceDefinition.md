@@ -63,7 +63,7 @@ AnimatedGraphics[{Backdrop[RGBColor["#F4F1EA"]], TitleCard["Mathematica", {0, 2}
 A drum pattern, rendered for one cycle:
 
 ```wl
-Audio[Track["bd [~ bd] sd ~, hh*8"], 1]
+Track["bd [~ bd] sd ~, hh*8"]["Audio", 1]
 ```
 
 <!-- => an Audio object of a drum beat -->

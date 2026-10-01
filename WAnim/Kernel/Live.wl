@@ -363,12 +363,11 @@ Track /: MakeBoxes[t_Track /; t["Source"] === None, TraditionalForm] := With[{bo
 (* ::Subsection:: *)
 (*Video*)
 
-(* track["Video", n] and Video[track, n]: the live view playing through n cycles (by default its "Cycles"),
+(* track["Video", n]: the live view playing through n cycles (by default its "Cycles"),
    with its sound -- a player that works anywhere a Video does, the cloud included.  "View" picks the
    views (Automatic: the track's own, a PianoRoll unless TrackView set others), "Theme" the colours. *)
 Options[trackVideo] = {"View" -> Automatic, FrameRate -> 24, ImageSize -> 640, "Theme" -> "Dark", "CyclesPerSecond" :> $CyclesPerSecond};
 (t_Track)["Video", n : (_ ? NumericQ | Automatic) : Automatic, opts : OptionsPattern[trackVideo]] := trackVideo[t, n, opts];
-Track /: Video[t_Track, n : (_ ? NumericQ | Automatic) : Automatic, opts : OptionsPattern[trackVideo]] := trackVideo[t, n, opts];
 trackVideo[t_, n0_, opts___] := Block[{$CyclesPerSecond = OptionValue[trackVideo, {opts}, "CyclesPerSecond"]},
     Module[{n = Replace[n0, Automatic :> cyclesOf[t]], fps = OptionValue[trackVideo, {opts}, FrameRate], size = OptionValue[trackVideo, {opts}, ImageSize],
             pick = If[OptionValue[trackVideo, {opts}, "Theme"] === "Light", First, Last], views, aud, dir, wav, file},

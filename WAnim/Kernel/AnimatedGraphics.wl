@@ -36,7 +36,7 @@ PackageScoped[{directiveQ, summaryIcon, encodeVideo}]
    (1 by default, a cycle a second).
 
    g[t] is the frame at time t as Graphics; Export["film.mp4", g] renders it, frames in parallel, with
-   its sound; Video[g], AnimatedImage[g] and Audio[g] give it as those. *)
+   its sound; g["Video"], g["AnimatedImage"] and g["Audio"] give it as those. *)
 
 Options[AnimatedGraphics] = {
     PlotRange -> Automatic, "CanvasSize" -> {1920, 1080}, "Screen" -> Automatic, PlotTheme -> Automatic, Background -> Automatic, ImageSize -> Automatic,
@@ -301,15 +301,15 @@ foleyVoices[ev_] := Join[
     If[FreeQ[ev, "Tick"], {}, {Instrument["Tick"][Track[Cases[ev, {t_, "Tick", v_} :> {t, 1/100, 1, v}]]]}],
     If[FreeQ[ev, "Blip"], {}, {Instrument["Blip"][Track[Cases[ev, {t_, "Blip", v_} :> {t, 1/20, 91, v}]]]}]];
 
-(* Audio[g]: its sound over its duration, the foley mixed with the first Track that starts with it, through
+(* g["Audio"]: its sound over its duration, the foley mixed with the first Track that starts with it, through
    the same studio and mixer, when "Foley" -> True *)
-AnimatedGraphics /: Audio[g : AnimatedGraphics[a_ ? agDataQ]] := Module[{cps = agOption[g, "CyclesPerSecond"], dur = g["Duration"], ss = sounds[g, 0], fv, k, rendered, mix},
+(g : AnimatedGraphics[a_ ? agDataQ])["Audio"] := Module[{cps = agOption[g, "CyclesPerSecond"], dur = g["Duration"], ss = sounds[g, 0], fv, k, rendered, mix},
     fv = If[TrueQ[agOption[g, "Foley"]], foleyVoices[foley[g, 0]], {}];
     If[fv =!= {}, k = FirstPosition[ss, {0, _Track}, None, {1}];
         ss = If[k === None, Append[ss, {0, Track[fv]}],
             MapAt[Replace[#, {0, t_Track} :> {0, Track[Join[{Track[First[t], KeyDrop[metaOf[t], "Mixer"]]}, fv], KeyTake[metaOf[t], "Mixer"]]}] &, ss, k]]];
     If[ss === {}, Return[None]];
-    rendered = Map[With[{au = If[MatchQ[#[[2]], _Audio], #[[2]], Audio[#[[2]], Max[1, Ceiling[dur - #[[1]]]], "CyclesPerSecond" -> cps]]},
+    rendered = Map[With[{au = If[MatchQ[#[[2]], _Audio], #[[2]], #[[2]]["Audio", Max[1, Ceiling[dur - #[[1]]]], "CyclesPerSecond" -> cps]]},
         If[#[[1]] > 0, AudioPad[au, {#[[1]] / cps, 0}], au]] &, ss];
     mix = AudioTrim[If[Length[rendered] == 1, First[rendered], AudioOverlay[rendered]], dur / cps];
     AudioPad[mix, {0, Max[0, dur / cps - QuantityMagnitude[Duration[mix], "Seconds"]]}]];
@@ -331,7 +331,7 @@ frameImage[g_, t_, renderer_ : Automatic] := With[{gr = g[t, ImageSize -> agOpti
 Options[agExport] = {"From" -> 0, "To" -> Automatic, FrameRate -> Automatic, "KernelInitialization" :> Null,
     "Parallel" -> True, "Kernels" -> 4, "Renderer" -> Automatic, "FrameDirectory" -> Automatic, "CRF" -> 18, "Chunk" -> 60};
 AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts___] /; ToLowerCase[FileExtension[file]] === "gif" :=
-    Export[file, AnimatedImage[g, opts]];
+    Export[file, g["AnimatedImage", opts]];
 AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts : OptionsPattern[agExport]] := Module[{
     from = OptionValue[agExport, {opts}, "From"], to = Replace[OptionValue[agExport, {opts}, "To"], Automatic :> g["Duration"]],
     fps = Replace[OptionValue[agExport, {opts}, FrameRate], Automatic :> agOption[g, FrameRate]],
@@ -366,7 +366,7 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts 
         wav = soundtrack[g, from, to, dir]];
     encodeVideo[dir, fps, wav, file, OptionValue[agExport, {opts}, "CRF"]]];
 (* the film's sound from "From" to "To", as a WAV file in dir, or None for a silent film *)
-soundtrack[g_, from_, to_, dir_] := With[{aud = Audio[g]},
+soundtrack[g_, from_, to_, dir_] := With[{aud = g["Audio"]},
     If[aud === None, None, Export[FileNameJoin[{dir, "soundtrack.wav"}], AudioTrim[aud, Quantity[{from, to} / agOption[g, "CyclesPerSecond"], "Seconds"]]]]];
 
 (* frames f000001.png, ... in dir, and a sound or None, encoded by ffmpeg into file *)
@@ -378,14 +378,14 @@ encodeVideo[dir_, fps_, wav_, file_, crf_] := Module[{ffmpeg, res},
         If[wav === None, {}, {"-c:a", "aac", "-b:a", "256k", "-shortest"}],
         {"-movflags", "+faststart", ExpandFileName[file]}]];
     If[res["ExitCode"] =!= 0, Failure["FFmpeg", <|"MessageTemplate" -> res["StandardError"]|>], ExpandFileName[file]]];
-(* Video[g]: rendered to a temporary file *)
-AnimatedGraphics /: Video[g : AnimatedGraphics[_ ? agDataQ], opts___] := With[{f = Export[FileNameJoin[{$TemporaryDirectory, CreateUUID["wanim-"] <> ".mp4"}], g, opts]},
+(* g["Video"]: rendered to a temporary file *)
+(g : AnimatedGraphics[_ ? agDataQ])["Video", opts___] := With[{f = Export[FileNameJoin[{$TemporaryDirectory, CreateUUID["wanim-"] <> ".mp4"}], g, opts]},
     If[StringQ[f], Video[f], f]];
 
-(* AnimatedImage[g]: small and self-contained, it plays in a notebook and in the cloud; frames at
+(* g["AnimatedImage"]: small and self-contained, it plays in a notebook and in the cloud; frames at
    "Resolution" times the size they are shown at, so thin lines stay crisp *)
 Options[agAnimatedImage] = {"From" -> 0, "To" -> Automatic, FrameRate -> 15, ImageSize -> 480, "Resolution" -> 2};
-AnimatedGraphics /: AnimatedImage[g : AnimatedGraphics[_ ? agDataQ], opts : OptionsPattern[agAnimatedImage]] := Module[{
+(g : AnimatedGraphics[_ ? agDataQ])["AnimatedImage", opts : OptionsPattern[agAnimatedImage]] := Module[{
     from = OptionValue[agAnimatedImage, {opts}, "From"], to = Replace[OptionValue[agAnimatedImage, {opts}, "To"], Automatic :> Max[g["Duration"], 10^-3]],
     fps = OptionValue[agAnimatedImage, {opts}, FrameRate], cps = agOption[g, "CyclesPerSecond"], size = OptionValue[agAnimatedImage, {opts}, ImageSize],
     k = OptionValue[agAnimatedImage, {opts}, "Resolution"]},
@@ -397,7 +397,7 @@ AnimatedGraphics /: AnimatedImage[g : AnimatedGraphics[_ ? agDataQ], opts : Opti
    the picture (or the button) to play or pause; drag the slider to scrub. *)
 Options[agPlayer] = {ImageSize -> 960, UpdateInterval -> 1 / 30, "StartTime" -> 0};
 (g : AnimatedGraphics[a_ ? agDataQ])["Dynamic", opts : OptionsPattern[agPlayer]] := With[{
-    dur = g["Duration"], spc = 1 / agOption[g, "CyclesPerSecond"], aud = Audio[g],
+    dur = g["Duration"], spc = 1 / agOption[g, "CyclesPerSecond"], aud = g["Audio"],
     size = OptionValue[agPlayer, {opts}, ImageSize], dt = OptionValue[agPlayer, {opts}, UpdateInterval], t0 = OptionValue[agPlayer, {opts}, "StartTime"],
     defs = userDefinitions[g]},
     DynamicModule[{t = t0, playing = False, stream = None, begin = 0.},

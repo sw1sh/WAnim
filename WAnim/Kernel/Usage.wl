@@ -7,7 +7,7 @@
 (*AnimatedGraphics and elements*)
 
 AnimatedGraphics::usage = "AnimatedGraphics[{content, \[Ellipsis]}] is graphics in time: graphics primitives, {t0, t1} -> x shown from t0 to t1, functions of time, elements such as TitleCard and nested AnimatedGraphics, and Track or Audio for its sound.
-AnimatedGraphics[\[Ellipsis]][t] is the frame at time t; Export[\"file.mp4\", g], Video[g], AnimatedImage[g] and Audio[g] render it; g[\"Play\", effect] plays an AnimationEffect after the ones before.
+AnimatedGraphics[\[Ellipsis]][t] is the frame at time t; Export[\"file.mp4\", g], g[\"Video\"], g[\"AnimatedImage\"] and g[\"Audio\"] render it; g[\"Play\", effect] plays an AnimationEffect after the ones before.
 AnimatedGraphics[\"tex\"] and AnimatedGraphics[{\"tex1\", \"tex2\", \[Ellipsis]}] typeset TeX with MaTeX, the parts as g[\"Part\", i].";
 Backdrop::usage = "Backdrop[colour] fills the canvas with colour; Backdrop[colour, {t0, t1}] only between t0 and t1. The colour may be a function of time, and it can fade in and out.";
 Easing::usage = "Easing[name] is an easing curve on [0, 1], such as \"Linear\", \"Smooth\", \"InOutCubic\", \"OutExpo\" or \"OutBack\".
@@ -88,7 +88,7 @@ BraceLabel::usage = "BraceLabel[g] is a curly brace under an AnimatedGraphics, t
 
 Track::usage = "Track[\"mini-notation\"] is a cyclic pattern of events, such as Track[\"bd [~ bd] sd, hh*8\"].
 Track[{{onset, duration, value}, \[Ellipsis]}] plays exactly those events, a fourth element being the velocity; Track[{track1, track2, \[Ellipsis]}] stacks voices; Track[] is silence.
-Audio[track, n] renders n cycles; track[\"Query\", a, b] gives the events between a and b; it shows itself as a live player.";
+track[\"Audio\", n] renders n cycles; track[\"Query\", a, b] gives the events between a and b; it shows itself as a live player.";
 TrackSpeed::usage = "TrackSpeed[r][track] plays track r times faster; r < 1 plays it slower.";
 TrackShift::usage = "TrackShift[t][track] plays track t cycles later; t < 0 plays it earlier.";
 TrackSequence::usage = "TrackSequence[track1, track2, \[Ellipsis]] plays the tracks one after another within each cycle.";

@@ -174,7 +174,7 @@ Table[AnimatedGraphics[{Backdrop[Black], {0, 1} -> Function[t, CanvasDisk[{960 +
 A drum track as the sound, eight bars at 120 BPM, sixteen seconds:
 
 ```wl
-Duration[Audio[AnimatedGraphics[{Backdrop[Black], Track["bd [~ bd] sd ~, hh*8"]}, "Duration" -> 8, "CyclesPerSecond" -> 1/2]]]
+Duration[AnimatedGraphics[{Backdrop[Black], Track["bd [~ bd] sd ~, hh*8"]}, "Duration" -> 8, "CyclesPerSecond" -> 1/2]["Audio"]]
 ```
 
 <!-- => 16 s -->
