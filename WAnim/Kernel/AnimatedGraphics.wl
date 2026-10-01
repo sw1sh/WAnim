@@ -349,9 +349,9 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts 
         With[{frame = Unique["WAnimVideoFrame"], times = times, dir = dir, chunks = Partition[Range[n], UpTo[OptionValue[agExport, {opts}, "Chunk"]]]},
             (* rasterizing needs a front end; subkernels do not always come with one *)
             ParallelEvaluate[frame[i_] := UsingFrontEnd[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]]]]]];
-            (* the content's own functions (a notebook's colours, tracks, helpers) live in the caller's
-               context, which distribution from this package does not follow by itself *)
-            DistributeDefinitions @@ Flatten[Hold @@ Union[Cases[g, s_Symbol /; MemberQ[{"Global`", $Context}, Context[s]] :> Hold[s], {0, Infinity}, Heads -> True]], 1, Hold];
+            (* the content's own functions (a notebook's colours, tracks, helpers), and only those: the package
+               and its caches (Spikey models, sprites, sounds) stay out, each kernel has WAnim of its own *)
+            With[{defs = userDefinitions[g]}, ParallelEvaluate[restoreDefinitions[defs]]];
             (* a front end grows with every picture it rasterizes, so each kernel starts a fresh one
                after every chunk: memory stays bounded however long the film *)
             ParallelDo[Scan[frame, c]; Developer`UninstallFrontEnd[], {c, chunks}, Method -> "FinestGrained"];

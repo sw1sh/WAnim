@@ -96,9 +96,12 @@ sessionFoley[cs_] := Join @@ Map[Switch[#["kind"],
     _, {}] &, cs];
 
 (* "From" -> previous session wipes this era in over the last picture of the previous one ("Enter" ->
-   "Wipe" in a tenth of a cycle, unless told otherwise).  A wipe only needs that picture, so it is kept
-   instead of the whole previous session (which would carry its own predecessor, and so on down the film) *)
-sessionOptions[opts_List, t0_] := With[{o = Replace[opts, ("From" -> g_AnimatedGraphics) :> ("From" -> <|"Screen" -> g["Screen"][t0 - 10^-3]|>), {1}]},
+   "Wipe" in a tenth of a cycle, unless told otherwise).  A wipe only needs that picture, so it is kept, as
+   an image, instead of the whole previous session (which would carry its own predecessor, and so on down
+   the film: a film's sessions then weigh gigabytes, copied to every kernel that renders it) *)
+screenPicture[prims_] := CanvasImage[Rasterize[Graphics[canvasResolve[{1920, 1080}, prims], PlotRange -> {{0, 1920}, {0, 1080}}, PlotRangePadding -> None,
+    ImagePadding -> None, ImageSize -> 1920, Background -> None], "Image", Background -> None, ImageResolution -> 72], {0, 0, 1920, 1080}];
+sessionOptions[opts_List, t0_] := With[{o = Replace[opts, ("From" -> g_AnimatedGraphics) :> ("From" -> <|"Screen" -> screenPicture[g["Screen"][t0 - 10^-3]]|>), {1}]},
     If[MatchQ[ov[o, "From"], _Association] && MissingQ[ov[o, "Enter"]], Join[o, {"Enter" -> "Wipe", "EnterTime" -> Replace[ov[o, "EnterTime"], _Missing -> 0.1]}], o]];
 
 (* number the cells, add evaluated outputs, turn expressions into pictures once *)
