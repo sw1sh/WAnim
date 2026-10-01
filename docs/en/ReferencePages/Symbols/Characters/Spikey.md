@@ -21,7 +21,7 @@ RelatedGuides: [WAnim]
 - "Version" and "Display" may be functions of time, so one Spikey lives through the eras without restarting its dance.
 - "Face" -> True gives it the face of the personified Spikey of "The Story of Spikey": glasses, eyebrows and an open smile; "Raise" (0 to 1) lifts its right hand and "Blink" -> True shuts its eyes happily.
 - Position, "Radius", "Dance", "Raise" and "Blink" may be functions of time too, so Spikey can walk, grow and wave.
-- "Pulse" -> *track* squashes it on each onset of *track* (see [TrackPulse]()); "BeatsPerCycle" sets the sway.
+- "Pulse" -> *track* pulses it on each onset of *track* (see [TrackPulse]()); its centre never moves.
 
 | Option | Default | Description |
 | --- | --- | --- |
@@ -29,8 +29,7 @@ RelatedGuides: [WAnim]
 | "Display" | Automatic | "1Bit" or "Gray" for old displays |
 | "Radius" | 46 | size in pixels |
 | "Pulse" | None | a Track to dance to |
-| "BeatsPerCycle" | 4 | sway beats per timeline unit |
-| "Dance" | 1 | how much it moves |
+| "Dance" | 1 | how strongly it pulses |
 | "Face" | False | glasses, eyebrows and a smile |
 | "Raise" | 0 | how high the right hand is |
 | "Blink" | False | eyes shut |
