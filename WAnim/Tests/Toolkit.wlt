@@ -98,3 +98,11 @@ VerificationTest[
     GPUGraphics[{Arrow[{{0, 0}, {1, 1}}]}, PlotRange -> {{0, 1}, {0, 1}}]["Message"],
     "unsupported: Arrow",
     TestID -> "GPUGraphics-unsupported"]
+
+(* ArchiveClip: a film's picture over its span, its sound a voice the music ducks under *)
+VerificationTest[
+    Module[{f = FileNameJoin[{$TemporaryDirectory, "wanim-clip-test.mp4"}], g, a},
+        Export[f, Video[AnimatedGraphics[{Backdrop[Red]}, "Duration" -> 1, "CanvasSize" -> {160, 90}, "Parallel" -> False]["Video", "Parallel" -> False]]];
+        g = AnimatedGraphics[{ArchiveClip[f, {0, 1}, "Style" -> "Full", "Sound" -> False]}, "Duration" -> 1, "CanvasSize" -> {160, 90}];
+        Count[g[0.5], _Image, Infinity] > 0],
+    True, TestID -> "ArchiveClip-draws"]

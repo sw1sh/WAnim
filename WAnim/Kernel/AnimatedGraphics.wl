@@ -181,7 +181,7 @@ at[l_List, T_] := at[#, T] & /@ l;
 at[(Rule | RuleDelayed)[{t0_, t1_}, x_], T_] := If[t0 <= T < t1, If[MatchQ[x, _AnimatedGraphics], x["Update", T - t0], at[x, T]], Nothing];
 at[f_Function, T_] := at[f[T], T];
 at[g_AnimatedGraphics, T_] := g["Update", T];
-at[_Track | _Audio, _] := Nothing;
+at[_Track | _Audio | _clipVoice, _] := Nothing;
 at[x_, _] := x;
 
 
@@ -287,7 +287,7 @@ sizeRuleList[w_] := {
 (* what it makes heard: {offset, sound} for every Track or Audio in it, nested ones shifted by their spans *)
 sounds[l_List, off_] := Join @@ (sounds[#, off] & /@ l);
 sounds[(Rule | RuleDelayed)[{t0_ ? NumericQ, _}, x_], off_] := sounds[x, off + t0];
-sounds[s : _Track | _Audio, off_] := {{off, s}};
+sounds[s : _Track | _Audio | _clipVoice, off_] := {{off, s}};
 sounds[AnimatedGraphics[a_], off_] := sounds[a["Primitives"], off];
 sounds[_, _] := {};
 (* key presses and blips from the tools that type and evaluate *)
@@ -309,10 +309,21 @@ foleyVoices[ev_] := Join[
         ss = If[k === None, Append[ss, {0, Track[fv]}],
             MapAt[Replace[#, {0, t_Track} :> {0, Track[Join[{Track[First[t], KeyDrop[metaOf[t], "Mixer"]]}, fv], KeyTake[metaOf[t], "Mixer"]]}] &, ss, k]]];
     If[ss === {}, Return[None]];
-    rendered = Map[With[{au = If[MatchQ[#[[2]], _Audio], #[[2]], #[[2]]["Audio", Max[1, Ceiling[dur - #[[1]]]], "CyclesPerSecond" -> cps]]},
+    rendered = Map[With[{au = Switch[#[[2]], _Audio, #[[2]], _clipVoice, #[[2, 1]], _, #[[2]]["Audio", Max[1, Ceiling[dur - #[[1]]]], "CyclesPerSecond" -> cps]]},
         If[#[[1]] > 0, AudioPad[au, {#[[1]] / cps, 0}], au]] &, ss];
-    mix = AudioTrim[If[Length[rendered] == 1, First[rendered], AudioOverlay[rendered]], dur / cps];
-    AudioPad[mix, {0, Max[0, dur / cps - QuantityMagnitude[Duration[mix], "Seconds"]]}]];
+    (* an ArchiveClip's sound is a voice: the rest ducks beneath it *)
+    With[{voice = MatchQ[#[[2]], _clipVoice] & /@ ss}, mix = fitTo[duckUnder[Pick[rendered, voice, False], Pick[ss, voice], cps], dur / cps];
+        If[Or @@ voice, fitTo[AudioOverlay[Prepend[Pick[rendered, voice], mix]], dur / cps], mix]]];
+fitTo[a_, secs_] := With[{t = AudioTrim[a, secs]}, AudioPad[t, {0, Max[0, secs - QuantityMagnitude[Duration[t], "Seconds"]]}]];
+(* the music, at the gain each voice (an ArchiveClip's sound) asks for while it speaks, easing in and out
+   over a fifth of a second *)
+duckUnder[{}, _, _] := None;
+duckUnder[music_List, voices_, cps_] := With[{m = If[Length[music] == 1, First[music], AudioOverlay[music]]},
+    If[voices === {}, m, Module[{sr = AudioSampleRate[m], data = AudioData[m], x, gain},
+        x = N[Range[0, Length[First[data]] - 1] / QuantityMagnitude[sr]];
+        gain = Times @@ Table[With[{a = v[[1]] / cps, b = v[[1]] / cps + QuantityMagnitude[Duration[v[[2, 1]]], "Seconds"], g = v[[2, 2]]},
+            1 - (1 - g) Clip[Clip[(x - a + 0.2) / 0.2, {0, 1}] - Clip[(x - b) / 0.3, {0, 1}], {0, 1}]], {v, voices}];
+        Audio[(# gain) & /@ data, SampleRate -> sr]]]];
 
 
 (* ::Section:: *)

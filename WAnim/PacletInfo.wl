@@ -21,6 +21,7 @@ PacletObject[<|
       "Symbols" -> {
         "WolframInstitute`WAnim`AnimatedGraphics",
         "WolframInstitute`WAnim`AnimationEffect",
+        "WolframInstitute`WAnim`ArchiveClip",
         "WolframInstitute`WAnim`AutomatonTape",
         "WolframInstitute`WAnim`Backdrop",
         "WolframInstitute`WAnim`BraceLabel",

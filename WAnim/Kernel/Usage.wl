@@ -115,3 +115,4 @@ Instrument::usage = "Instrument[name][track] plays track on an instrument synthe
 Instrument[opts][track] sets how it sounds: \"Gain\", \"Pan\", \"Reverb\" and \"Delay\" sends, and \"Decay\" in cycles.";
 Mixer::usage = "Mixer[opts][track] sets how track is mixed: \"Sidechain\" -> a track to duck under, \"Cutoff\" -> f for a low-pass on the music bus at f[cycle] Hz, \"DelayTime\", \"DelayFeedback\", \"Master\" and \"FadeOut\", times in cycles.";
 GPUGraphics::usage = "GPUGraphics[graphics] draws a Graphics on the GPU, without the front end, into an Image; GPUGraphics[primitives, options] takes what Graphics takes.";
+ArchiveClip::usage = "ArchiveClip[video, {t0, t1}] plays an archival film over its span: its picture as a print or full frame, its sound in the soundtrack with the music ducked beneath it; \"From\" and \"To\" pick the moment, \"Credit\" and \"Subtitle\" caption it.";
