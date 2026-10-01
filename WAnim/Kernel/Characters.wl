@@ -172,11 +172,17 @@ wordDraw[{name_, at_, size_, width_, x_, y_}, t_, presence_, o_] := Module[{age 
     s = size (0.6 + 0.4 pop) (1 + 0.25 heat);
     CanvasText[name, {x + width (1 - s / size) / 2, y}, CanvasFont[defaultFont["Sans"], Round[4 s] / 4., weightNum[ov[o, FontWeight]]],
         If[heat > 0.02, Blend[{base, ov[o, "FlashColor"]}, heat], base], Opacity -> Clip[(0.18 + 0.82 presence) pop + 0.9 heat, {0, 1}]]];
-wallLayer[placed_, cutoff_, presence_, o_, size_] := wallLayer[placed, cutoff, presence, o, size] = Rasterize[
-    Graphics[canvasResolve[size, wordDraw[{#[[1]], #[[2]], #[[3]], #[[4]], #[[5]], #[[6]]}, Infinity, presence, o] & /@ Select[placed, #[[2]] <= cutoff &]],
-        PlotRange -> {{0, size[[1]]}, {0, size[[2]]}}, ImageSize -> size[[1]], PlotRangePadding -> None, ImagePadding -> None], "Image", Background -> ov[o, Background]];
-(* the settled layer is cached by its options, so colours changing over time are coarsened to a few steps *)
-coarseColors[o_] := Replace[o, (r : Rule | RuleDelayed)[k_, c_ ? ColorQ] :> r[k, RGBColor @@ Round[List @@ ColorConvert[c, "RGB"], 1/12]], {1}];
+(* the settled words all look alike -- one colour, one opacity -- so what is cached is only where they are: a
+   mask, rasterized once per half unit at 1.5 times the canvas (sharp under a camera's zoom), and coloured
+   every frame by arithmetic on it, so fading colours and presence cost nothing and fade smoothly *)
+wallMask[placed_, cutoff_, weight_, size_] := wallMask[placed, cutoff, weight, size] = Image[ColorConvert[Rasterize[
+    Graphics[canvasResolve[size, wordDraw[#, Infinity, 1, {"Color" -> White, "StrongColor" -> White, FontWeight -> weight}] & /@ Select[placed, #[[2]] <= cutoff &]],
+        PlotRange -> {{0, size[[1]]}, {0, size[[2]]}}, ImageSize -> size[[1]], PlotRangePadding -> None, ImagePadding -> None], "Image", Background -> Black, ImageResolution -> 108], "Grayscale"], "Real32"];
+(* the mask in colour c at opacity a over the background bg, or over nothing (bg None) *)
+wallLayer[mask_, c_, a_, bg_] := With[{m = a ImageData[mask], col = List @@ ColorConvert[c, "RGB"][[;; 3]]},
+    If[ColorQ[bg],
+        With[{b = List @@ ColorConvert[bg, "RGB"][[;; 3]]}, Image[Image[Transpose[Table[b[[k]] + (col[[k]] - b[[k]]) m, {k, 3}], {3, 1, 2}]], "Byte"]],
+        SetAlphaChannel[ConstantImage[c, ImageDimensions[mask], "Byte"], Image[Image[m], "Byte"]]]];
 (* Background -> colour (or a function of time) makes the settled layer opaque, the colour of what the
    wall sits on: a front end keeps a fresh copy of a transparent image every time it draws one, so a
    transparent full-frame layer would cost a frame's worth of memory per frame *)
@@ -194,8 +200,11 @@ inView[m_, {_, _, size_, width_, x_, y_}] := With[{a = m . {x, y - size, 1.}, b 
     a[[1]] < $canvasSize[[1]] && b[[1]] > 0 && a[[2]] < $canvasSize[[2]] && b[[2]] > 0];
 presenceAt[o_, t_] := Round[ov[o, "Presence"], 0.001];
 (* the page at rest: settled words from the cache, arriving ones drawn as they pop in *)
-wallPage[placed_, t_, o_, bg_] := With[{pr = presenceAt[o, t], cutoff = Floor[2 (t - 4)] / 2., lo = coarseColors[Join[{Background -> bg}, o]]},
-    {If[AnyTrue[placed, #[[2]] <= cutoff &], CanvasImage[wallLayer[placed, cutoff, pr, lo, $canvasSize], {0, 0, $canvasSize[[1]], $canvasSize[[2]]}], {}],
+(* words more than 2.5 units old have settled (their flash is under 2%), so they come from the layer; the
+   ones still arriving are drawn as type *)
+wallPage[placed_, t_, o_, bg_] := With[{pr = presenceAt[o, t], cutoff = Floor[2 (t - 2.5)] / 2.},
+    {If[AnyTrue[placed, #[[2]] <= cutoff &], CanvasImage[wallLayer[wallMask[placed, cutoff, ov[o, FontWeight], $canvasSize],
+        If[pr > 0.5, ov[o, "StrongColor"], ov[o, "Color"]], 0.18 + 0.82 pr, bg], {0, 0, $canvasSize[[1]], $canvasSize[[2]]}], {}],
      wordDraw[#, t, pr, o] & /@ Select[placed, cutoff < #[[2]] <= t &]}];
 (* the biggest words still on their way fly from "From" to their place *)
 flightDraw[placed_, t_, o_] := With[{from = layerPoint[ov[o, "Origin"]], ft = ov[o, "FlightTime"]},
