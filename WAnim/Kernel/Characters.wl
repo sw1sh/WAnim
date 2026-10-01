@@ -50,17 +50,19 @@ spikeyDisplay[img_, "1Bit"] := SetAlphaChannel[Binarize[ColorConvert[RemoveAlpha
 spikeyDisplay[img_, "Gray"] := SetAlphaChannel[ImageApply[Round[3 #] / 3 &, ColorConvert[RemoveAlphaChannel[img, White], "Grayscale"]], AlphaChannel[img]];
 spikeyDisplay[img_, _] := img;
 
-spikeyDraw[t_, {t0_, t1_}, o_] := Module[{p = layerPoint[ov[o, Position]], r, kick, beat, d = ov[o, "Dance"], v, m, spin, px, img, env = envelope[t, {t0, t1}, o]},
+spikeyDraw[t_, {t0_, t1_}, o_] := Module[{p = layerPoint[ov[o, Position]], r, kick, beat, d = ov[o, "Dance"], v, m, spin, tilt, px, img, env = envelope[t, {t0, t1}, o]},
     r = ov[o, "Radius"] env["Scale"];
     kick = If[ov[o, "Pulse"] === None, 0, d TrackPulse[ov[o, "Pulse"], 14][t]];
     beat = ov[o, "BeatsPerCycle"] t;
     v = spikeyVersion[ov[o, "Version"]]; m = spikeyModel[v];
     (* the spin, to 2 degrees, within the model's symmetry period; the image a little larger than drawn *)
     spin = 2 Round[Mod[ov[o, "Spin"] t / Degree, m["Period"]] / 2];
+    (* and it rocks towards and away from the viewer, as it always has: a tilt of 26 degrees, give or take 9 *)
+    tilt = 2 Round[(0.45 + 0.15 Sin[1.3 t]) / Degree / 2];
     px = 32 Ceiling[2.2 r / 32];
     If[r <= 0.5, {}, {
         If[TrueQ[ov[o, "Face"]], spikeyLimbs[p, r, t, ov[o, "Raise"]], {}],
-        img = spikeyDisplay[spikeySprite[v, spin, 26, px], ov[o, "Display"]];
+        img = spikeyDisplay[spikeySprite[v, spin, tilt, px], ov[o, "Display"]];
         CanvasTransform[CanvasTranslate[{p[[1]], p[[2]] - 0.12 r d Abs[Sin[Pi beat]]}] . CanvasRotate[0.22 d Sin[Pi beat]] . CanvasScale[{1 + 0.08 kick, 1 - 0.1 kick}],
             (* the image spans the model's box, 2.1 radii *)
             CanvasImage[img, {-1.05 r, -1.05 r, 2.1 r, 2.1 r}, Opacity -> env["Alpha"]]],
