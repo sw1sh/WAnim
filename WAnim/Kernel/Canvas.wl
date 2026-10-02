@@ -141,7 +141,10 @@ imageImpl[img_Image, {x_, y_, w_, h_}, opts : OptionsPattern[CanvasImage]] := Wi
     With[{d = ImageDimensions[img]}, With[{s = Min[w / d[[1]], h / d[[2]]]},
         imageImpl[img, {x + (w - d[[1]] s) / 2, y + (h - d[[2]] s) / 2, d[[1]] s, d[[2]] s}, Opacity -> a]]],
     With[{p = cxf[{x, y + h}], c = cxf[{x + w / 2, y + h / 2}], ang = cangle[]},
-        {cop[a], If[Abs[ang] < 10^-6, #, Rotate[#, -ang, c]] &[Inset[img, p, {Left, Bottom}, {w cscaleX[], h cscaleY[]}]]}]]];
+        {cop[a], If[Abs[ang] < 10^-6, #, Rotate[#, -ang, c]] &[Inset[faded[img, a $canvasAlpha], p, {Left, Bottom}, {w cscaleX[], h cscaleY[]}]]}]]];
+(* Opacity does not reach an inset image, so a fading image carries its opacity in its own alpha channel *)
+faded[img_, a_] := Which[a >= 0.999, img, a <= 0.001, SetAlphaChannel[img, 0],
+    True, SetAlphaChannel[img, If[ImageChannels[img] == 4 || ImageChannels[img] == 2, ImageMultiply[AlphaChannel[img], a], ConstantImage[a, ImageDimensions[img], "Byte"]]]];
 
 
 (* ::Section:: *)
