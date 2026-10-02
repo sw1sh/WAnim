@@ -320,10 +320,14 @@ fitTo[a_, secs_] := With[{t = AudioTrim[a, secs]}, AudioPad[t, {0, Max[0, secs -
    over a fifth of a second *)
 duckUnder[{}, _, _] := None;
 duckUnder[music_List, voices_, cps_] := With[{m = If[Length[music] == 1, First[music], AudioOverlay[music]]},
-    If[voices === {}, m, Module[{sr = AudioSampleRate[m], data = AudioData[m], x, gain},
-        x = Range[0., Length[First[data]] - 1.] / N[QuantityMagnitude[sr]]; (* packed: an unpacked time axis made this take hours *)
-        gain = Times @@ Table[With[{a = v[[1]] / cps, b = v[[1]] / cps + QuantityMagnitude[Duration[v[[2, 1]]], "Seconds"], g = v[[2, 2]]},
-            1 - (1 - g) Clip[Clip[(x - a + 0.2) / 0.2, {0, 1}] - Clip[(x - b) / 0.3, {0, 1}], {0, 1}]], {v, voices}];
+    If[voices === {}, m, Module[{sr = N[QuantityMagnitude[AudioSampleRate[m]]], data = AudioData[m], n, gain},
+        (* one gain curve, lowered only over each voice's own stretch (it eases in 0.2 s before, out 0.3 s after):
+           a whole-length curve per voice, 172 MB apiece for an 8-minute film, all held at once, crawled *)
+        n = Length[First[data]]; gain = ConstantArray[1., n];
+        Do[With[{a = v[[1]] / cps, b = v[[1]] / cps + QuantityMagnitude[Duration[v[[2, 1]]], "Seconds"], g = v[[2, 2]]},
+            With[{i0 = Clip[Floor[(a - 0.2) sr] + 1, {1, n}], i1 = Clip[Ceiling[(b + 0.3) sr] + 1, {1, n}]},
+                If[i1 > i0, With[{x = Range[i0 - 1., i1 - 1.] / sr},
+                    gain[[i0 ;; i1]] *= 1 - (1 - g) Clip[Clip[(x - a + 0.2) / 0.2, {0, 1}] - Clip[(x - b) / 0.3, {0, 1}], {0, 1}]]]]], {v, voices}];
         Audio[(# gain) & /@ data, SampleRate -> sr]]]];
 
 
