@@ -321,7 +321,7 @@ fitTo[a_, secs_] := With[{t = AudioTrim[a, secs]}, AudioPad[t, {0, Max[0, secs -
 duckUnder[{}, _, _] := None;
 duckUnder[music_List, voices_, cps_] := With[{m = If[Length[music] == 1, First[music], AudioOverlay[music]]},
     If[voices === {}, m, Module[{sr = AudioSampleRate[m], data = AudioData[m], x, gain},
-        x = N[Range[0, Length[First[data]] - 1] / QuantityMagnitude[sr]];
+        x = Range[0., Length[First[data]] - 1.] / N[QuantityMagnitude[sr]]; (* packed: an unpacked time axis made this take hours *)
         gain = Times @@ Table[With[{a = v[[1]] / cps, b = v[[1]] / cps + QuantityMagnitude[Duration[v[[2, 1]]], "Seconds"], g = v[[2, 2]]},
             1 - (1 - g) Clip[Clip[(x - a + 0.2) / 0.2, {0, 1}] - Clip[(x - b) / 0.3, {0, 1}], {0, 1}]], {v, voices}];
         Audio[(# gain) & /@ data, SampleRate -> sr]]]];
