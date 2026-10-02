@@ -359,8 +359,12 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts 
     (* a frame directory made here is deleted when done, encoded or not: a film's frames are tens of gigabytes *)
     own = OptionValue[agExport, {opts}, "FrameDirectory"] === Automatic;
     dir = If[own, CreateDirectory[], OptionValue[agExport, {opts}, "FrameDirectory"]];
-    (* every formula typeset here, once: the kernels that draw the frames find it on disk *)
-    Scan[texShape, DeleteDuplicates @ Cases[g, CanvasTeX[s_String, ___] :> s, Infinity]];
+    (* every formula typeset here, once: the kernels that draw the frames find it on disk.  A formula can be
+       chosen as the film plays ({"a", "b"}[[k]]), so every string in it that looks like TeX is typeset: the math
+       of "text $math$", and strings with a backslash, a sub- or superscript or braces *)
+    Quiet @ Scan[texShape, DeleteDuplicates @ Flatten @ Map[Which[StringContainsQ[#, "$"], Take[StringSplit[#, "$", All], {2, -1, 2}],
+            StringContainsQ[#, "\\" | "_" | "^" | "{"] && StringLength[#] < 200 && ! StringStartsQ[#, "/" | "http"], #, True, {}] &,
+        Cases[g, _String, Infinity]]];
     WithCleanup[
     n = Round[(to - from) fps / cps];
     times = from + Range[0, n - 1] cps / fps;
