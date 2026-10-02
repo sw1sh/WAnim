@@ -364,7 +364,10 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts 
        of "text $math$", and strings with a backslash, a sub- or superscript or braces *)
     Quiet @ Scan[texShape, DeleteDuplicates @ Flatten @ Map[Which[StringContainsQ[#, "$"], Take[StringSplit[#, "$", All], {2, -1, 2}],
             StringContainsQ[#, "\\" | "_" | "^" | "{"] && StringLength[#] < 200 && ! StringStartsQ[#, "/" | "http"], #, True, {}] &,
-        Cases[g, _String, Infinity]]];
+        (* in the film and in the definitions of the functions it draws with; an AnimatedGraphics holds its
+           content in an Association, which Cases does not look into, so that is opened up inside Hold, where the
+           AnimatedGraphics around it cannot rebuild it *)
+        Cases[Hold[g, Evaluate[userDefinitions[g]]] //. a_Association :> RuleCondition[Normal[a]], _String, Infinity]]];
     WithCleanup[
     n = Round[(to - from) fps / cps];
     times = from + Range[0, n - 1] cps / fps;

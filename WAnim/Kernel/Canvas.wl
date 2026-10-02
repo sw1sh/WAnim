@@ -248,6 +248,7 @@ wrapPara[para_, f_, w_, "Code"] := Module[{out = {}, cur = ""},
    A formula is typeset once and kept on disk, so the kernels that render a film share it; a kernel without
    MaTeX loaded loads it when a formula it needs is not there yet. *)
 Options[CanvasTeX] = {Alignment -> Left, Opacity -> 1};
+CanvasTeX::tex = "MaTeX could not typeset `1`.";
 texImpl[s_String, {x_, y_}, size_ ? NumericQ, c_, opts : OptionsPattern[CanvasTeX]] := With[{sh = texShape[s], k = size / 12.},
     With[{x0 = Switch[OptionValue[CanvasTeX, {opts}, Alignment], Center, x - k sh["Width"] / 2, Right, x - k sh["Width"], _, x]},
         texGlyphs[sh, {x0, y}, k, c, OptionValue[CanvasTeX, {opts}, Opacity]]]];
@@ -267,8 +268,10 @@ texGlyphs[sh_, {x_, y_}, k_, c_, a_] := {EdgeForm[], FaceForm[paint[c, a]], Poly
 texShape[s_String] := texShape[s] = Module[{file = FileNameJoin[{$UserBaseDirectory, "ApplicationData", "WAnim", "TeX", IntegerString[Hash[{s, 2}, "SHA256"], 36] <> ".wxf"}], g, base, h, sh},
     If[FileExistsQ[file], Return[Import[file, "WXF"], Module]];
     If[! MemberQ[$Packages, "MaTeX`"], Quiet @ Needs["MaTeX`"]];
-    g = MaTeX`MaTeX[s, FontSize -> 12];
-    If[Head[g] =!= Graphics, Return[<|"Glyphs" -> {}, "Width" -> 0.|>, Module]];
+    g = Quiet @ MaTeX`MaTeX[s, FontSize -> 12];
+    (* what will not typeset is said once and drawn as nothing; kept in this session only, so a formula
+       typeset where MaTeX works is not hidden by a kernel where it does not *)
+    If[Head[g] =!= Graphics, If[$KernelID == 0, Message[CanvasTeX::tex, s]]; Return[<|"Glyphs" -> {}, "Width" -> 0.|>, Module]];
     h = OptionValue[Graphics, Options[g], PlotRange][[2, 2]];
     base = h Replace[OptionValue[Graphics, Options[g], BaselinePosition], {Scaled[b_] :> b, _ -> 0}];
     sh = <|"Glyphs" -> (Function[pt, {pt[[1]], pt[[2]] - base}] /@ # &) /@ texGlyphOutlines[First[g], OptionValue[Graphics, Options[g], PlotRange][[1, 2]]],
