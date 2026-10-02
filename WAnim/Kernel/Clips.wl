@@ -34,7 +34,7 @@ Options[ArchiveClip] = elementOptions[{Position -> Automatic, "Size" -> Automati
    over other pictures is never anonymous.  "LowerThird" -> False leaves out the name strap (a film that names
    its speaker itself).  "Caption" describes what the picture shows, small, top right.  "Fade" dissolves the
    picture in and out over that many seconds at the edges of its span and of each "Show" span.  "Crop" ->
-   {left, right, top, bottom} trims those fractions of the picture (a caption burned into the film).  The frames are read from the source once per kernel, at "FrameRate". *)
+   {left, right, top, bottom} trims those fractions of the picture (a caption burned into the film).  The frames are decoded once, at "FrameRate", into a cache every kernel shares. *)
 ArchiveClip[src_, {t0_, t1_}, opts : OptionsPattern[]] := With[{o = toolOptions[{opts}, ArchiveClip]},
     With[{file = clipFile[src], in = ov[o, "From"]},
         With[{out = Replace[ov[o, "To"], Automatic :> clipDuration[file]]},
@@ -54,25 +54,32 @@ clipFile[s_String] /; StringStartsQ[s, "http"] := Module[{dir = FileNameJoin[{$U
 clipFile[s_String] := ExpandFileName[s];
 clipDuration[file_] := QuantityMagnitude[Duration[Video[file]], "Seconds"];
 
-(* the moment's frames, at the clip's frame rate and the size they are drawn at, read once per kernel *)
-(* the moment's frames, at the clip's frame rate, no wider than drawn (nor than 1280 pixels), read once per
-   kernel; only the last two clips are kept, as a film's frames are drawn in order *)
-clipFrames[file_, {in_, out_}, fps_, px0_] := With[{key = {file, in, out, fps, Min[px0, 1280]}},
-    Lookup[$clipCache, Key[key], With[{f = readFrames[file, {in, out}, fps, Min[px0, 1280]]}, $clipCache = Append[KeyTake[$clipCache, Take[Keys[$clipCache], -Min[1, Length[$clipCache]]]], key -> f]; f]]];
+(* the moment's frames are decoded once, by ffmpeg, into a folder of JPEGs in the user's WAnim cache --
+   shared by every kernel that renders the film -- and read one at a time as they are drawn.  A kernel keeps
+   only the last few it read. *)
+frameDir[file_, {in_, out_}, fps_, px_] := Module[{key = IntegerString[Hash[{file, FileByteCount[file], N[in], N[out], fps, px}, "CRC32"], 36],
+        root = FileNameJoin[{$UserBaseDirectory, "ApplicationData", "WAnim", "ClipFrames"}], dir, tmp, ffmpeg},
+    dir = FileNameJoin[{root, key}];
+    If[! FileExistsQ[FileNameJoin[{dir, "done"}]],
+        ffmpeg = SelectFirst[{"/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"}, FileExistsQ, "ffmpeg"];
+        tmp = CreateDirectory[FileNameJoin[{root, key <> "-" <> CreateUUID[]}]];
+        RunProcess[{ffmpeg, "-v", "error", "-ss", ToString[N[in]], "-i", file, "-t", ToString[N[out - in]],
+            "-vf", "fps=" <> ToString[fps] <> ",scale='min(" <> ToString[px] <> ",iw)':-2", "-q:v", "2", FileNameJoin[{tmp, "f%05d.jpg"}]}];
+        Export[FileNameJoin[{tmp, "done"}], "", "Text"];
+        (* another kernel may have finished first: keep whichever is there *)
+        If[DirectoryQ[dir], DeleteDirectory[tmp, DeleteContents -> True], Quiet @ RenameDirectory[tmp, dir]]];
+    dir];
+frameCount[dir_] := frameCount[dir] = Length[FileNames["f*.jpg", dir]];
+clipFrame[dir_, k_] := Lookup[$clipCache, Key[{dir, k}], With[{img = Import[FileNameJoin[{dir, "f" <> IntegerString[k, 10, 5] <> ".jpg"}]]},
+    $clipCache = Append[If[Length[$clipCache] >= 6, Rest[$clipCache], $clipCache], {dir, k} -> img]; img]];
 $clipCache = <||>;
-readFrames[file_, {in_, out_}, fps_, px_] := Module[{v = Video[file], times = Range[N[in] + 0.5 / fps, N[out], 1. / fps], n, frames = $Failed},
-    (* each frame is read at the middle of its moment: a video track often starts a little after its
-       container and ends a little before; the last times that cannot be read repeat the last frame that can *)
-    n = Length[times];
-    While[n > 0 && ! ListQ[frames = Quiet[VideoExtractFrames[v, Take[times, n]]]], n = Floor[0.9 n]];
-    If[n == 0, {}, PadRight[If[ImageDimensions[#][[1]] > px, ImageResize[#, px], #] & /@ frames, Length[times], Last[frames]]]];
 
 (* the moment's sound, as a voice: clipVoice[audio, duck], the gain the film's music ducks to under it *)
 clipAudio[file_, {in_, out_}, vol_, duck_] := With[{a = AudioTrim[Audio[file], {in, out}]},
     clipVoice[a If[vol === Automatic, Min[8, 0.09 / Max[10^-4, AudioMeasurements[a, "RMSAmplitude"]]], vol], duck]];
 
 clipDraw[file_, {in_, out_}, t_, {t0_, t1_}, o_] := Module[{full = ov[o, "Style"] === "Full", fps = ov[o, "FrameRate"], env = envelope[t, {t0, t1}, o],
-        box, p, d, w, h, k, frames, frame, sec, show = ov[o, "Show"], f = ov[o, "Fade"], alpha, first, z, sub, credit = ov[o, "Credit"], cap = ov[o, "Caption"]},
+        box, p, d, w, h, k, dirn, n, frame, sec, show = ov[o, "Show"], f = ov[o, "Fade"], alpha, first, z, sub, credit = ov[o, "Credit"], cap = ov[o, "Caption"]},
     box = Replace[ov[o, "Size"], Automatic :> If[full, $canvasSize, {640, 480}]];
     p = If[full, {0, 0}, Replace[ov[o, Position], Automatic | Center :> ($canvasSize - box) / 2]];
     sec = in + (out - in) (t - t0) / (t1 - t0);
@@ -80,11 +87,13 @@ clipDraw[file_, {in_, out_}, t_, {t0_, t1_}, o_] := Module[{full = ov[o, "Style"
     alpha = If[show === All, ramp[t, {t0, t1}, f], Max[0, ramp[t, {#[[1]] - f / 2, #[[2]] + f / 2}, f] & /@ show]];
     first = If[show === All, t0, Min[show[[All, 1]]]];
     sub = Replace[ov[o, "Subtitle"], {l_List :> SelectFirst[l, #[[1]] <= sec - in < #[[2]] &, {0, 0, None}][[3]], s_String :> s, _ -> None}];
-    frames = If[alpha > 0, cropped[clipFrames[file, {in, out}, fps, Round[box[[1]]]], ov[o, "Crop"]], {}];
-    {If[alpha > 0 && ListQ[frames] && frames =!= {}, (
-        d = ImageDimensions[First[frames]]; {w, h} = d Min[box[[1]] / d[[1]], box[[2]] / d[[2]]];
-        k = Clip[1 + Floor[Length[frames] (t - t0) / (t1 - t0)], {1, Length[frames]}];
-        frame = frames[[k]]; z = 1 + ov[o, "Zoom"] (t - t0) / (t1 - t0);
+    dirn = If[alpha > 0, frameDir[file, {in, out}, fps, Min[1280, Round[box[[1]]]]], None];
+    n = If[dirn === None, 0, frameCount[dirn]];
+    {If[alpha > 0 && n > 0, (
+        k = Clip[1 + Floor[n (t - t0) / (t1 - t0)], {1, n}];
+        frame = cropOne[clipFrame[dirn, k], ov[o, "Crop"]];
+        d = ImageDimensions[frame]; {w, h} = d Min[box[[1]] / d[[1]], box[[2]] / d[[2]]];
+        z = 1 + ov[o, "Zoom"] (t - t0) / (t1 - t0);
         CanvasOpacity[env["Alpha"] alpha, {
             If[full, {CanvasRectangle[{0, 0, $canvasSize[[1]], $canvasSize[[2]]}, Black],
                     CanvasClip[{0, 0, $canvasSize[[1]], $canvasSize[[2]]}, CanvasImage[frame, {(box[[1]] - z w) / 2, (box[[2]] - z h) / 2, z w, z h}]]},
@@ -94,10 +103,8 @@ clipDraw[file_, {in_, out_}, t_, {t0_, t1_}, o_] := Module[{full = ov[o, "Style"
                 True, CanvasText[StringRiffle[Flatten[{credit}], " \[CenterDot] "], {p[[1]] - 14, p[[2]] + h + 50}, CanvasFont[defaultFont["Sans"], 24, 400], RGBColor["#8E8B84"]]],
             If[StringQ[cap], clipCaption[cap], {}]}]), {}],
      If[StringQ[sub], CanvasOpacity[env["Alpha"], clipSubtitle[sub, If[credit === None, None, StringRiffle[Flatten[{credit}], ", "]], {$canvasSize[[1]] / 2, $canvasSize[[2]] - 70}]], {}]}];
-cropped[frames_, None] := frames;
-cropped[frames_List, {l_, r_, tp_, b_}] := cropped[frames, {l, r, tp, b}] = With[{d = ImageDimensions[First[frames]]},
-    ImageTake[#, {Round[tp d[[2]]] + 1, d[[2]] - Round[b d[[2]]]}, {Round[l d[[1]]] + 1, d[[1]] - Round[r d[[1]]]}] & /@ frames];
-cropped[x_, _] := x;
+cropOne[img_, None] := img;
+cropOne[img_, {l_, r_, tp_, b_}] := With[{d = ImageDimensions[img]}, ImageTake[img, {Round[tp d[[2]]] + 1, d[[2]] - Round[b d[[2]]]}, {Round[l d[[1]]] + 1, d[[1]] - Round[r d[[1]]]}]];
 ramp[t_, {a_, b_}, f_] := If[f <= 0, If[a <= t < b, 1, 0], Clip[Min[(t - a) / f, (b - t) / f], {0, 1}]];
 
 (* what a picture shows, small, top right *)

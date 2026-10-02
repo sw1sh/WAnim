@@ -363,7 +363,7 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts 
            in contiguous chunks, so a kernel's caches (a wall's settled words) keep being reused *)
         With[{frame = Unique["WAnimVideoFrame"], sound = Unique["WAnimVideoSound"], times = times, dir = dir, from = from, to = to, renderer = OptionValue[agExport, {opts}, "Renderer"], chunks = Partition[Range[n], UpTo[OptionValue[agExport, {opts}, "Chunk"]]]},
             (* rasterizing needs a front end; subkernels do not always come with one *)
-            ParallelEvaluate[frame[i_] := UsingFrontEnd[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]], renderer]]];
+            ParallelEvaluate[frame[i_] := UsingFrontEnd[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]], renderer], "CompressionLevel" -> 0.1]];
                 sound[] := soundtrack[g, from, to, dir]];
             (* the content's own functions (a notebook's colours, tracks, helpers), and only those: the package
                and its caches (Spikey models, sprites, sounds) stay out, each kernel has WAnim of its own *)
@@ -374,7 +374,7 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts 
                front end is hardly used, and restarting it only risks a start that hangs) *)
             wav = First @ ParallelMap[If[# === "Sound", sound[], Scan[frame, #]; If[renderer === "FrontEnd", Developer`UninstallFrontEnd[]]] &, Prepend[chunks, "Sound"], Method -> "FinestGrained"];
             ParallelEvaluate[Remove[frame, sound]]; Remove[frame, sound]],
-        Do[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]], renderer]], {i, n}];
+        Do[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]], renderer], "CompressionLevel" -> 0.1], {i, n}];
         wav = soundtrack[g, from, to, dir]];
     encodeVideo[dir, fps, wav, file, OptionValue[agExport, {opts}, "CRF"]]];
 (* the film's sound from "From" to "To", as a WAV file in dir, or None for a silent film *)
