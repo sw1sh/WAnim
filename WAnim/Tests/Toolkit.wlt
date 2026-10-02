@@ -106,3 +106,18 @@ VerificationTest[
         g = AnimatedGraphics[{ArchiveClip[f, {0, 1}, "Style" -> "Full", "Sound" -> False]}, "Duration" -> 1, "CanvasSize" -> {160, 90}];
         Count[g[0.5], _Image, Infinity] > 0],
     True, TestID -> "ArchiveClip-draws"]
+
+(* the 3D canvas: a camera projects, nearer points draw later and larger; glow adds haloes beneath *)
+VerificationTest[
+    Module[{cam = CanvasCamera["Azimuth" -> 0, "Elevation" -> 0, "Distance" -> 5], prims},
+        prims = Flatten[{CanvasCloud[cam, {{0, 2, 0}, {0, -2, 0}}, Red, 10]}];
+        {Length[prims], #[[2]] & /@ prims, Last[prims][[1]]}],
+    {2, {10 5 / 7., 10 5 / 3.}, {960., 540.}}, TestID -> "CanvasCloud-depth-order"]
+
+VerificationTest[
+    AnimatedGraphics[{CanvasLine[{{100, 100}, {800, 500}}, White, "Glow" -> 8], CanvasDisk[{960, 540}, 40, Red, "Glow" -> 12],
+        CanvasGradient[{0, 0, 400, 400}, "Radial", Blue, {{0, 1}, {1, 0}}],
+        CanvasSurface3D[CanvasCamera[], Table[{x, y, x y}, {x, -1, 1, 0.5}, {y, -1, 1, 0.5}], Orange],
+        CanvasSphere3D[CanvasCamera[], {0, 0, 0}, 1, Cyan], CanvasCurve3D[CanvasCamera[], Table[{t, Cos[t], Sin[t]}, {t, 0, 6, 0.2}], Hue /@ Range[0, 1, 1 / 30.], 3]},
+        "Duration" -> 1][0.5] // GPUGraphics // ImageQ,
+    True, TestID -> "Canvas3D-glow-render"]

@@ -101,15 +101,27 @@ Options[CanvasPolygon] = {Opacity -> 1, "Stroke" -> None, "Edge" -> None};
 polygonImpl[pts_, c_, opts : OptionsPattern[CanvasPolygon]] := With[{a = OptionValue[CanvasPolygon, {opts}, Opacity], s = OptionValue[CanvasPolygon, {opts}, "Stroke"], e = OptionValue[CanvasPolygon, {opts}, "Edge"]},
     If[s === None, {If[e === None, EdgeForm[], EdgeForm[Directive[paint[e, a], AbsoluteThickness[0.6]]]], FaceForm[paint[c, a]], Polygon[cxf /@ pts]},
         {paint[c, a], thick[s], JoinForm["Round"], Line[cxf /@ Append[pts, First[pts]]]}]];
-Options[CanvasLine] = {Opacity -> 1, "Thickness" -> 1};
-lineImpl[pts_, c_, opts : OptionsPattern[CanvasLine]] := {paint[c, OptionValue[CanvasLine, {opts}, Opacity]], thick[OptionValue[CanvasLine, {opts}, "Thickness"]], CapForm["Round"], Line[cxf /@ pts]};
-Options[CanvasDisk] = {Opacity -> 1, "Stroke" -> None};
-diskImpl[{x_, y_}, r_, c_, opts : OptionsPattern[CanvasDisk]] := With[{p = cxf[{x, y}], rr = {r cscaleX[], r cscaleY[]}, a = OptionValue[CanvasDisk, {opts}, Opacity], s = OptionValue[CanvasDisk, {opts}, "Stroke"]},
-    If[s === None, {EdgeForm[], FaceForm[paint[c, a]], Disk[p, rr]}, {paint[c, a], thick[s], Circle[p, rr]}]];
+(* "Glow" -> r haloes a line, a disk or an outline: wider, fainter copies beneath it out to r pixels, as light
+   bleeds around a bright stroke *)
+Options[CanvasLine] = {Opacity -> 1, "Thickness" -> 1, "Glow" -> 0};
+lineImpl[pts_, c_, opts : OptionsPattern[CanvasLine]] := With[{a = OptionValue[CanvasLine, {opts}, Opacity], w = OptionValue[CanvasLine, {opts}, "Thickness"], g = OptionValue[CanvasLine, {opts}, "Glow"]},
+    {If[g > 0, Table[{paint[c, a 0.12 (1 - k / 5)], thick[w + 2 g k / 4], CapForm["Round"], JoinForm["Round"], Line[cxf /@ pts]}, {k, 4, 1, -1}], {}],
+     paint[c, a], thick[w], CapForm["Round"], JoinForm["Round"], Line[cxf /@ pts]}];
+Options[CanvasDisk] = {Opacity -> 1, "Stroke" -> None, "Glow" -> 0};
+diskImpl[{x_, y_}, r_, c_, opts : OptionsPattern[CanvasDisk]] := With[{p = cxf[{x, y}], rr = {r cscaleX[], r cscaleY[]}, a = OptionValue[CanvasDisk, {opts}, Opacity],
+        s = OptionValue[CanvasDisk, {opts}, "Stroke"], g = OptionValue[CanvasDisk, {opts}, "Glow"]},
+    {If[g > 0, Table[With[{rk = r + g k / 4}, If[s === None, {EdgeForm[], FaceForm[paint[c, a 0.14 (1 - k / 5)]], Disk[p, {rk cscaleX[], rk cscaleY[]}]},
+            {paint[c, a 0.12 (1 - k / 5)], thick[s + 2 g k / 4], Circle[p, rr]}]], {k, 4, 1, -1}], {}],
+     If[s === None, {EdgeForm[], FaceForm[paint[c, a]], Disk[p, rr]}, {paint[c, a], thick[s], Circle[p, rr]}]}];
 
 (* a colour fading across a rectangle: stops {{u, opacity}, ...} along "Horizontal" or "Vertical",
    drawn as thin strips (LinearGradientFilling has no per-stop opacity) *)
 Options[CanvasGradient] = {"Steps" -> 24};
+(* "Radial": from the centre of the rectangle out to its edge, as concentric rings (a glow, a vignette, a hot body) *)
+gradientImpl[{x_, y_, w_, h_}, "Radial", c_, stops_, opts : OptionsPattern[CanvasGradient]] /; ! MatchQ[c, {{_ ? NumericQ, _} ..}] := With[{n = OptionValue[CanvasGradient, {opts}, "Steps"],
+        f = Interpolation[stops, InterpolationOrder -> 1], cx = x + w / 2, cy = y + h / 2, th = Subdivide[0., 2 Pi, 72]},
+    Table[With[{u0 = (i - 1) / n, u1 = i / n}, polygonImpl[Join[Transpose[{cx + w / 2 u1 Cos[th], cy + h / 2 u1 Sin[th]}], Reverse @ Transpose[{cx + w / 2 u0 Cos[th], cy + h / 2 u0 Sin[th]}]],
+        c, Opacity -> f[(u0 + u1) / 2]]], {i, n}]];
 gradientImpl[{x_, y_, w_, h_}, dir_, c_, stops_, opts : OptionsPattern[CanvasGradient]] /; ! MatchQ[c, {{_ ? NumericQ, _} ..}] := With[{n = OptionValue[CanvasGradient, {opts}, "Steps"], f = Interpolation[stops, InterpolationOrder -> 1]},
     Table[With[{u0 = (i - 1) / n, a = f[(i - 1 / 2) / n]},
         If[dir === "Horizontal", rectImpl[{x + w u0, y, w / n + 0.6, h}, c, Opacity -> a], rectImpl[{x, y + h u0, w, h / n + 0.6}, c, Opacity -> a]]],

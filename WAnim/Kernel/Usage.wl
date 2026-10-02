@@ -116,3 +116,8 @@ Instrument[opts][track] sets how it sounds: \"Gain\", \"Pan\", \"Reverb\" and \"
 Mixer::usage = "Mixer[opts][track] sets how track is mixed: \"Sidechain\" -> a track to duck under, \"Cutoff\" -> f for a low-pass on the music bus at f[cycle] Hz, \"DelayTime\", \"DelayFeedback\", \"Master\" and \"FadeOut\", times in cycles.";
 GPUGraphics::usage = "GPUGraphics[graphics] draws a Graphics on the GPU, without the front end, into an Image; GPUGraphics[primitives, options] takes what Graphics takes.";
 ArchiveClip::usage = "ArchiveClip[video, {t0, t1}] plays an archival film over its span: its picture as a print or full frame, its sound in the soundtrack with the music ducked beneath it; \"From\" and \"To\" pick the moment, \"Credit\" and \"Subtitle\" caption it.";
+CanvasCamera::usage = "CanvasCamera[opts] is a perspective camera for the 3D canvas tools: \"Azimuth\", \"Elevation\", \"Distance\", \"Target\", and where on the canvas (\"Center\", \"Scale\") the target appears.";
+CanvasCloud::usage = "CanvasCloud[camera, points, colour, r] draws glowing dots at 3D points, far to near, sized by perspective.";
+CanvasCurve3D::usage = "CanvasCurve3D[camera, points, colour, thickness] draws a path through space, one colour or one per point, with an optional \"Glow\".";
+CanvasSurface3D::usage = "CanvasSurface3D[camera, grid, colours] draws a lit surface from a grid of 3D points, its faces sorted far to near.";
+CanvasSphere3D::usage = "CanvasSphere3D[camera, centre, r, colour] draws a softly lit sphere with its meridians and parallels, the far half faint.";
