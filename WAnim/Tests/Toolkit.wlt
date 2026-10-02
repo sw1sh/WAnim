@@ -121,3 +121,25 @@ VerificationTest[
         CanvasSphere3D[CanvasCamera[], {0, 0, 0}, 1, Cyan], CanvasCurve3D[CanvasCamera[], Table[{t, Cos[t], Sin[t]}, {t, 0, 6, 0.2}], Hue /@ Range[0, 1, 1 / 30.], 3]},
         "Duration" -> 1][0.5] // GPUGraphics // ImageQ,
     True, TestID -> "Canvas3D-glow-render"]
+
+(* TeX on the canvas: glyph outlines, one even-odd path per glyph, bars for a fraction's rule *)
+VerificationTest[
+    With[{sh = WolframInstitute`WAnim`PackageScope`texShape["\\frac{a}{2} = \\Delta"]}, {Length[sh["Glyphs"]] >= 5, sh["Width"] > 10, AllTrue[sh["Glyphs"], MatrixQ[#, NumericQ] &]}],
+    {True, True, True}, TestID -> "CanvasTeX-glyphs"]
+
+VerificationTest[
+    ImageQ @ GPUGraphics[Graphics[WolframInstitute`WAnim`PackageScope`canvasResolve[{400, 200},
+        {CanvasTeX["E = h\\nu", {20, 80}, 40, White], CanvasTeX["state $|0\\rangle$", {20, 160}, CanvasFont["Source Sans 3", 30], White, Alignment -> Left]}],
+        PlotRange -> {{0, 400}, {0, 200}}, ImageSize -> 400]],
+    True, TestID -> "CanvasTeX-renders"]
+
+(* subtitles: words between asterisks are emphasised, punctuation stays with its word *)
+VerificationTest[
+    WolframInstitute`WAnim`Clips`Private`subtitleTokens["the *universal quantum*, by *Planck*."],
+    {{{"the", False}}, {{"universal", True}}, {{"quantum", True}, {",", False}}, {{"by", False}}, {{"Planck", True}, {".", False}}},
+    TestID -> "Subtitle-emphasis"]
+
+(* the music stays ducked through a short pause between voices *)
+VerificationTest[
+    WolframInstitute`WAnim`AnimatedGraphics`Private`duckSpans[{{0, 5, 0.2}, {6, 9, 0.1}, {20, 22, 0.15}}],
+    {{0, 9, 0.1}, {20, 22, 0.15}}, TestID -> "Duck-holds-through-pauses"]

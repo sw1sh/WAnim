@@ -58,19 +58,27 @@ CanvasCurve3D[cam_Association, pts_List, c_, w_, opts : OptionsPattern[]] := Mod
 
 (* CanvasSurface3D[camera, grid, colours] is a surface from a grid of points (m by n by 3), shaded by a light
    from "Light" (a direction), its faces drawn far to near; colours is one colour, a grid of colours (m by n),
-   or a function of the point.  "Mesh" -> colour draws the grid lines faintly. *)
-Options[CanvasSurface3D] = {Opacity -> 1, "Light" -> {-0.4, -0.6, 0.7}, "Ambient" -> 0.35, "Mesh" -> None};
-CanvasSurface3D[cam_Association, grid_List, c_, opts : OptionsPattern[]] := Module[{m = Length[grid], n = Length[First[grid]], flat = Flatten[N[grid], 1], p, xy, dep, faces, lt, amb, col},
+   or a function of the point.  It is shaded smoothly, each corner lit by the normal of the surface there and
+   the faces a hair larger than they are, so no seam of the grid shows; "Mesh" -> colour draws the grid
+   lines faintly instead, "Smooth" -> False shades each face flat. *)
+Options[CanvasSurface3D] = {Opacity -> 1, "Light" -> {-0.4, -0.6, 0.7}, "Ambient" -> 0.35, "Mesh" -> None, "Smooth" -> True};
+CanvasSurface3D[cam_Association, grid_List, c_, opts : OptionsPattern[]] := Module[{m = Length[grid], n = Length[First[grid]], g = N[grid], flat, p, xy, dep, faces, lt, amb, col, nrm, vcol, shadeOf},
+    flat = Flatten[g, 1];
     p = cameraProject[cam, flat]; xy = p["XY"]; dep = p["Depth"];
     lt = Normalize[OptionValue["Light"]]; amb = OptionValue["Ambient"];
-    col[i_, j_] := Which[ColorQ[c], c, Head[c] === Function || Head[c] === Symbol, c[grid[[i, j]]], True, c[[i, j]]];
-    faces = Flatten[Table[With[{ks = {(i - 1) n + j, (i - 1) n + j + 1, i n + j + 1, i n + j}},
-        {Mean[dep[[ks]]], ks, i, j}], {i, m - 1}, {j, n - 1}], 1];
-    faces = ReverseSortBy[faces, First];
-    Table[With[{ks = f[[2]], q = flat[[f[[2]]]]}, With[{nrm = Normalize[Cross[q[[2]] - q[[1]], q[[4]] - q[[1]]]]},
-        With[{shade = amb + (1 - amb) Abs[nrm . lt], base = col[f[[3]], f[[4]]]},
-            CanvasPolygon[xy[[ks]], Blend[{Black, base}, shade], Opacity -> OptionValue[Opacity],
-                "Edge" -> If[OptionValue["Mesh"] === None, Blend[{Black, base}, shade], OptionValue["Mesh"]]]]]], {f, faces}]];
+    col[i_, j_] := Which[ColorQ[c], c, Head[c] === Function || Head[c] === Symbol, c[g[[i, j]]], True, c[[i, j]]];
+    shadeOf[nv_, base_] := Blend[{Black, base}, amb + (1 - amb) Abs[nv . lt]];
+    faces = ReverseSortBy[Flatten[Table[{Mean[dep[[{(i - 1) n + j, (i - 1) n + j + 1, i n + j + 1, i n + j}]]], i, j}, {i, m - 1}, {j, n - 1}], 1], First];
+    If[TrueQ[OptionValue["Smooth"]] && OptionValue["Mesh"] === None,
+        (* the normal at each point from its neighbours along the two grid directions *)
+        nrm = Table[Normalize[Cross[g[[Min[i + 1, m], j]] - g[[Max[i - 1, 1], j]], g[[i, Min[j + 1, n]]] - g[[i, Max[j - 1, 1]]]]], {i, m}, {j, n}];
+        vcol = Table[shadeOf[nrm[[i, j]], col[i, j]], {i, m}, {j, n}];
+        Table[With[{i = f[[2]], j = f[[3]]}, With[{ks = {(i - 1) n + j, (i - 1) n + j + 1, i n + j + 1, i n + j}}, With[{q = xy[[ks]], ctr = Mean[xy[[ks]]]},
+            CanvasPolygon[ctr + (# - ctr) (1 + 0.9 / Max[1., Norm[# - ctr]]) & /@ q, White, Opacity -> OptionValue[Opacity],
+                "VertexColors" -> {vcol[[i, j]], vcol[[i, j + 1]], vcol[[i + 1, j + 1]], vcol[[i + 1, j]]}]]]], {f, faces}],
+        Table[With[{i = f[[2]], j = f[[3]]}, With[{ks = {(i - 1) n + j, (i - 1) n + j + 1, i n + j + 1, i n + j}, q = flat[[{(i - 1) n + j, (i - 1) n + j + 1, i n + j + 1, i n + j}]]},
+            With[{sh = shadeOf[Normalize[Cross[q[[2]] - q[[1]], q[[4]] - q[[1]]]], col[i, j]]},
+                CanvasPolygon[xy[[ks]], sh, Opacity -> OptionValue[Opacity], "Edge" -> Replace[OptionValue["Mesh"], None -> sh]]]]], {f, faces}]]];
 
 (* CanvasSphere3D[camera, centre, r, colour] is a sphere: a softly lit disk with its meridians and parallels
    ("Wire" -> {meridians, parallels}), the near half of the wire bright, the far half faint *)

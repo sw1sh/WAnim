@@ -89,8 +89,10 @@ clipFrame[dir_, k_] := Lookup[$clipCache, Key[{dir, k}], With[{img = Import[File
 $clipCache = <||>;
 
 (* the moment's sound, as a voice: clipVoice[audio, duck], the gain the film's music ducks to under it *)
+(* it fades in and out over a few hundredths of a second: a clip cut mid-word or mid-breath otherwise starts and
+   stops with a jump *)
 clipAudio[file_, {in_, out_}, vol_, duck_] := With[{a = AudioTrim[Audio[file], {in, out}]},
-    clipVoice[a If[vol === Automatic, Min[8, 0.09 / Max[10^-4, AudioMeasurements[a, "RMSAmplitude"]]], vol], duck]];
+    clipVoice[AudioFade[a, {0.05, 0.12}] If[vol === Automatic, Min[8, 0.09 / Max[10^-4, AudioMeasurements[a, "RMSAmplitude"]]], vol], duck]];
 
 clipDraw[file_, {in_, out_}, t_, {t0_, t1_}, o_] := Module[{full = ov[o, "Style"] === "Full", fps = ov[o, "FrameRate"], env = envelope[t, {t0, t1}, o],
         box, p, d, w, h, k, dirn, n, frame, sec, show = ov[o, "Show"], f = ov[o, "Fade"], alpha, first, z, sub, credit = ov[o, "Credit"], cap = ov[o, "Caption"]},
@@ -131,9 +133,29 @@ lowerThird[credit_, a_] := With[{l = Flatten[{credit}], y = $canvasSize[[2]] - 2
     CanvasText[l[[1]], {116, y - 10}, CanvasFont[defaultFont["Sans"], 44, 700], White],
     If[Length[l] > 1, CanvasText[l[[2]], {118, y + 32}, CanvasFont[defaultFont["Sans"], 28, 400], RGBColor["#D8D4CC"]], {}]}]];
 
-(* subtitles as film subtitles: white on a shadow, centred, the speaker named above them *)
-clipSubtitle[s_, who_, {cx_, y_}] := With[{f = CanvasFont[defaultFont["Sans"], 36, 500], g = CanvasFont[defaultFont["Sans"], 22, 700]},
-    With[{lines = CanvasWrap[s, f, 1500], lh = 48}, With[{n = Length[lines], w = Max[CanvasTextWidth[#, f] & /@ lines]}, {
-        If[StringQ[who], With[{v = CanvasTextWidth[ToUpperCase[who], g] + 3 StringLength[who]}, CanvasText[ToUpperCase[who], {cx - v / 2, y - 54 - lh (n - 1)}, g, RGBColor["#E8604C"], "Tracking" -> 3]], {}],
-        CanvasRectangle[{cx - w / 2 - 16, y - 40 - lh (n - 1), w + 32, 54 + lh (n - 1)}, Black, Opacity -> 0.55, "Radius" -> 6],
-        MapIndexed[CanvasText[#1, {cx - CanvasTextWidth[#1, f] / 2, y - lh (n - #2[[1]])}, f, White] &, lines]}]]];
+(* subtitles as film subtitles: white on a shadow, centred, the speaker named above them.  Words between
+   asterisks are the ones that matter -- "the *universal quantum of action*" -- and stand out in the accent,
+   bolder: the reason the quotation is there *)
+$subtitleAccent = RGBColor["#FFC857"];
+clipSubtitle[s_, who_, {cx_, y_}] := Module[{f = CanvasFont[defaultFont["Sans"], 36, 500], fe = CanvasFont[defaultFont["Sans"], 36, 700], g = CanvasFont[defaultFont["Sans"], 22, 700],
+        tokens, width, sp, lines = {}, cur = {}, lh = 48, n, w},
+    tokens = subtitleTokens[s];
+    width[tk_] := Total[CanvasTextWidth[#[[1]], If[#[[2]], fe, f]] & /@ tk];
+    sp = CanvasTextWidth[" ", f];
+    Do[If[cur =!= {} && Total[width /@ cur] + sp Length[cur] + width[tk] > 1500, AppendTo[lines, cur]; cur = {tk}, AppendTo[cur, tk]], {tk, tokens}];
+    AppendTo[lines, cur];
+    n = Length[lines]; w = Max[(Total[width /@ #] + sp (Length[#] - 1)) & /@ lines];
+    {If[StringQ[who], With[{v = CanvasTextWidth[ToUpperCase[who], g] + 3 StringLength[who]}, CanvasText[ToUpperCase[who], {cx - v / 2, y - 54 - lh (n - 1)}, g, RGBColor["#E8604C"], "Tracking" -> 3]], {}],
+     CanvasRectangle[{cx - w / 2 - 16, y - 40 - lh (n - 1), w + 32, 54 + lh (n - 1)}, Black, Opacity -> 0.55, "Radius" -> 6],
+     MapIndexed[Function[{line, i}, Module[{x = cx - (Total[width /@ line] + sp (Length[line] - 1)) / 2},
+        Table[{Table[{CanvasText[pc[[1]], {x, y - lh (n - i[[1]])}, If[pc[[2]], fe, f], If[pc[[2]], $subtitleAccent, White]], x += CanvasTextWidth[pc[[1]], If[pc[[2]], fe, f]]}[[1]], {pc, tk}],
+            x += sp}[[1]], {tk, line}]]], lines]}];
+(* the words of a line, each a list of {piece, emphasised?}: a word can begin plain and end emphasised, as
+   "*lumps*." does *)
+subtitleTokens[s_] := Module[{tokens = {}, open = True},
+    (* open: the last piece ended in a space (or nothing came yet), so the next starts a new word *)
+    MapIndexed[Function[{seg, k}, With[{em = EvenQ[k[[1]]], parts = StringSplit[seg, " ", All]},
+        MapIndexed[If[#1 =!= "", If[#2[[1]] == 1 && ! open, tokens[[-1]] = Append[tokens[[-1]], {#1, em}], AppendTo[tokens, {{#1, em}}]]] &, parts];
+        If[seg =!= "", open = StringEndsQ[seg, " "]]]],
+        StringSplit[s, "*", All]];
+    tokens];

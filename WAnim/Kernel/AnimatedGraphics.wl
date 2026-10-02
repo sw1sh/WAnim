@@ -315,19 +315,23 @@ foleyVoices[ev_] := Join[
     (* an ArchiveClip's sound is a voice: the rest ducks beneath it *)
     With[{voice = MatchQ[#[[2]], _clipVoice] & /@ ss}, mix = Replace[duckUnder[Pick[rendered, voice, False], Pick[ss, voice], cps], m : Except[None] :> fitTo[m, dur / cps]];
         If[Or @@ voice, fitTo[AudioOverlay[If[mix === None, Pick[rendered, voice], Prepend[Pick[rendered, voice], mix]]], dur / cps], mix]]];
+(* the voices' spans {start, end, gain}, those less than 3 s apart run together at the lower gain *)
+duckSpans[spans_] := Fold[If[#1 =!= {} && #2[[1]] - #1[[-1, 2]] < 3, ReplacePart[#1, -1 -> {#1[[-1, 1]], Max[#1[[-1, 2]], #2[[2]]], Min[#1[[-1, 3]], #2[[3]]]}], Append[#1, #2]] &, {}, SortBy[spans, First]];
 fitTo[a_, secs_] := With[{t = AudioTrim[a, secs]}, AudioPad[t, {0, Max[0, secs - QuantityMagnitude[Duration[t], "Seconds"]]}]];
-(* the music, at the gain each voice (an ArchiveClip's sound) asks for while it speaks, easing in and out
-   over a fifth of a second *)
+(* the music, at the gain each voice (an ArchiveClip's sound) asks for while it speaks: it eases down 0.4 s
+   before a voice and back up over 0.8 s after, and stays down through a pause between voices shorter than
+   3 s -- music swelling up in every breath between two speakers is a jerk, not a score *)
 duckUnder[{}, _, _] := None;
 duckUnder[music_List, voices_, cps_] := With[{m = If[Length[music] == 1, First[music], AudioOverlay[music]]},
     If[voices === {}, m, Module[{sr = N[QuantityMagnitude[AudioSampleRate[m]]], data = AudioData[m], n, gain},
         (* one gain curve, lowered only over each voice's own stretch (it eases in 0.2 s before, out 0.3 s after):
            a whole-length curve per voice, 172 MB apiece for an 8-minute film, all held at once, crawled *)
         n = Length[First[data]]; gain = ConstantArray[1., n];
-        Do[With[{a = v[[1]] / cps, b = v[[1]] / cps + QuantityMagnitude[Duration[v[[2, 1]]], "Seconds"], g = v[[2, 2]]},
-            With[{i0 = Clip[Floor[(a - 0.2) sr] + 1, {1, n}], i1 = Clip[Ceiling[(b + 0.3) sr] + 1, {1, n}]},
+        Do[With[{a = v[[1]], b = v[[2]], g = v[[3]]},
+            With[{i0 = Clip[Floor[(a - 0.4) sr] + 1, {1, n}], i1 = Clip[Ceiling[(b + 0.8) sr] + 1, {1, n}]},
                 If[i1 > i0, With[{x = Range[i0 - 1., i1 - 1.] / sr},
-                    gain[[i0 ;; i1]] *= 1 - (1 - g) Clip[Clip[(x - a + 0.2) / 0.2, {0, 1}] - Clip[(x - b) / 0.3, {0, 1}], {0, 1}]]]]], {v, voices}];
+                    gain[[i0 ;; i1]] *= 1 - (1 - g) Clip[Clip[(x - a + 0.4) / 0.4, {0, 1}] - Clip[(x - b) / 0.8, {0, 1}], {0, 1}]]]]],
+            {v, duckSpans[{#[[1]] / cps, #[[1]] / cps + QuantityMagnitude[Duration[#[[2, 1]]], "Seconds"], #[[2, 2]]} & /@ voices]}];
         Audio[(# gain) & /@ data, SampleRate -> sr]]]];
 
 
@@ -355,6 +359,8 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts 
     (* a frame directory made here is deleted when done, encoded or not: a film's frames are tens of gigabytes *)
     own = OptionValue[agExport, {opts}, "FrameDirectory"] === Automatic;
     dir = If[own, CreateDirectory[], OptionValue[agExport, {opts}, "FrameDirectory"]];
+    (* every formula typeset here, once: the kernels that draw the frames find it on disk *)
+    Scan[texShape, DeleteDuplicates @ Cases[g, CanvasTeX[s_String, ___] :> s, Infinity]];
     WithCleanup[
     n = Round[(to - from) fps / cps];
     times = from + Range[0, n - 1] cps / fps;

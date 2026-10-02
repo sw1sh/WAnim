@@ -6,12 +6,12 @@
 PackageExported[{
     CanvasTransform, CanvasOpacity, CanvasTranslate, CanvasScale, CanvasRotate,
     CanvasRectangle, CanvasPolygon, CanvasLine, CanvasDisk, CanvasImage, CanvasGradient, CanvasClip, CanvasScreen,
-    CanvasFont, CanvasText, CanvasTextWidth, CanvasWrap,
+    CanvasFont, CanvasText, CanvasTextWidth, CanvasWrap, CanvasTeX, CanvasTeXWidth,
     TypedText, OrderedDither
 }]
 
 (* the renderer draws canvas primitives on a canvas of its size *)
-PackageScoped[{$canvasSize, canvasResolve, canvasPrimitiveQ, cxf}]
+PackageScoped[{$canvasSize, canvasResolve, canvasPrimitiveQ, cxf, texShape}]
 
 
 (* ::Section:: *)
@@ -38,7 +38,7 @@ $canvasAlpha = 1.;
    in WL units -- the canvas width, or a CanvasClip inset's own width inside one. *)
 $canvasRef := $canvasSize[[1]];
 
-$canvasPattern = Alternatives @@ (Blank /@ {CanvasTransform, CanvasOpacity, CanvasClip, CanvasScreen, CanvasRectangle, CanvasPolygon, CanvasLine, CanvasDisk, CanvasImage, CanvasGradient, CanvasText});
+$canvasPattern = Alternatives @@ (Blank /@ {CanvasTransform, CanvasOpacity, CanvasClip, CanvasScreen, CanvasRectangle, CanvasPolygon, CanvasLine, CanvasDisk, CanvasImage, CanvasGradient, CanvasText, CanvasTeX});
 canvasPrimitiveQ[e_] := ! FreeQ[e, $canvasPattern];
 
 (* canvasResolve[size, expr] turns every canvas primitive in expr into graphics primitives, drawn on a
@@ -57,6 +57,7 @@ rc[CanvasDisk[args__]] := diskImpl[args];
 rc[CanvasImage[args__]] := imageImpl[args];
 rc[CanvasGradient[args__]] := gradientImpl[args];
 rc[CanvasText[args__]] := textImpl[args];
+rc[CanvasTeX[args__]] := texImpl[args];
 rc[x_] := x;
 toMatrix[m_ ? MatrixQ] := m;
 toMatrix[tf_TransformationFunction] := TransformationMatrix[tf];
@@ -97,9 +98,13 @@ rectImpl[{x_, y_, w_, h_}, c_, opts : OptionsPattern[CanvasRectangle]] := With[{
         True, {paint[c, a], thick[s], Line[cxf /@ {{x, y}, {x + w, y}, {x + w, y + h}, {x, y + h}, {x, y}}]}
     ]];
 (* "Edge" -> colour outlines the face thinly in the same primitive: the seams of a mesh disappear, or show as lines *)
-Options[CanvasPolygon] = {Opacity -> 1, "Stroke" -> None, "Edge" -> None};
-polygonImpl[pts_, c_, opts : OptionsPattern[CanvasPolygon]] := With[{a = OptionValue[CanvasPolygon, {opts}, Opacity], s = OptionValue[CanvasPolygon, {opts}, "Stroke"], e = OptionValue[CanvasPolygon, {opts}, "Edge"]},
-    If[s === None, {If[e === None, EdgeForm[], EdgeForm[Directive[paint[e, a], AbsoluteThickness[0.6]]]], FaceForm[paint[c, a]], Polygon[cxf /@ pts]},
+(* "VertexColors" -> {colour, ...} shades the face smoothly between colours at its corners *)
+Options[CanvasPolygon] = {Opacity -> 1, "Stroke" -> None, "Edge" -> None, "VertexColors" -> None};
+polygonImpl[pts_, c_, opts : OptionsPattern[CanvasPolygon]] := With[{a = OptionValue[CanvasPolygon, {opts}, Opacity], s = OptionValue[CanvasPolygon, {opts}, "Stroke"], e = OptionValue[CanvasPolygon, {opts}, "Edge"],
+        vc = OptionValue[CanvasPolygon, {opts}, "VertexColors"]},
+    Which[vc =!= None && s === None, {If[$canvasAlpha a < 1, cop[a], Nothing], EdgeForm[], Polygon[cxf /@ pts, VertexColors -> (toColor /@ vc)]},
+      s === None, {If[e === None, EdgeForm[], EdgeForm[Directive[paint[e, a], AbsoluteThickness[0.6]]]], FaceForm[paint[c, a]], Polygon[cxf /@ pts]},
+      True,
         {paint[c, a], thick[s], JoinForm["Round"], Line[cxf /@ Append[pts, First[pts]]]}]];
 (* "Glow" -> r haloes a line, a disk or an outline: wider, fainter copies beneath it out to r pixels, as light
    bleeds around a bright stroke *)
@@ -231,6 +236,72 @@ wrapPara[para_, f_, w_, "Code"] := Module[{out = {}, cur = ""},
             With[{k = Max[1, LengthWhile[Range[StringLength[cur]], CanvasTextWidth[StringTake[cur, #], f] <= w &]]}, AppendTo[out, StringTake[cur, k]]; cur = StringDrop[cur, k]]],
         {p, StringCases[para, RegularExpression["[^ ,\\[]+[ ,\\[]*|[ ,\\[]+"]]}];
     Append[out, cur]];
+
+
+(* ::Section:: *)
+(*TeX*)
+
+(* CanvasTeX["tex", {x, y}, size, colour] typesets TeX math with MaTeX, its baseline at canvas (x, y), size px
+   the size of its type; CanvasTeX["text $tex$ text", {x, y}, font, colour] sets text in a CanvasFont with the
+   math between dollars typeset inline, on the same baseline.  Glyphs are polygons (even-odd, holes cut), so
+   they draw on the GPU, crisp at any size, and fade with the canvas.  Alignment -> Left | Center | Right.
+   A formula is typeset once and kept on disk, so the kernels that render a film share it; a kernel without
+   MaTeX loaded loads it when a formula it needs is not there yet. *)
+Options[CanvasTeX] = {Alignment -> Left, Opacity -> 1};
+texImpl[s_String, {x_, y_}, size_ ? NumericQ, c_, opts : OptionsPattern[CanvasTeX]] := With[{sh = texShape[s], k = size / 12.},
+    With[{x0 = Switch[OptionValue[CanvasTeX, {opts}, Alignment], Center, x - k sh["Width"] / 2, Right, x - k sh["Width"], _, x]},
+        texGlyphs[sh, {x0, y}, k, c, OptionValue[CanvasTeX, {opts}, Opacity]]]];
+texImpl[s_String, {x_, y_}, f_Association, c_, opts : OptionsPattern[CanvasTeX]] := Module[{pieces = texPieces[s], k = f["Size"] / 12. 1.08, w, cx, a = OptionValue[CanvasTeX, {opts}, Opacity]},
+    w = Total[If[#[[2]], k texShape[#[[1]]]["Width"], CanvasTextWidth[#[[1]], f]] & /@ pieces];
+    cx = Switch[OptionValue[CanvasTeX, {opts}, Alignment], Center, x - w / 2, Right, x - w, _, x];
+    Map[If[#[[2]], With[{sh = texShape[#[[1]]]}, {texGlyphs[sh, {cx, y}, k, c, a], cx += k sh["Width"]}[[1]]],
+        {textImpl[#[[1]], {cx, y}, f, c, Opacity -> a], cx += CanvasTextWidth[#[[1]], f]}[[1]]] &, pieces]];
+(* text and $math$ pieces: {"piece", math?} *)
+texPieces[s_] := MapIndexed[{#1, EvenQ[#2[[1]]]} &, StringSplit[s, "$", All]] // DeleteCases[{"", _}];
+(* CanvasTeXWidth["tex", size] and CanvasTeXWidth["text $tex$", font]: the width CanvasTeX sets it in *)
+CanvasTeXWidth[s_String, size_ ? NumericQ] := size / 12. texShape[s]["Width"];
+CanvasTeXWidth[s_String, f_Association] := Total[If[#[[2]], f["Size"] / 12. 1.08 texShape[#[[1]]]["Width"], CanvasTextWidth[#[[1]], f]] & /@ texPieces[s]];
+texGlyphs[sh_, {x_, y_}, k_, c_, a_] := {EdgeForm[], FaceForm[paint[c, a]], Polygon[cxf /@ ({x, y} + k {1, -1} # & /@ #) & /@ sh["Glyphs"]]};
+
+(* a formula as glyph outlines in TeX points (12 pt type), the baseline at y = 0: <|"Glyphs", "Width"|> *)
+texShape[s_String] := texShape[s] = Module[{file = FileNameJoin[{$UserBaseDirectory, "ApplicationData", "WAnim", "TeX", IntegerString[Hash[{s, 2}, "SHA256"], 36] <> ".wxf"}], g, base, h, sh},
+    If[FileExistsQ[file], Return[Import[file, "WXF"], Module]];
+    If[! MemberQ[$Packages, "MaTeX`"], Quiet @ Needs["MaTeX`"]];
+    g = MaTeX`MaTeX[s, FontSize -> 12];
+    If[Head[g] =!= Graphics, Return[<|"Glyphs" -> {}, "Width" -> 0.|>, Module]];
+    h = OptionValue[Graphics, Options[g], PlotRange][[2, 2]];
+    base = h Replace[OptionValue[Graphics, Options[g], BaselinePosition], {Scaled[b_] :> b, _ -> 0}];
+    sh = <|"Glyphs" -> (Function[pt, {pt[[1]], pt[[2]] - base}] /@ # &) /@ texGlyphOutlines[First[g], OptionValue[Graphics, Options[g], PlotRange][[1, 2]]],
+        "Width" -> OptionValue[Graphics, Options[g], PlotRange][[1, 2]]|>;
+    Quiet[CreateDirectory[DirectoryName[file], CreateIntermediateDirectories -> True]; Export[file, sh, "WXF"]];
+    sh];
+(* the glyphs in drawing order; a stroke (a fraction's bar, a root's overline) is a JoinedCurve at the
+   Thickness before it, a fraction of the formula's width, drawn here as a thin bar *)
+texGlyphOutlines[prims_, width_] := Module[{th = 0.01, out = {}},
+    Scan[Which[MatchQ[#, _Thickness], th = First[#],
+        MatchQ[#, _JoinedCurve], out = Join[out, strokeBars[Cases[#, {_ ? NumericQ, _ ? NumericQ}, Infinity], th width]],
+        MatchQ[#, _FilledCurve | _Polygon | _Rectangle], out = Join[out, texOutline[#]]] &,
+        Flatten[{prims} /. Style[x_, st___] :> {st, x}]];
+    out];
+strokeBars[pts_, w_] := Table[With[{a = pts[[i]], b = pts[[i + 1]]}, With[{nv = w / 2 Normalize[{-(b - a)[[2]], (b - a)[[1]]}]}, {a + nv, b + nv, b - nv, a - nv}]], {i, Length[pts] - 1}];
+(* each glyph as ONE closed path through all its rings, back to the first point after each: filled even-odd,
+   its holes are holes *)
+texOutline[FilledCurve[specs_, pts_, ___]] := {joinRings[MapThread[curveRing, {specs, pts}]]};
+texOutline[FilledCurve[c_, ___]] := {joinRings[Cases[c, Line[p_] :> p, Infinity]]};
+texOutline[Polygon[p_ ? MatrixQ, ___]] := {p};
+texOutline[Rectangle[{x0_, y0_}, {x1_, y1_}, ___]] := {{{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}};
+texOutline[_] := {};
+joinRings[rings_] := With[{r1 = First[rings]}, Join[r1, {First[r1]}, Join @@ ({#, {First[#], First[r1]}} & /@ Rest[rings] // Map[Join @@ # &])]];
+(* a ring of FilledCurve's compact form: {type, n, degree} segments, 0 a line, 1 a Bezier curve; the first takes
+   its start point too, each next continues from the last *)
+curveRing[spec_, pts_] := Module[{i = 0, cur, out = {}},
+    Do[With[{n = sg[[2]] - If[i == 0, 1, 0]},
+        If[i == 0, cur = pts[[1]]; AppendTo[out, cur]; i = 1];
+        With[{new = pts[[i + 1 ;; i + n]]},
+            (* a run of Bezier pieces of the segment's degree, each from where the last ended *)
+            If[sg[[1]] == 1, Do[out = Join[out, Rest[BezierFunction[Prepend[piece, Last[out]]] /@ Subdivide[0., 1., 8]]], {piece, Partition[new, Max[1, sg[[3]]]]}], out = Join[out, new]];
+            cur = Last[new]; i += n]], {sg, spec}];
+    out];
 
 
 (* ::Section:: *)

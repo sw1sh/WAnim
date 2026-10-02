@@ -42,6 +42,8 @@ PacletObject[<|
         "WolframInstitute`WAnim`CanvasScreen",
         "WolframInstitute`WAnim`CanvasSphere3D",
         "WolframInstitute`WAnim`CanvasSurface3D",
+        "WolframInstitute`WAnim`CanvasTeX",
+        "WolframInstitute`WAnim`CanvasTeXWidth",
         "WolframInstitute`WAnim`CanvasText",
         "WolframInstitute`WAnim`CanvasTextWidth",
         "WolframInstitute`WAnim`CanvasTransform",

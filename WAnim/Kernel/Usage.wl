@@ -121,3 +121,5 @@ CanvasCloud::usage = "CanvasCloud[camera, points, colour, r] draws glowing dots 
 CanvasCurve3D::usage = "CanvasCurve3D[camera, points, colour, thickness] draws a path through space, one colour or one per point, with an optional \"Glow\".";
 CanvasSurface3D::usage = "CanvasSurface3D[camera, grid, colours] draws a lit surface from a grid of 3D points, its faces sorted far to near.";
 CanvasSphere3D::usage = "CanvasSphere3D[camera, centre, r, colour] draws a softly lit sphere with its meridians and parallels, the far half faint.";
+CanvasTeX::usage = "CanvasTeX[\"tex\", {x, y}, size, colour] typesets TeX math with MaTeX, its baseline at a canvas point, as glyph outlines; CanvasTeX[\"text $tex$ text\", {x, y}, font, colour] sets text with the math between dollars typeset inline.";
+CanvasTeXWidth::usage = "CanvasTeXWidth[\"tex\", size] and CanvasTeXWidth[\"text $tex$\", font] are the width CanvasTeX sets them in, in canvas pixels.";
