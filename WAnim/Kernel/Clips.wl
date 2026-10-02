@@ -67,13 +67,18 @@ clipDuration[file_] := QuantityMagnitude[Duration[Video[file]], "Seconds"];
    shared by every kernel that renders the film -- and read one at a time as they are drawn.  A kernel keeps
    only the last few it read. *)
 frameDir[file_, {in_, out_}, fps_, px_] := Module[{key = IntegerString[Hash[{file, FileByteCount[file], N[in], N[out], fps, px}, "CRC32"], 36],
-        root = FileNameJoin[{$UserBaseDirectory, "ApplicationData", "WAnim", "ClipFrames"}], dir, tmp, ffmpeg},
+        root = FileNameJoin[{$UserBaseDirectory, "ApplicationData", "WAnim", "ClipFrames"}], dir, tmp, ffmpeg, r},
     dir = FileNameJoin[{root, key}];
     If[! FileExistsQ[FileNameJoin[{dir, "done"}]],
         ffmpeg = SelectFirst[{"/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"}, FileExistsQ, "ffmpeg"];
         tmp = CreateDirectory[FileNameJoin[{root, key <> "-" <> CreateUUID[]}]];
-        RunProcess[{ffmpeg, "-v", "error", "-ss", ToString[N[in]], "-i", file, "-t", ToString[N[out - in]],
+        r = RunProcess[{ffmpeg, "-v", "error", "-ss", ToString[N[in]], "-i", file, "-t", ToString[N[out - in]],
             "-vf", "fps=" <> ToString[fps] <> ",scale='min(" <> ToString[px] <> ",iw)':-2", "-q:v", "2", FileNameJoin[{tmp, "f%05d.jpg"}]}];
+        (* only a whole decoding is kept: one that failed (a full disk, a truncated file) and was marked done
+           anyway left a clip with no pictures, its shots blank in every later build *)
+        If[r["ExitCode"] =!= 0 || FileNames["f*.jpg", tmp] === {},
+            DeleteDirectory[tmp, DeleteContents -> True];
+            Return[Failure["ClipFrames", <|"MessageTemplate" -> "ffmpeg could not decode `1`: `2`", "MessageParameters" -> {file, r["StandardError"]}|>], Module]];
         Export[FileNameJoin[{tmp, "done"}], "", "Text"];
         (* another kernel may have finished first: keep whichever is there *)
         If[DirectoryQ[dir], DeleteDirectory[tmp, DeleteContents -> True], Quiet @ RenameDirectory[tmp, dir]]];
