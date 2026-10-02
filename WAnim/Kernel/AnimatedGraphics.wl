@@ -347,8 +347,11 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts_
 AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts : OptionsPattern[agExport]] := Module[{
     from = OptionValue[agExport, {opts}, "From"], to = Replace[OptionValue[agExport, {opts}, "To"], Automatic :> g["Duration"]],
     fps = Replace[OptionValue[agExport, {opts}, FrameRate], Automatic :> agOption[g, FrameRate]],
-    cps = agOption[g, "CyclesPerSecond"], dir, n, times, wav},
-    dir = Replace[OptionValue[agExport, {opts}, "FrameDirectory"], Automatic :> CreateDirectory[]];
+    cps = agOption[g, "CyclesPerSecond"], dir, own, n, times, wav},
+    (* a frame directory made here is deleted when done, encoded or not: a film's frames are tens of gigabytes *)
+    own = OptionValue[agExport, {opts}, "FrameDirectory"] === Automatic;
+    dir = If[own, CreateDirectory[], OptionValue[agExport, {opts}, "FrameDirectory"]];
+    WithCleanup[
     n = Round[(to - from) fps / cps];
     times = from + Range[0, n - 1] cps / fps;
     (* in parallel when kernels can be had; otherwise (none launched, none licensed) here, in order *)
@@ -376,7 +379,8 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts 
             ParallelEvaluate[Remove[frame, sound]]; Remove[frame, sound]],
         Do[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]], renderer], "CompressionLevel" -> 0.1], {i, n}];
         wav = soundtrack[g, from, to, dir]];
-    encodeVideo[dir, fps, wav, file, OptionValue[agExport, {opts}, "CRF"]]];
+    encodeVideo[dir, fps, wav, file, OptionValue[agExport, {opts}, "CRF"]],
+    If[own, Quiet @ DeleteDirectory[dir, DeleteContents -> True]]]];
 (* the film's sound from "From" to "To", as a WAV file in dir, or None for a silent film *)
 soundtrack[g_, from_, to_, dir_] := With[{aud = g["Audio"]},
     If[aud === None, None, Export[FileNameJoin[{dir, "soundtrack.wav"}], AudioTrim[aud, Quantity[{from, to} / agOption[g, "CyclesPerSecond"], "Seconds"]]]]];
