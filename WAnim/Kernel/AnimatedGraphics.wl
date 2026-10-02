@@ -313,8 +313,8 @@ foleyVoices[ev_] := Join[
         (* one sample rate for all: overlaying sounds of different rates misplaces every later one *)
         With[{r = AudioResample[au, 44100]}, If[#[[1]] > 0, AudioPad[r, {#[[1]] / cps, 0}], r]]] &, ss];
     (* an ArchiveClip's sound is a voice: the rest ducks beneath it *)
-    With[{voice = MatchQ[#[[2]], _clipVoice] & /@ ss}, mix = fitTo[duckUnder[Pick[rendered, voice, False], Pick[ss, voice], cps], dur / cps];
-        If[Or @@ voice, fitTo[AudioOverlay[Prepend[Pick[rendered, voice], mix]], dur / cps], mix]]];
+    With[{voice = MatchQ[#[[2]], _clipVoice] & /@ ss}, mix = Replace[duckUnder[Pick[rendered, voice, False], Pick[ss, voice], cps], m : Except[None] :> fitTo[m, dur / cps]];
+        If[Or @@ voice, fitTo[AudioOverlay[If[mix === None, Pick[rendered, voice], Prepend[Pick[rendered, voice], mix]]], dur / cps], mix]]];
 fitTo[a_, secs_] := With[{t = AudioTrim[a, secs]}, AudioPad[t, {0, Max[0, secs - QuantityMagnitude[Duration[t], "Seconds"]]}]];
 (* the music, at the gain each voice (an ArchiveClip's sound) asks for while it speaks, easing in and out
    over a fifth of a second *)
@@ -366,8 +366,10 @@ AnimatedGraphics /: Export[file_String, g : AnimatedGraphics[_ ? agDataQ], opts 
            in contiguous chunks, so a kernel's caches (a wall's settled words) keep being reused *)
         With[{frame = Unique["WAnimVideoFrame"], sound = Unique["WAnimVideoSound"], times = times, dir = dir, from = from, to = to, renderer = OptionValue[agExport, {opts}, "Renderer"], chunks = Partition[Range[n], UpTo[OptionValue[agExport, {opts}, "Chunk"]]]},
             (* rasterizing needs a front end; subkernels do not always come with one *)
-            ParallelEvaluate[frame[i_] := UsingFrontEnd[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[g, times[[i]], renderer], "CompressionLevel" -> 0.1]];
-                sound[] := soundtrack[g, from, to, dir]];
+            (* a frame has no sound: the film goes to the frame function without its recordings, since an Audio
+               re-evaluated with every frame writes itself into the system's audio cache again, gigabytes a film *)
+            With[{gv = g /. (_clipVoice | _Audio) -> Nothing}, ParallelEvaluate[frame[i_] := UsingFrontEnd[Export[FileNameJoin[{dir, "f" <> IntegerString[i, 10, 6] <> ".png"}], frameImage[gv, times[[i]], renderer], "CompressionLevel" -> 0.1]]]];
+            ParallelEvaluate[sound[] := soundtrack[g, from, to, dir]];
             (* the content's own functions (a notebook's colours, tracks, helpers), and only those: the package
                and its caches (Spikey models, sprites, sounds) stay out, each kernel has WAnim of its own *)
             With[{defs = userDefinitions[g]}, ParallelEvaluate[restoreDefinitions[defs]]];
