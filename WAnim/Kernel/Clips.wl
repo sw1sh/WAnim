@@ -49,8 +49,17 @@ clipFile[File[f_]] := clipFile[f];
 clipFile[u_URL] := clipFile[First[u]];
 clipFile[s_String] /; StringStartsQ[s, "http"] := Module[{dir = FileNameJoin[{$UserBaseDirectory, "ApplicationData", "WAnim", "Clips"}], f},
     f = FileNameJoin[{dir, IntegerString[Hash[s, "CRC32"], 36] <> "." <> Replace[FileExtension[URLParse[s, "Path"] /. {} -> {""} // Last], "" -> "mp4"]}];
-    If[! FileExistsQ[f], Quiet @ CreateDirectory[dir]; URLDownload[s, f]];
+    If[! FileExistsQ[f], Quiet @ CreateDirectory[dir]; download[s, f]];
     f];
+(* a download kept only when whole: the server's Content-Length checked, three tries -- a slow server cutting a
+   transfer short left a truncated clip in the cache, its sound unreadable, and the film's soundtrack failed *)
+download[s_, f_] := Module[{tmp = f <> ".part", r, len},
+    Do[r = Quiet @ URLDownload[s, tmp, {"StatusCode", "Headers"}];
+        len = If[AssociationQ[r], Replace[Lookup[KeyMap[ToLowerCase, Association[r["Headers"]]], "content-length", Missing[]], l_String :> FromDigits[l]], Missing[]];
+        If[AssociationQ[r] && r["StatusCode"] === 200 && FileExistsQ[tmp] && (MissingQ[len] || FileByteCount[tmp] === len),
+            RenameFile[tmp, f, OverwriteTarget -> True]; Return[f, Module]], {3}];
+    Quiet @ DeleteFile[tmp];
+    Failure["Download", <|"MessageTemplate" -> "`1` did not download whole", "MessageParameters" -> {s}|>]];
 clipFile[s_String] := ExpandFileName[s];
 clipDuration[file_] := QuantityMagnitude[Duration[Video[file]], "Seconds"];
 
