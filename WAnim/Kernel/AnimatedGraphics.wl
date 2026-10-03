@@ -318,8 +318,8 @@ foleyVoices[ev_] := Join[
 (* the voices' spans {start, end, gain}, those less than 3 s apart run together at the lower gain *)
 duckSpans[spans_] := Fold[If[#1 =!= {} && #2[[1]] - #1[[-1, 2]] < 3, ReplacePart[#1, -1 -> {#1[[-1, 1]], Max[#1[[-1, 2]], #2[[2]]], Min[#1[[-1, 3]], #2[[3]]]}], Append[#1, #2]] &, {}, SortBy[spans, First]];
 fitTo[a_, secs_] := With[{t = AudioTrim[a, secs]}, AudioPad[t, {0, Max[0, secs - QuantityMagnitude[Duration[t], "Seconds"]]}]];
-(* the music, at the gain each voice (an ArchiveClip's sound) asks for while it speaks: it eases down 0.4 s
-   before a voice and back up over 0.8 s after, and stays down through a pause between voices shorter than
+(* the music, at the gain each voice (an ArchiveClip's sound) asks for while it speaks: it eases down over the
+   1.2 s before a voice, so it is already low when the first word comes, and back up over 1 s after, and stays down through a pause between voices shorter than
    3 s -- music swelling up in every breath between two speakers is a jerk, not a score *)
 duckUnder[{}, _, _] := None;
 duckUnder[music_List, voices_, cps_] := With[{m = If[Length[music] == 1, First[music], AudioOverlay[music]]},
@@ -328,9 +328,10 @@ duckUnder[music_List, voices_, cps_] := With[{m = If[Length[music] == 1, First[m
            a whole-length curve per voice, 172 MB apiece for an 8-minute film, all held at once, crawled *)
         n = Length[First[data]]; gain = ConstantArray[1., n];
         Do[With[{a = v[[1]], b = v[[2]], g = v[[3]]},
-            With[{i0 = Clip[Floor[(a - 0.4) sr] + 1, {1, n}], i1 = Clip[Ceiling[(b + 0.8) sr] + 1, {1, n}]},
+            With[{i0 = Clip[Floor[(a - 1.2) sr] + 1, {1, n}], i1 = Clip[Ceiling[(b + 1.0) sr] + 1, {1, n}]},
                 If[i1 > i0, With[{x = Range[i0 - 1., i1 - 1.] / sr},
-                    gain[[i0 ;; i1]] *= 1 - (1 - g) Clip[Clip[(x - a + 0.4) / 0.4, {0, 1}] - Clip[(x - b) / 0.8, {0, 1}], {0, 1}]]]]],
+                    (* an S-shaped ease, not a ramp: no corner to hear *)
+                    gain[[i0 ;; i1]] *= 1 - (1 - g) (Sin[Pi / 2 Clip[(x - a + 1.2) / 1.2, {0, 1}]]^2 - Sin[Pi / 2 Clip[(x - b) / 1.0, {0, 1}]]^2)]]]],
             {v, duckSpans[{#[[1]] / cps, #[[1]] / cps + QuantityMagnitude[Duration[#[[2, 1]]], "Seconds"], #[[2, 2]]} & /@ voices]}];
         Audio[(# gain) & /@ data, SampleRate -> sr]]]];
 
