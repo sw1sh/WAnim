@@ -144,11 +144,11 @@ clipSubtitle[s_, who_, {cx_, y_}] := Module[{f = CanvasFont[defaultFont["Sans"],
     sp = CanvasTextWidth[" ", f];
     Do[If[cur =!= {} && Total[width /@ cur] + sp Length[cur] + width[tk] > 1500, AppendTo[lines, cur]; cur = {tk}, AppendTo[cur, tk]], {tk, tokens}];
     AppendTo[lines, cur];
-    n = Length[lines]; w = Max[(Total[width /@ #] + sp (Length[#] - 1)) & /@ lines];
-    {If[StringQ[who], With[{v = CanvasTextWidth[ToUpperCase[who], g] + 3 StringLength[who]}, CanvasText[ToUpperCase[who], {cx - v / 2, y - 54 - lh (n - 1)}, g, RGBColor["#E8604C"], "Tracking" -> 3]], {}],
-     CanvasRectangle[{cx - w / 2 - 16, y - 40 - lh (n - 1), w + 32, 54 + lh (n - 1)}, Black, Opacity -> 0.55, "Radius" -> 6],
-     MapIndexed[Function[{line, i}, Module[{x = cx - (Total[width /@ line] + sp (Length[line] - 1)) / 2},
-        Table[{Table[{CanvasText[pc[[1]], {x, y - lh (n - i[[1]])}, If[pc[[2]], fe, f], If[pc[[2]], $subtitleAccent, White]], x += CanvasTextWidth[pc[[1]], If[pc[[2]], fe, f]]}[[1]], {pc, tk}],
+    n = Length[lines]; w = Max[(Total[width /@ #] + sp * (Length[#] - 1)) & /@ lines];
+    {If[StringQ[who], With[{v = CanvasTextWidth[ToUpperCase[who], g] + 3 StringLength[who]}, CanvasText[ToUpperCase[who], {cx - v / 2, y - 54 - lh * (n - 1)}, g, RGBColor["#E8604C"], "Tracking" -> 3]], {}],
+     CanvasRectangle[{cx - w / 2 - 16, y - 40 - lh * (n - 1), w + 32, 54 + lh * (n - 1)}, Black, Opacity -> 0.55, "Radius" -> 6],
+     MapIndexed[Function[{line, i}, Module[{x = cx - (Total[width /@ line] + sp * (Length[line] - 1)) / 2},
+        Table[{Table[{CanvasText[pc[[1]], {x, y - lh * (n - i[[1]])}, If[pc[[2]], fe, f], If[pc[[2]], $subtitleAccent, White]], x += CanvasTextWidth[pc[[1]], If[pc[[2]], fe, f]]}[[1]], {pc, tk}],
             x += sp}[[1]], {tk, line}]]], lines]}];
 (* the words of a line, each a list of {piece, emphasised?}: a word can begin plain and end emphasised, as
    "*lumps*." does *)

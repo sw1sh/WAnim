@@ -42,7 +42,7 @@ RelatedGuides: [WAnim]
 The first 300 symbols of the Wolfram Language by usage, all present:
 
 ```wl
-WordWall[Take[SortBy[Cases[WolframLanguageData[All, {"Name", "Frequencies"}], {n_, {"All" -> w_ ? NumericQ, ___}} :> {n, w, 0}], -#[[2]] &], 300], {0, 2}, "Presence" -> 1][1, ImageSize -> 480]
+WordWall[Take[SortBy[Cases[WolframLanguageData[All, {"Name", "Frequencies"}], {n_ /; ! StringStartsQ[n, "$"], {"All" -> w_ ? NumericQ, ___}} :> {n, w, 0}], -#[[2]] &], 300], {0, 2}, "Presence" -> 1][1, ImageSize -> 480]
 ```
 
 <!-- => a dense alphabetical wall, List and Set large -->
@@ -74,7 +74,7 @@ WordWall[{#, 1., 1} & /@ {"alpha", "beta", "gamma", "delta", "epsilon", "zeta", 
 Zooming in on one word; its place comes from the wall itself:
 
 ```wl
-With[{words = Take[SortBy[Cases[WolframLanguageData[All, {"Name", "Frequencies"}], {n_, {"All" -> w_ ? NumericQ, ___}} :> {n, w, 0}], -#[[2]] &], 300]},
+With[{words = Take[SortBy[Cases[WolframLanguageData[All, {"Name", "Frequencies"}], {n_ /; ! StringStartsQ[n, "$"], {"All" -> w_ ? NumericQ, ___}} :> {n, w, 0}], -#[[2]] &], 300]},
     With[{focus = WordWall[words, {0, 2}]["Places"]["List"]},
         WordWall[words, {0, 2}, "Presence" -> 1, "Camera" -> (CanvasScale[1 + #, focus] &)][1.5, ImageSize -> 480]]]
 ```
@@ -86,7 +86,7 @@ With[{words = Take[SortBy[Cases[WolframLanguageData[All, {"Name", "Frequencies"}
 The words ending in Q, standing out of a dimmed page:
 
 ```wl
-WordWall[Take[SortBy[Cases[WolframLanguageData[All, {"Name", "Frequencies"}], {n_, {"All" -> w_ ? NumericQ, ___}} :> {n, w, 0}], -#[[2]] &], 300], {0, 2},
+WordWall[Take[SortBy[Cases[WolframLanguageData[All, {"Name", "Frequencies"}], {n_ /; ! StringStartsQ[n, "$"], {"All" -> w_ ? NumericQ, ___}} :> {n, w, 0}], -#[[2]] &], 300], {0, 2},
     "Presence" -> 1, Background -> White, "Emphasis" -> ({StringEndsQ[#, "Q"] &, 1} &)][1, ImageSize -> 480]
 ```
 

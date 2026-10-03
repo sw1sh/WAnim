@@ -81,6 +81,16 @@ places text exactly where a browser canvas would, so designs port from web tools
 - `CanvasClip` drawing confined to a rectangle
 - `CanvasFont`, `CanvasText`, `CanvasTextWidth`, `CanvasWrap` text on its baseline, measured and wrapped the way a canvas does
 - `TypedText` the part of a text typed by a given fraction of the way through
+- `CanvasTeX`, `CanvasTeXWidth` TeX on the canvas: formulas, or text with mathematics inline, as glyph outlines
+
+### Drawing in depth
+
+- `CanvasCamera` a perspective camera; `CanvasCloud`, `CanvasCurve3D`, `CanvasSurface3D`, `CanvasSphere3D` points, paths, lit surfaces and spheres seen through it, drawn as canvas primitives
+
+### Documentary film
+
+- `ArchiveClip` archival film in a film: its picture, its voice with the music ducked beneath, subtitles, the speaker's name
+- `GPUGraphics` a frame drawn on the GPU, without the front end
 
 ### Music: tracks in cyclic time
 

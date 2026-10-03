@@ -21,7 +21,9 @@ Links: ["[Manim](https://www.manim.community)", "[Strudel](https://strudel.cc)",
 - <code>*g*[*t*]</code> is the frame at time *t*, a [Graphics](). [Export]() to ".mp4" renders every frame in parallel and encodes them with ffmpeg together with the sound; [Video](), [AnimatedImage]() and [Audio]() render it too.
 - Creation tools write a film one segment per line: [Typewriter](), [TitleCard](), [CaptionText](), [TerminalSession](), [NotebookSession]() (a notebook window of its era, 1988 to today), [DictionaryCard](), [Spikey](), and more. They draw with a canvas kit that places text exactly where a browser canvas would.
 - A [Track]() is a cyclic-time music pattern after Strudel and TidalCycles, written in mini-notation such as `"bd [~ bd] sd, hh*8"`. It plays live as an editable, highlighting piano roll, renders to [Audio]() through synthesized instruments, and can be queried by the picture ([TrackPulse]()), so motion locks to sound.
-- LaTeX is typeset with MaTeX when it is installed.
+- LaTeX is typeset with MaTeX when it is installed, in objects and on the canvas ([CanvasTeX]()), where captions can carry mathematics inline.
+- Documentaries: [ArchiveClip]() plays archival film in a film -- picture, voice with the music ducked under it, emphasised subtitles, the speaker's name -- and a 3D canvas ([CanvasCamera]()) draws point clouds, curves, lit surfaces and spheres as plain primitives.
+- Frames are drawn on the GPU ([GPUGraphics](), Metal on Apple silicon) where they can be, tens of times faster than the front end, which draws the rest.
 
 ## Usage
 
